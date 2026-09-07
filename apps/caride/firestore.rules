@@ -1,0 +1,489 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ──────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    /** Admin users have a document at admins/{auth.uid} (bootstrap via Console). */
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    /** Staff users have a document at staff/{auth.uid}. */
+    function isStaff() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function isApprovedDriver() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/drivers/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.approvalStatus == 'approved';
+    }
+
+    function driverPresenceDoc() {
+      return get(/databases/$(database)/documents/driverPresence/$(request.auth.uid)).data;
+    }
+
+    function hasDriverPresence() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/driverPresence/$(request.auth.uid));
+    }
+
+    function isDriverAvailableForRequests() {
+      return isApprovedDriver() &&
+        hasDriverPresence() &&
+        driverPresenceDoc().availabilityState == 'online' &&
+        driverPresenceDoc().isAvailableForRequests == true;
+    }
+
+    // ─── Admin roster (bootstrap first doc in Firebase Console) ─
+    match /admins/{adminUid} {
+      allow read: if isSignedIn() && (request.auth.uid == adminUid || isAdmin());
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Tier settings (drivers read; admins write) ────────────
+    match /tierSettings/{tierId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── OTP Challenges ────────────────────────────────────────
+    match /otpChallenges/{challengeId} {
+      allow read, write: if false; // Cloud Functions only
+    }
+
+    // ─── Config (any signed-in user can read) ───────────────────
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // ─── Special Offers / Promos (any signed-in user can read; admins/staff write) ──
+    match /promos/{promoId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isStaff();
+    }
+
+    // ─── Announcements & Popups (any signed-in user can read; admins/staff write) ──
+    match /popups/{popupId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isStaff();
+    }
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isStaff();
+    }
+    match /banners/{bannerId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isStaff();
+    }
+
+    // ─── Frequently Asked Questions (FAQs) ─────────────────────
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+
+    // ─── Users Metadata (Session & Role Flags) ──────────────────
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid) &&
+        (!('activeRole' in request.resource.data) || request.resource.data.activeRole in ['customer', 'driver', 'fleet']);
+      allow update: if isOwner(uid) &&
+        !('createdAt' in request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isAdmin();
+
+      match /notifications/{notifId} {
+        allow read, write, delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── Customers (rider app profiles; replaces legacy `users`) ──
+    match /customers/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid) &&
+        (!('walletBalance' in request.resource.data) || request.resource.data.walletBalance == 0) &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'customer');
+      allow update: if isOwner(uid) &&
+        !('walletBalance' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('role' in request.resource.data.diff(resource.data).affectedKeys());
+
+      match /savedCards/{cardId} {
+        allow read, write, delete: if isOwner(uid);
+      }
+
+      match /savedAddresses/{addrId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /paymentMethods/{pmId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /referrals/{refId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if false; // Cloud Functions only
+      }
+
+      match /recentPlaces/{placeId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /trustedContacts/{contactId} {
+        allow read, write, delete: if isOwner(uid);
+      }
+    }
+
+    // ─── Driver Profiles ───────────────────────────────────────
+    match /drivers/{uid} {
+      allow read: if isSignedIn();
+
+      // Drivers can update own profile fields (approvalStatus allowed for testing upload flow queue)
+      allow update: if isOwner(uid) &&
+        // !('approvalStatus' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('role' in request.resource.data.diff(resource.data).affectedKeys());
+
+      allow update: if isAdmin() || isStaff();
+
+      // Only Cloud Functions create driver profiles (callable); initial create still owner-based in rules if needed
+      allow create: if isOwner(uid) &&
+        request.resource.data.role == 'driver' &&
+        request.resource.data.approvalStatus == 'draft';
+
+      // Documents subcollection
+      match /documents/{docId} {
+        allow read: if isOwner(uid) || isAdmin() || isStaff();
+        allow create: if (isOwner(uid) && request.resource.data.status == 'pending') || isAdmin() || isStaff();
+        allow update: if (isOwner(uid) && request.resource.data.status == 'pending') || isAdmin() || isStaff();
+        allow delete: if isAdmin() || isStaff();
+      }
+
+      // Vehicle info subcollection
+      match /vehicle/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid) || isAdmin() || isStaff();
+      }
+
+      // Verification history subcollection
+      match /verificationHistory/{histId} {
+        allow read: if isOwner(uid) || isAdmin() || isStaff();
+        allow write: if isAdmin() || isStaff();
+      }
+
+      // Referral downline list (written by Cloud Functions)
+      match /referrals/{refId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if false;
+      }
+
+      // Bank accounts subcollection (read by driver, written by functions/driver)
+      match /bankAccounts/{accountId} {
+        allow read, write: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── Driver Presence ───────────────────────────────────────
+    match /driverPresence/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(uid) &&
+        request.resource.data.driverUid == uid &&
+        request.resource.data.availabilityState in ['offline', 'online', 'on_trip'] &&
+        (
+          !request.resource.data.isAvailableForRequests ||
+          request.resource.data.approvalStatusSnapshot == 'approved'
+        );
+      allow write: if isAdmin();
+    }
+
+    // ─── Fleet Managers (Onboarding Drafts & Applications) ──────
+    match /fleet_managers/{uid} {
+      allow read: if isOwner(uid) || isAdmin() || isStaff();
+      allow create, update: if isOwner(uid) || isAdmin() || isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Fleets (Fleet Partner Profiles & Operational Data) ────
+    match /fleets/{fleetId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+      allow update: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+      allow delete: if isAdmin();
+    }
+
+    // ─── Rental Vehicles (Fleet Inventory) ─────────────────────
+    match /rental_vehicles/{vehicleId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+      allow update: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+      allow delete: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+    }
+
+    // ─── Rental Bookings / Orders ──────────────────────────────
+    match /rental_bookings/{bookingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Fleet Drivers ─────────────────────────────────────────
+    match /fleet_drivers/{driverId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    // ─── Mail Queue (Cloud Functions / Notification Triggers) ──
+    match /mail/{mailId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ─── Rides ─────────────────────────────────────────────────
+    match /rides/{rideId} {
+      // Customers can create ride requests
+      allow create: if isSignedIn() &&
+        request.resource.data.customerUid == request.auth.uid &&
+        request.resource.data.status == 'requested';
+
+      // Customer, driver, admin, or anyone with a valid trip sharing code can read
+      allow read: if isSignedIn() && (
+        resource.data.customerUid == request.auth.uid ||
+        resource.data.driverUid == request.auth.uid ||
+        (
+          isDriverAvailableForRequests() &&
+          resource.data.status in ['requested', 'bidding']
+        ) ||
+        isAdmin() ||
+        // Check if an active shared trip mapping exists referencing this rideId
+        (resource.data.sharingCode != null && exists(/databases/$(database)/documents/sharedTrips/$(resource.data.sharingCode)))
+      );
+
+      allow update: if isSignedIn() &&
+        resource.data.customerUid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['driverRating', 'driverRatingComment', 'ratedAt', 'updatedAt']);
+
+      allow update: if isSignedIn() &&
+        resource.data.driverUid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'driverArrivedAt', 'customerRating', 'customerRatingComment', 'customerRatedAt', 'updatedAt']);
+
+      allow update: if isAdmin();
+
+      match /viewers/{driverUid} {
+        allow read: if isSignedIn();
+        allow write, delete: if isSignedIn() && request.auth.uid == driverUid;
+      }
+    }
+
+    // ─── Bids ──────────────────────────────────────────────────
+    match /bids/{rideId} {
+      // Parent bids document: any signed-in user can read (needed for collection queries)
+      allow read: if isSignedIn();
+
+      match /offers/{bidId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // ─── Chat / Ride Messages ──────────────────────────────────
+    match /rideMessages/{rideId} {
+      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participantUids);
+      allow write: if isSignedIn() && request.auth.uid in request.resource.data.participantUids;
+
+      match /messages/{msgId} {
+        allow read, write: if isSignedIn() && (
+          (exists(/databases/$(database)/documents/rides/$(rideId)) && (
+            get(/databases/$(database)/documents/rides/$(rideId)).data.customerUid == request.auth.uid ||
+            get(/databases/$(database)/documents/rides/$(rideId)).data.driverUid == request.auth.uid
+          ))
+        );
+      }
+    }
+    // ─── Support Chats ─────────────────────────────────────────
+    match /supportChats/{chatId} {
+      allow read: if isSignedIn() && (
+        resource.data.driverUid == request.auth.uid ||
+        resource.data.userUid == request.auth.uid ||
+        isAdmin() ||
+        isStaff()
+      );
+
+      allow create: if isSignedIn() &&
+        (request.resource.data.driverUid == request.auth.uid || request.resource.data.userUid == request.auth.uid) &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.lastMessage is string &&
+        request.resource.data.lastMessageAt is timestamp;
+
+      allow update: if isSignedIn() && (
+        resource.data.driverUid == request.auth.uid ||
+        resource.data.userUid == request.auth.uid ||
+        isAdmin() ||
+        isStaff()
+      );
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (
+          get(/databases/$(database)/documents/supportChats/$(chatId)).data.driverUid == request.auth.uid ||
+          get(/databases/$(database)/documents/supportChats/$(chatId)).data.userUid == request.auth.uid ||
+          isAdmin() ||
+          isStaff()
+        );
+
+        allow create: if isSignedIn() && (
+          (request.resource.data.senderUid == request.auth.uid && (request.resource.data.senderRole == 'driver' || request.resource.data.senderRole == 'customer')) ||
+          isAdmin() ||
+          isStaff()
+        ) && request.resource.data.text is string &&
+          request.resource.data.createdAt is timestamp;
+      }
+    }
+
+    // ─── Support Tickets (Fleet & Customer Support) ────────────
+    match /support_tickets/{ticketId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+
+      match /messages/{msgId} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
+    }
+
+    // ─── Staff Audit Activities ────────────────────────────────
+    match /staff_activities/{actId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+    // ─── Driver Locations ──────────────────────────────────────
+    match /driverLocations/{rideId} {
+      // Customer, assigned driver, or anyone with a valid trip sharing code can read location
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/rides/$(rideId)).data.customerUid == request.auth.uid ||
+        get(/databases/$(database)/documents/rides/$(rideId)).data.driverUid == request.auth.uid ||
+        (
+          get(/databases/$(database)/documents/rides/$(rideId)).data.sharingCode != null &&
+          exists(/databases/$(database)/documents/sharedTrips/$(get(/databases/$(database)/documents/rides/$(rideId)).data.sharingCode))
+        )
+      );
+
+      // Only the assigned driver can write their location
+      allow write: if isSignedIn() &&
+        get(/databases/$(database)/documents/rides/$(rideId)).data.driverUid == request.auth.uid;
+    }
+
+    // ─── Shared Trips (Trip Codes) ─────────────────────────────
+    match /sharedTrips/{code} {
+      // Any authenticated user can read (lookup code to get the rideId)
+     allow read: if isSignedIn();
+      
+      // The customer who owns the ride can create/delete their sharing codes
+      allow create, delete: if isSignedIn() && 
+       get(/databases/$(database)/documents/rides/$(request.resource.data.rideId)).data.customerUid == request.auth.uid;
+    }
+
+    // ─── Wallet Transactions ───────────────────────────────────
+    match /walletTransactions/{txId} {
+      // Users can read their own transactions
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+      // ONLY Cloud Functions can create, update, or delete.
+      allow write: if false;
+
+      // Admin can do everything
+      allow read, write: if isAdmin();
+    }
+
+    // ─── Platform Earnings (Commission) ───────────────────────
+    match /platformEarnings/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Functions only
+    }
+
+    // ─── Withdrawal Snapshots ──────────────────────────────────
+    match /withdrawalSnapshots/{snapshotId} {
+      allow read, write: if isAdmin();
+      
+      match /entries/{entryId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // ─── Paystack Receipts ─────────────────────────────────────
+    match /paystackReceipts/{reference} {
+      allow read, write: if false; // Cloud Functions only
+    }
+
+    // ─── Driver Payouts ────────────────────────────────────────
+    match /driverPayouts/{payoutId} {
+      allow read: if isSignedIn() && (resource.data.driverId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ─── Withdrawal Batches ────────────────────────────────────
+    match /withdrawalBatches/{batchId} {
+      allow read, write: if isAdmin();
+      
+      match /entries/{entryId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // ─── Transactions ──────────────────────────────────────────
+    match /transactions/{txId} {
+      allow read: if isSignedIn() && (resource.data.driverId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ─── Admin Audit Logs ──────────────────────────────────────
+    match /adminAuditLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ─── Emergency Events ──────────────────────────────────────
+    match /emergencyEvents/{eventId} {
+      allow read: if isSignedIn() && (resource.data.customerUid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.customerUid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Config / Referral Settings ───────────────────────────
+    match /config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Staff Roster & Commissions ───────────────────────────
+    match /staff/{staffId} {
+      allow read: if isSignedIn() && (request.auth.uid == staffId || isAdmin() || isStaff());
+      allow write: if isAdmin() || (request.auth.uid == staffId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bankDetails', 'updatedAt']));
+
+      match /referrals/{refId} {
+        allow read: if isSignedIn() && (request.auth.uid == staffId || isAdmin() || isStaff());
+        allow write: if isAdmin() || isStaff();
+      }
+    }
+
+    match /staff_withdrawal_requests/{reqId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.staffId == request.auth.uid || isAdmin() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.staffId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /staff_commission_transactions/{txId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.staffId == request.auth.uid || isAdmin() || isStaff());
+      allow write: if isAdmin();
+    }
+  }
+}

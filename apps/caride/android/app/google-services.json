@@ -1,0 +1,91 @@
+{
+  "project_info": {
+    "project_number": "907513616513",
+    "firebase_url": "https://caride-app-default-rtdb.firebaseio.com",
+    "project_id": "caride-app",
+    "storage_bucket": "caride-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:907513616513:android:25c02f1d4d0b96aff45580",
+        "android_client_info": {
+          "package_name": "com.caride.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "907513616513-0ti7r7vu5q80aoblvuu5mc8oj1i8900u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.caride.app",
+            "certificate_hash": "db7beab73820599e7122ef502733fe7f35dcb55a"
+          }
+        },
+        {
+          "client_id": "907513616513-d8h01qa783f0inc2dgk4cdecgkrajl80.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiYrnvfxJYRJRy_IgPtjUR5xF2KdBSWiA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "907513616513-d8h01qa783f0inc2dgk4cdecgkrajl80.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "907513616513-85kcgpjv78avr9ue9ibo1tndefpgq6o8.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.caride.customer.customerApp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:907513616513:android:e9346e6c848a015af45580",
+        "android_client_info": {
+          "package_name": "com.caride.driver.driver_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "907513616513-d8h01qa783f0inc2dgk4cdecgkrajl80.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiYrnvfxJYRJRy_IgPtjUR5xF2KdBSWiA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "907513616513-d8h01qa783f0inc2dgk4cdecgkrajl80.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "907513616513-85kcgpjv78avr9ue9ibo1tndefpgq6o8.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.caride.customer.customerApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,12 @@
+﻿[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.caride.app",
+      "sha256_cert_fingerprints": [
+        "D3:E6:D3:5C:20:2C:28:E6:6F:42:81:09:4C:8E:1C:7E:D7:1E:38:B2:10:E2:08:D3:56:90:09:2C:6A:42:8B:0A"
+      ]
+    }
+  }
+]

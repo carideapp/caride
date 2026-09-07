@@ -1,0 +1,55 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: actions/subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter Installation
+        run: flutter --version
+
+      - name: Install Dependencies
+        run: |
+          cd apps/caride
+          flutter pub get
+
+      - name: Build iOS Application (Release)
+        run: |
+          cd apps/caride
+          flutter build ios --release --no-codesign
+
+      - name: Create Payload and IPA Package
+        run: |
+          cd apps/caride/build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r CaRide_App.ipa Payload
+          echo "IPA created successfully at apps/caride/build/ios/iphoneos/CaRide_App.ipa"
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CaRide-iOS-IPA
+          path: apps/caride/build/ios/iphoneos/CaRide_App.ipa
+          retention-days: 7

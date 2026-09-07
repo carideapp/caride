@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background color matching the Lottie splash animation's green background -->
+    <color name="splash_bg">#FFFFFF</color>
+</resources>

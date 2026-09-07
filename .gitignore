@@ -1,0 +1,24 @@
+# Mac OS
+.DS_Store
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+**/build/
+ios/Flutter/ephemeral/
+**/ios/Flutter/ephemeral/
+ios/Pods/
+**/ios/Pods/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml

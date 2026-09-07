@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CaRide – Nigeria's Smart Ride-Hailing App</title>
+  <meta name="description" content="CaRide connects passengers with trusted drivers across Nigeria. Set your own price, choose your driver, and travel safely. Available on Android and iOS." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://www.caride.ng/" />
+  <meta property="og:title" content="CaRide – Nigeria's Smart Ride-Hailing App" />
+  <meta property="og:description" content="Set your own price, choose your driver, and travel safely across Nigeria." />
+  <meta property="og:url" content="https://www.caride.ng/" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" type="image/png" href="/caride_logo.png" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <style>
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: 60px;
+      padding: 120px 0 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 55% at 65% 40%, rgba(22,163,74,0.12) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 40% at 20% 70%, rgba(250,204,21,0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    /* Subtle grid lines */
+    .hero::after {
+      content: '';
+      position: absolute; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 0%, transparent 75%);
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 0%, transparent 75%);
+    }
+    .hero-left { position: relative; z-index: 2; }
+    .hero-right {
+      position: relative; z-index: 2;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .hero h1 {
+      color: var(--white);
+      margin: 18px 0 20px;
+      font-size: clamp(2.8rem, 5vw, 4.2rem);
+    }
+    .hero h1 em { color: var(--green); font-style: normal; }
+    .hero-desc { font-size: 1.1rem; max-width: 460px; margin-bottom: 36px; }
+    .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 52px; }
+    .hero-trust {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .trust-avatars {
+      display: flex; margin-right: -6px;
+    }
+    .trust-avatars span {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--green), #065f46);
+      border: 2px solid var(--dark);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 800; color: white;
+      margin-right: -8px;
+    }
+    .trust-text { font-size: 0.82rem; color: rgba(255,255,255,0.45); }
+    .trust-text strong { color: rgba(255,255,255,0.75); font-weight: 600; }
+
+    /* Phone visual */
+    .hero-phone-wrap {
+      position: relative;
+      width: 300px;
+    }
+    .hero-phone-wrap img {
+      width: 100%; height: auto;
+      filter: drop-shadow(0 32px 72px rgba(0,0,0,0.65))
+              drop-shadow(0 0 48px rgba(22,163,74,0.22));
+      animation: heroFloat 5s ease-in-out infinite;
+    }
+    @keyframes heroFloat {
+      0%,100% { transform: translateY(0) rotate(-2deg); }
+      50%      { transform: translateY(-16px) rotate(0deg); }
+    }
+
+    /* Chips */
+    .chip-tl {
+      top: 12%; left: -80px;
+    }
+    .chip-br {
+      bottom: 14%; right: -80px;
+    }
+
+    /* FEATURES BG */
+    .features-section {
+      background: var(--dark-2);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    /* HOW IT WORKS */
+    .hiw-section { background: var(--dark); }
+    .hiw-phones {
+      display: flex; justify-content: center; gap: 32px;
+      margin-top: 64px; flex-wrap: wrap;
+    }
+    .hiw-phone {
+      position: relative; width: 220px; text-align: center;
+    }
+    .hiw-phone img {
+      width: 100%;
+      filter: drop-shadow(0 20px 48px rgba(0,0,0,0.6))
+              drop-shadow(0 0 30px rgba(22,163,74,0.14));
+      transition: transform 0.4s var(--ease), filter 0.4s var(--ease);
+    }
+    .hiw-phone:hover img {
+      transform: translateY(-8px) scale(1.02);
+      filter: drop-shadow(0 30px 60px rgba(0,0,0,0.65))
+              drop-shadow(0 0 45px rgba(22,163,74,0.22));
+    }
+    .hiw-phone-label {
+      margin-top: 16px;
+      font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.6);
+    }
+    .hiw-phone-badge {
+      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      background: var(--green); color: white;
+      font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px;
+      padding: 4px 12px; border-radius: var(--r-full);
+      white-space: nowrap;
+    }
+
+    /* STATS */
+    .stats-section { background: var(--dark-2); }
+
+    /* DRIVER */
+    .driver-section { background: var(--dark); }
+
+    /* TESTIMONIALS */
+    .testi-section { background: var(--dark-2); }
+
+    /* BENTO GRID */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      grid-template-rows: auto;
+      gap: 18px;
+      margin-top: 64px;
+    }
+    .bento-a { grid-column: span 7; grid-row: span 1; }
+    .bento-b { grid-column: span 5; grid-row: span 1; }
+    .bento-c { grid-column: span 4; }
+    .bento-d { grid-column: span 4; }
+    .bento-e { grid-column: span 4; }
+    .bento-cell {
+      border-radius: var(--r-xl);
+      padding: 32px 28px;
+      overflow: hidden; position: relative;
+    }
+    .bento-cell.big { min-height: 240px; }
+    .bento-cell.sm  { min-height: 160px; }
+    .bento-dark {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+    .bento-green {
+      background: linear-gradient(135deg, rgba(22,163,74,0.15) 0%, rgba(22,163,74,0.05) 100%);
+      border: 1px solid rgba(22,163,74,0.2);
+    }
+    .bento-cell h3 { color: var(--white); margin-bottom: 8px; font-size: 1.1rem; }
+    .bento-cell p  { font-size: 0.875rem; }
+    .bento-big-val {
+      font-size: 3rem; font-weight: 900; letter-spacing: -2px;
+      background: linear-gradient(135deg, #fff 40%, #4ade80);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    @media (max-width: 1024px) {
+      .hero { grid-template-columns: 1fr; gap: 40px; padding: 140px 0 64px; }
+      .hero-right { display: none; }
+      .bento-a, .bento-b, .bento-c, .bento-d, .bento-e { grid-column: span 12; }
+    }
+    @media (max-width: 768px) {
+      .hiw-phones { gap: 20px; }
+      .hiw-phone { width: 160px; }
+      .chip-tl, .chip-br { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════ NAVBAR ════════ -->
+<nav class="navbar" id="navbar">
+  <div class="container">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-logo">Ca<span>Ride</span></a>
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <ul class="navbar-links" id="nav-links">
+        <li><a href="/" class="active">Home</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#drivers">Drivers</a></li>
+        <li><a href="mailto:support@caride.ng" class="nav-cta">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- ════════ HERO ════════ -->
+<section class="hero">
+  <div class="container" style="grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center; position:relative; z-index:2;">
+    <!-- Left -->
+    <div class="hero-left">
+      <span class="label label-green" data-reveal>
+        <span class="dot-live"></span> Now Live in Nigeria
+      </span>
+      <h1 data-reveal data-reveal-delay="1">
+        Your Ride.<br /><em>Your Price.</em><br />Your Choice.
+      </h1>
+      <p class="hero-desc" data-reveal data-reveal-delay="2">
+        CaRide is Nigeria's smart ride-hailing platform where you set the fare. Drivers compete for your ride — you always win.
+      </p>
+      <div class="hero-actions" data-reveal data-reveal-delay="3">
+        <a href="#" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.41c1.27.07 2.18.77 2.93.8.86-.02 2.04-.83 3.08-.73 1.41.13 2.46.67 3.17 1.67-2.99 1.8-2.5 5.77.53 6.88-.47 1.38-1.08 2.74-1.71 4.25zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+          Download on iOS
+        </a>
+        <a href="#" class="btn btn-ghost">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.76c.37.21.82.21 1.21.01l11.75-6.76-2.46-2.46L3.18 23.76zm16.56-9.09L17.3 13.2 14.74 10.62l2.02-2.02 1.98 1.14c.95.55.95 2.38 0 2.93zM3.15.24C2.78.45 2.5.86 2.5 1.4v21.2c0 .54.28.95.65 1.16L14.1 12 3.15.24zm10.1 10.89L3.18.21l10.5 10.5-2.46 2.46-2.03-2.04z"/></svg>
+          Get on Android
+        </a>
+      </div>
+      <div class="hero-trust" data-reveal data-reveal-delay="4">
+        <div class="trust-avatars">
+          <span>E</span><span>A</span><span>O</span><span>C</span><span>+</span>
+        </div>
+        <p class="trust-text"><strong>10,000+ riders</strong> already on board</p>
+      </div>
+    </div>
+
+    <!-- Right – Phone -->
+    <div class="hero-right" style="position:relative; display:flex; justify-content:center; align-items:center;">
+      <div class="phone-glow" style="position:absolute;inset:-20%;border-radius:50%;background:radial-gradient(circle,rgba(22,163,74,0.2) 0%,transparent 65%);z-index:0;"></div>
+      <div class="hero-phone-wrap" data-reveal data-reveal-delay="2">
+        <img src="/phone_hero.png" alt="CaRide app showing live map with driver tracking" />
+
+        <!-- Floating chips -->
+        <div class="float-chip chip-tl" style="top:10%;left:-85px;">
+          <p class="chip-label">Driver matched</p>
+          <p class="chip-val">Emmanuel A. ⭐ 4.9</p>
+          <p class="chip-sub chip-green">● En route · 3 min</p>
+        </div>
+        <div class="float-chip chip-br delay-1" style="bottom:12%;right:-90px;">
+          <p class="chip-label">Your bid</p>
+          <p class="chip-val chip-green">₦1,800</p>
+          <p class="chip-sub">Lekki → Victoria Island</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ STATS STRIP ════════ -->
+<section class="stats-section section" style="padding:0;">
+  <div class="container">
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <div class="stat-val"><span data-target="10000" data-suffix="+">0</span></div>
+        <div class="stat-lbl">Happy Riders</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val"><span data-target="500" data-suffix="+">0</span></div>
+        <div class="stat-lbl">Active Drivers</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">4.8★</div>
+        <div class="stat-lbl">App Store Rating</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val"><span data-target="50" data-suffix="K+">0</span></div>
+        <div class="stat-lbl">Trips Completed</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ FEATURES ════════ -->
+<section class="features-section section" id="features">
+  <div class="container">
+    <div class="section-header">
+      <span class="label label-green" data-reveal>Why CaRide</span>
+      <h2 data-reveal data-reveal-delay="1">Everything you need.<br />Nothing you don't.</h2>
+      <p data-reveal data-reveal-delay="2">Designed for the modern Nigerian — fast, transparent, and built on real trust.</p>
+    </div>
+
+    <!-- Bento-style grid -->
+    <div class="bento-grid">
+      <!-- Large: Price control -->
+      <div class="bento-cell bento-dark bento-a big glass-hover" data-reveal>
+        <span class="label label-yellow" style="margin-bottom:18px;">🏆 Signature Feature</span>
+        <h3 style="font-size:1.5rem; margin-bottom:10px;">Set Your Own Price</h3>
+        <p style="max-width:340px;">Unlike fixed-fare apps, CaRide puts you in control. Set your fare — drivers near you compete for your ride. The best offer wins.</p>
+        <div class="bento-big-val" style="position:absolute;bottom:28px;right:32px;opacity:0.5;">₦</div>
+      </div>
+      <!-- Green: Real-time -->
+      <div class="bento-cell bento-green bento-b big glass-hover" data-reveal data-reveal-delay="1">
+        <div class="feature-icon" style="width:44px;height:44px;font-size:1.2rem;margin-bottom:14px;">📍</div>
+        <h3>Live Tracking</h3>
+        <p>Watch your driver move toward you in real time on the map — from acceptance to arrival.</p>
+      </div>
+      <!-- Small cells -->
+      <div class="bento-cell bento-dark bento-c sm glass-hover" data-reveal data-reveal-delay="2">
+        <div class="feature-icon" style="width:40px;height:40px;font-size:1.1rem;margin-bottom:12px;">🔒</div>
+        <h3 style="font-size:0.95rem;">Verified Drivers</h3>
+        <p style="font-size:0.85rem;">Every driver is ID-verified and vehicle-checked before going online.</p>
+      </div>
+      <div class="bento-cell bento-dark bento-d sm glass-hover" data-reveal data-reveal-delay="3">
+        <div class="feature-icon" style="width:40px;height:40px;font-size:1.1rem;margin-bottom:12px;">💳</div>
+        <h3 style="font-size:0.95rem;">Flex Payments</h3>
+        <p style="font-size:0.85rem;">Wallet, card, bank transfer, or crypto (USDT). You choose.</p>
+      </div>
+      <div class="bento-cell bento-dark bento-e sm glass-hover" data-reveal data-reveal-delay="4">
+        <div class="feature-icon" style="width:40px;height:40px;font-size:1.1rem;margin-bottom:12px;">🎁</div>
+        <h3 style="font-size:0.95rem;">Earn Referrals</h3>
+        <p style="font-size:0.85rem;">Share your code. Earn ₦100 wallet credit per referred ride.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ HOW IT WORKS ════════ -->
+<section class="hiw-section section" id="how-it-works">
+  <div class="container">
+    <div class="section-header">
+      <span class="label label-white" data-reveal>How It Works</span>
+      <h2 data-reveal data-reveal-delay="1">Book a ride in minutes</h2>
+      <p data-reveal data-reveal-delay="2">From opening the app to arriving at your destination — it's that simple.</p>
+    </div>
+
+    <div class="steps-row" data-reveal data-reveal-delay="2">
+      <div class="step-item step-connector">
+        <div class="step-num">1</div>
+        <h3>Enter Destination</h3>
+        <p>Open CaRide, pin your pickup and drop-off. We'll show a smart price range based on demand.</p>
+      </div>
+      <div class="step-item step-connector">
+        <div class="step-num">2</div>
+        <h3>Set Your Price</h3>
+        <p>Pick the suggested fare or enter your own custom bid. Your ride, your rules.</p>
+      </div>
+      <div class="step-item step-connector">
+        <div class="step-num">3</div>
+        <h3>Pick Your Driver</h3>
+        <p>Review driver profiles, ratings, and counter-offers. Select the best fit.</p>
+      </div>
+      <div class="step-item">
+        <div class="step-num">4</div>
+        <h3>Ride & Pay</h3>
+        <p>Track live, arrive safely. Payment is automatic when the ride ends in-app.</p>
+      </div>
+    </div>
+
+    <!-- Phone row -->
+    <div class="hiw-phones" data-reveal data-reveal-delay="3">
+      <div class="hiw-phone">
+        <span class="hiw-phone-badge">Step 1 & 2</span>
+        <img src="/phone_booking.png" alt="CaRide app - set your destination and price screen" />
+        <p class="hiw-phone-label">Set Destination & Price</p>
+      </div>
+      <div class="hiw-phone" style="margin-top:32px;">
+        <span class="hiw-phone-badge">Step 3 & 4</span>
+        <img src="/phone_hero.png" alt="CaRide app - driver tracking screen" />
+        <p class="hiw-phone-label">Track & Ride</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ DRIVER SECTION ════════ -->
+<section class="driver-section section" id="drivers">
+  <div class="container">
+    <div class="driver-band">
+      <div class="driver-band-inner">
+        <!-- Left -->
+        <div>
+          <span class="label label-yellow" data-reveal>🚗 Become a Driver</span>
+          <h2 data-reveal data-reveal-delay="1" style="color:var(--white); margin:16px 0 12px;">
+            Drive with CaRide.<br />Earn on your terms.
+          </h2>
+          <p data-reveal data-reveal-delay="2" style="max-width:380px;">
+            Join hundreds of drivers earning on the CaRide platform. Flexible hours, competitive commissions, and a ranking system that rewards your dedication.
+          </p>
+          <div class="driver-rank-cards" data-reveal data-reveal-delay="3">
+            <div class="rank-card"><span class="rank-icon">🥈</span><div class="rank-info"><h4>Silver</h4><p>Starting tier — standard commission</p></div></div>
+            <div class="rank-card"><span class="rank-icon">🥇</span><div class="rank-info"><h4>Gold</h4><p>50+ trips — reduced commission deduction</p></div></div>
+            <div class="rank-card"><span class="rank-icon">💎</span><div class="rank-info"><h4>Diamond</h4><p>200+ trips — priority dispatch + perks</p></div></div>
+            <div class="rank-card"><span class="rank-icon">🏆</span><div class="rank-info"><h4>Platinum</h4><p>500+ trips — lowest commission + bonuses</p></div></div>
+          </div>
+          <div style="margin-top:28px;" data-reveal data-reveal-delay="4">
+            <a href="#" class="btn btn-primary">Sign Up as Driver</a>
+          </div>
+        </div>
+        <!-- Right: phone -->
+        <div style="display:flex; flex-direction:column; align-items:center; gap:16px;" data-reveal data-reveal-delay="2">
+          <div class="phone-frame" style="width:260px; position:relative;">
+            <div class="phone-glow"></div>
+            <img src="/phone_driver.png" alt="CaRide driver app showing earnings dashboard" />
+          </div>
+          <div style="background:rgba(22,163,74,0.12);border:1px solid rgba(22,163,74,0.25);border-radius:var(--r-lg);padding:18px 28px;text-align:center;">
+            <p style="font-size:0.75rem;color:rgba(255,255,255,0.45);margin-bottom:4px;">Avg. monthly earnings</p>
+            <p style="font-size:2rem;font-weight:900;color:#4ade80;letter-spacing:-1px;margin:0;">₦85,000+</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ TESTIMONIALS ════════ -->
+<section class="testi-section section">
+  <div class="container">
+    <div class="section-header">
+      <span class="label label-green" data-reveal>Loved by Users</span>
+      <h2 data-reveal data-reveal-delay="1">Real riders. Real stories.</h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testi-card glass glass-hover" data-reveal>
+        <div class="stars">★★★★★</div>
+        <p class="testi-body">"Finally an app where I control my own fare. Got a driver in under 3 minutes during rush hour. The bidding system is a game-changer."</p>
+        <div class="testi-author"><div class="testi-avatar">AC</div><div><p class="testi-name">Adaeze C.</p><p class="testi-role">Rider · Lagos</p></div></div>
+      </div>
+      <div class="testi-card glass glass-hover" data-reveal data-reveal-delay="1">
+        <div class="stars">★★★★★</div>
+        <p class="testi-body">"I've been a CaRide driver for 3 months now. Earning consistently and the Gold tier perks really make a difference. Highly recommend."</p>
+        <div class="testi-author"><div class="testi-avatar">EM</div><div><p class="testi-name">Emmanuel M.</p><p class="testi-role">Driver · Lagos</p></div></div>
+      </div>
+      <div class="testi-card glass glass-hover" data-reveal data-reveal-delay="2">
+        <div class="stars">★★★★★</div>
+        <p class="testi-body">"The live tracking is super accurate and the in-app chat saved me once when I couldn't reach the driver. Great experience overall."</p>
+        <div class="testi-author"><div class="testi-avatar">OB</div><div><p class="testi-name">Oluwaseun B.</p><p class="testi-role">Rider · Abuja</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ CTA ════════ -->
+<section class="cta-section">
+  <div class="container">
+    <span class="label label-green" data-reveal>Get Started Today</span>
+    <h2 data-reveal data-reveal-delay="1">Ready to ride smarter?</h2>
+    <p data-reveal data-reveal-delay="2">Download CaRide and take control of your journeys across Nigeria. Your first ride awaits.</p>
+    <div class="cta-actions" data-reveal data-reveal-delay="3">
+      <a href="#" class="store-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.41c1.27.07 2.18.77 2.93.8.86-.02 2.04-.83 3.08-.73 1.41.13 2.46.67 3.17 1.67-2.99 1.8-2.5 5.77.53 6.88-.47 1.38-1.08 2.74-1.71 4.25zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+        <div class="store-btn-text"><small>Download on the</small>App Store</div>
+      </a>
+      <a href="#" class="store-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.18 23.76c.37.21.82.21 1.21.01l11.75-6.76-2.46-2.46L3.18 23.76zm16.56-9.09L17.3 13.2 14.74 10.62l2.02-2.02 1.98 1.14c.95.55.95 2.38 0 2.93zM3.15.24C2.78.45 2.5.86 2.5 1.4v21.2c0 .54.28.95.65 1.16L14.1 12 3.15.24zm10.1 10.89L3.18.21l10.5 10.5-2.46 2.46-2.03-2.04z"/></svg>
+        <div class="store-btn-text"><small>Get it on</small>Google Play</div>
+      </a>
+      <a href="mailto:support@caride.ng" class="btn btn-outline-green">Contact Us</a>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ FOOTER ════════ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-logo">Ca<span>Ride</span></div>
+        <p class="footer-desc">Nigeria's smart ride-hailing platform — connecting passengers with trusted drivers nationwide. Fast. Safe. Affordable.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul class="footer-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#drivers">Drive with Us</a></li>
+          <li><a href="mailto:support@caride.ng">Support</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul class="footer-links">
+          <li><a href="/privacypolicy.html">Privacy Policy</a></li>
+          <li><a href="/accountdeletion.html">Account Deletion</a></li>
+          <li><a href="mailto:legal@caride.ng">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025 CaRide Technologies. All rights reserved. Lagos, Nigeria.</p>
+      <ul class="footer-bottom-links">
+        <li><a href="/privacypolicy.html">Privacy</a></li>
+        <li><a href="/accountdeletion.html">Account Deletion</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
