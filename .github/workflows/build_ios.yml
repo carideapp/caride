@@ -26,8 +26,10 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Verify Flutter Installation
-        run: flutter --version
+      - name: Configure Build Environment
+        run: |
+          flutter config --no-enable-swift-package-manager
+          mkdir -p apps/caride/build/ios/SourcePackages
 
       - name: Install Dependencies
         run: |
