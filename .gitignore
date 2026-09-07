@@ -18,6 +18,11 @@ node_modules/
 dist/
 **/dist/
 
+# Apps and extra folders to ignore
+apps/admin_dashboard/
+UI/
+website/
+
 # IDE
 .idea/
 .vscode/
