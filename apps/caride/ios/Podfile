@@ -43,6 +43,12 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['SWIFT_VERSION'] = '5.10'
       config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+      cflags = config.build_settings['OTHER_CFLAGS']
+      cflags = [cflags] unless cflags.nil? || cflags.is_a?(Array)
+      cflags ||= ['$(inherited)']
+      cflags << '-Wno-objc-method-access'
+      cflags << '-Wno-error=objc-method-access'
+      config.build_settings['OTHER_CFLAGS'] = cflags
       defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
       defs = [defs] unless defs.nil? || defs.is_a?(Array)
       defs ||= ['$(inherited)']
