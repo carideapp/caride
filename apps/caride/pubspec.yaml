@@ -73,7 +73,7 @@ dependencies:
   flutter_svg: ^2.3.0
   confetti: ^0.8.0
   audioplayers: ^6.1.0
-  share_plus: ^13.3.0
+  share_plus: ">=10.1.4 <14.0.0"
   app_links: ^6.3.2
   vibration: ^3.0.0
 
