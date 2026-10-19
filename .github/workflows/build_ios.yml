@@ -30,6 +30,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Select Xcode Version
+        run: |
+          # Select latest Xcode 26.x or fallback to newest available Xcode on the runner
+          XCODE_PATH=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$XCODE_PATH" ]; then
+            XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          fi
+          if [ -n "$XCODE_PATH" ]; then
+            echo "Selected Xcode: $XCODE_PATH"
+            sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          fi
+          xcodebuild -version
+
       - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
