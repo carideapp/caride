@@ -1,6 +1,7 @@
 import 'package:design_system/design_system.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/driver/models/driver_document.dart';
+import 'package:caride/core/driver/models/driver_profile.dart';
 import 'package:caride/core/driver/models/vehicle_info.dart';
 import 'package:caride/core/driver/verification/driver_verification_config.dart';
 import 'package:caride/features/driver/auth/data/driver_profile_repository.dart';
@@ -56,34 +57,40 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
       ),
       body: SafeArea(
         child: ResponsiveContainer(
-          child: StreamBuilder<VehicleInfo?>(
-            stream: _profileRepo.streamVehicleInfo(uid),
-            builder: (context, snapshot) {
-              final vehicle = snapshot.data;
-              if (vehicle == null) {
-                return ListView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.lg,
-                  ),
-                  children: [
-                    EmptyState(
-                      title: 'Vehicle information required',
-                      message:
-                          'Submit your vehicle information first before you upload verification documents.',
-                      icon: Icons.drive_eta_rounded,
-                      action: PrimaryButton(
-                        label: 'Add Vehicle Info',
-                        onPressed: () =>
-                            context.push(DriverRoutePaths.profileVehicle),
+          child: StreamBuilder<DriverProfile?>(
+            stream: _profileRepo.streamDriverProfile(uid),
+            builder: (context, profileSnapshot) {
+              final driverProfile = profileSnapshot.data;
+              return StreamBuilder<VehicleInfo?>(
+                stream: _profileRepo.streamVehicleInfo(uid),
+                builder: (context, snapshot) {
+                  final vehicle = snapshot.data;
+                  if (vehicle == null) {
+                    return ListView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.lg,
                       ),
-                    ),
-                  ],
-                );
-              }
+                      children: [
+                        EmptyState(
+                          title: 'Vehicle information required',
+                          message:
+                              'Submit your vehicle information first before you upload verification documents.',
+                          icon: Icons.drive_eta_rounded,
+                          action: PrimaryButton(
+                            label: 'Add Vehicle Info',
+                            onPressed: () =>
+                                context.push(DriverRoutePaths.profileVehicle),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
 
-              final requiredDocs =
-                  requiredDocumentsForVehicleType(vehicle.vehicleType);
+                  final requiredDocs = requiredDocumentsForVehicleType(
+                    vehicle.vehicleType,
+                    operatingState: driverProfile?.state,
+                  );
 
               return StreamBuilder<List<DriverDocument>>(
                 stream: _documentRepo.streamDocuments(uid),
@@ -244,10 +251,12 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
                 },
               );
             },
-          ),
-        ),
+          );
+        },
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
@@ -402,6 +411,20 @@ class _DocumentTile extends StatelessWidget {
                   fadedAsset: 'lib/assets/proof_of_insurance_faded.png',
                   halfAsset: 'lib/assets/proof_of_insurance_half.png',
                   blurAsset: 'lib/assets/proof_of_insurance_blur.png',
+                ),
+              ),
+            );
+          } else if (definition.type == 'lasdri_card') {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const DriverGenericDocumentUploadScreen(
+                  documentType: 'lasdri_card',
+                  title: 'LASDRI Card',
+                  instruction: 'Upload a clear picture of your Lagos State Drivers Institute (LASDRI) recertification card.',
+                  correctAsset: 'lib/assets/drivers_license_correct.png',
+                  fadedAsset: 'lib/assets/drivers_license_faded.png',
+                  halfAsset: 'lib/assets/drivers_license_half.png',
+                  blurAsset: 'lib/assets/drivers_license_blur.png',
                 ),
               ),
             );

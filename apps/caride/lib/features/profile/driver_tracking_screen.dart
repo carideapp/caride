@@ -496,17 +496,61 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Row(
                 children: [
-                  IconButton.filledTonal(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: isDark ? Colors.white : const Color(0xFF111827),
+                      ),
+                    ),
                   ),
                   const Spacer(),
-                  IconButton.filledTonal(
-                    onPressed: loc == null ? null : _recenter,
-                    icon: Icon(
-                      _followDriver
-                          ? Icons.my_location_rounded
-                          : Icons.location_searching_rounded,
+                  GestureDetector(
+                    onTap: loc == null ? null : _recenter,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _followDriver
+                            ? Icons.my_location_rounded
+                            : Icons.location_searching_rounded,
+                        size: 20,
+                        color: _followDriver
+                            ? AppColors.brand
+                            : (isDark ? Colors.white : const Color(0xFF111827)),
+                      ),
                     ),
                   ),
                 ],

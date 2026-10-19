@@ -21,7 +21,22 @@ class DriverWalletTransaction {
   final String? method;
   final String? reference;
 
-  bool get isCredit => type == 'credit';
+  bool get isCredit {
+    final t = type.toLowerCase().trim();
+    final d = description.toLowerCase();
+    if (t == 'debit' || t == 'payout' || t == 'commission_debit') return false;
+    if (t == 'credit' ||
+        t == 'referral_credit' ||
+        t == 'referral_reward' ||
+        t == 'cashback' ||
+        t == 'bonus' ||
+        d.contains('referral') ||
+        d.contains('cashback') ||
+        d.contains('earnings')) {
+      return true;
+    }
+    return t != 'debit' && t != 'payout';
+  }
 
   factory DriverWalletTransaction.fromDoc(
     DocumentSnapshot<Map<String, dynamic>> doc,

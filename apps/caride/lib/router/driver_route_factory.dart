@@ -28,7 +28,10 @@ import 'package:caride/features/driver/profile/driver_ride_history_screen.dart';
 import 'package:caride/features/driver/profile/driver_tiers_screen.dart';
 import 'package:caride/features/driver/profile/driver_vehicle_screen.dart';
 import 'package:caride/features/driver/profile/driver_account_security_screen.dart';
+import 'package:caride/features/driver/profile/driver_linked_fleets_screen.dart';
+import 'package:caride/features/driver/profile/driver_fleet_profile_view_screen.dart';
 import 'package:caride/features/driver/profile/become_customer_benefits_screen.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:caride/features/driver/requests/incoming_requests_screen.dart';
 import 'package:caride/features/driver/rides/driver_rides_screen.dart';
 import 'package:caride/features/driver/rides/driver_ride_detail_screen.dart';
@@ -40,6 +43,8 @@ import 'package:caride/features/driver/trip/trip_complete_screen.dart';
 import 'package:caride/features/driver/trip/trip_pickup_screen.dart';
 import 'package:caride/features/driver/wallet/driver_bank_account_screen.dart';
 import 'package:caride/features/driver/wallet/driver_wallet_screen.dart';
+import 'package:caride/features/driver/rental/driver_rental_bookings_screen.dart';
+import 'package:caride/features/driver/rental/driver_rental_trip_screen.dart';
 import 'package:navigation/navigation.dart';
 
 DriverRouteDelegates buildDriverRouteDelegates() {
@@ -94,5 +99,19 @@ DriverRouteDelegates buildDriverRouteDelegates() {
     referral: (_) => const DriverReferralScreen(),
     becomeCustomer: (_) => const BecomeCustomerBenefitsScreen(),
     accountSecurity: (_) => const DriverAccountSecurityScreen(),
+    linkedFleets: (_) => const DriverLinkedFleetsScreen(),
+    fleetProfileView: (context, extra) {
+      if (extra is FleetProfile) {
+        return DriverFleetProfileViewScreen(fleet: extra);
+      }
+      return const DriverLinkedFleetsScreen();
+    },
+    rentalBookings: (_) => const DriverRentalBookingsScreen(),
+    rentalTrip: (context, dynamic extra) {
+      if (extra is RentalBooking) {
+        return DriverRentalTripScreen(booking: extra);
+      }
+      return const DriverRentalBookingsScreen();
+    },
   );
 }

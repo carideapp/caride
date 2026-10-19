@@ -14,16 +14,22 @@ String? customerAuthRedirect(GoRouterState state) {
   final location = state.matchedLocation;
   final isAuthenticated = customerAuthController.isAuthenticated;
 
-  // Guest-only routes that require the user to be logged OUT.
+  // Guest-only routes that require or allow the user to be logged OUT.
   const guestOnlyRoutes = <String>{
     CustomerRoutePaths.onboarding,
     CustomerRoutePaths.welcome,
     CustomerRoutePaths.login,
+    CustomerRoutePaths.signup,
+    CustomerRoutePaths.otp,
     CustomerRoutePaths.forgotPassword,
     DriverRoutePaths.getStarted,
     DriverRoutePaths.login,
+    DriverRoutePaths.signup,
+    DriverRoutePaths.otp,
     DriverRoutePaths.forgotPassword,
     FleetRoutePaths.login,
+    FleetRoutePaths.signup,
+    FleetRoutePaths.otp,
     FleetRoutePaths.forgotPassword,
   };
 

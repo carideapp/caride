@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 final ThemeModeController customerThemeMode = ThemeModeController();
 
 class ThemeModeController extends ValueNotifier<ThemeMode> {
-  ThemeModeController() : super(ThemeMode.dark) {
+  ThemeModeController() : super(ThemeMode.light) {
     _loadTheme();
   }
 

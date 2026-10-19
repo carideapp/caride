@@ -107,4 +107,43 @@ class AppConfigRepository {
       },
     );
   }
+
+  Stream<DriverSettingsConfig> watchDriverSettings() {
+    return _firestore.collection('config').doc('driverSettings').snapshots().map(
+      (doc) {
+        final data = doc.data();
+        if (data == null) return DriverSettingsConfig.defaults;
+        return DriverSettingsConfig.fromMap(data);
+      },
+    );
+  }
+
+  Future<DriverSettingsConfig> getDriverSettings() async {
+    try {
+      final doc = await _firestore.collection('config').doc('driverSettings').get();
+      final data = doc.data();
+      if (data == null) return DriverSettingsConfig.defaults;
+      return DriverSettingsConfig.fromMap(data);
+    } catch (_) {
+      return DriverSettingsConfig.defaults;
+    }
+  }
+}
+
+class DriverSettingsConfig {
+  const DriverSettingsConfig({
+    required this.maxNegativeBalanceNaira,
+  });
+
+  final double maxNegativeBalanceNaira;
+
+  static const DriverSettingsConfig defaults = DriverSettingsConfig(
+    maxNegativeBalanceNaira: 3000.0,
+  );
+
+  factory DriverSettingsConfig.fromMap(Map<String, dynamic> data) {
+    final maxNeg = (data['maxNegativeBalanceNaira'] as num?)?.toDouble() ??
+        DriverSettingsConfig.defaults.maxNegativeBalanceNaira;
+    return DriverSettingsConfig(maxNegativeBalanceNaira: maxNeg);
+  }
 }

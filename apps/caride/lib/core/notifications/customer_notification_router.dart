@@ -27,6 +27,15 @@ class CustomerNotificationRouter {
       case 'chat_message':
         router.go(CustomerRoutePaths.chat);
         return;
+      case 'rental_booking_approved':
+      case 'rental_booking_declined':
+      case 'rental_driver_assigned':
+      case 'rental_heading_to_pickup':
+      case 'rental_trip_started':
+      case 'rental_trip_completed':
+      case 'rental_payment_confirmed':
+        router.go(CustomerRoutePaths.rentalBookings);
+        return;
       default:
         return;
     }

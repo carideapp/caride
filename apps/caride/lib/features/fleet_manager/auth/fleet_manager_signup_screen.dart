@@ -2,6 +2,7 @@ import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
 
+import '../../../../core/services/termii_service.dart';
 import '../widgets/fleet_document_picker.dart';
 import 'controllers/fleet_auth_controller.dart';
 import 'controllers/fleet_auth_error_helper.dart';
@@ -19,6 +20,7 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   // Step 1 Controllers
   final _accountFormKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _referralController = TextEditingController();
@@ -26,7 +28,6 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   // Step 3 Controllers
   final _infoFormKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _companyNameController = TextEditingController();
   final _companyAddressController = TextEditingController();
   final _rcNumberController = TextEditingController();
@@ -60,6 +61,7 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   }
 
   Future<void> _loadPersistedDraft() async {
+    await fleetAuthController.restorePendingSession();
     await fleetAuthController.loadSignupDraft();
     if (mounted) {
       setState(() {
@@ -71,12 +73,12 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   void _initFromDraft() {
     final c = fleetAuthController;
     _emailController.text = c.email;
+    _phoneController.text = c.phone;
     _passwordController.text = c.password;
     _confirmPasswordController.text = c.confirmPassword;
     _referralController.text = c.referralCode;
     _termsAccepted = c.termsAccepted;
     _fullNameController.text = c.fullName;
-    _phoneController.text = c.phone;
     _companyNameController.text = c.companyName;
     _companyAddressController.text = c.companyAddress;
     _rcNumberController.text = c.rcNumber;
@@ -85,12 +87,12 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   void _syncToDraft() {
     final c = fleetAuthController;
     c.email = _emailController.text.trim();
+    c.phone = _phoneController.text.trim();
     c.password = _passwordController.text;
     c.confirmPassword = _confirmPasswordController.text;
     c.referralCode = _referralController.text.trim();
     c.termsAccepted = _termsAccepted;
     c.fullName = _fullNameController.text.trim();
-    c.phone = _phoneController.text.trim();
     c.companyName = _companyNameController.text.trim();
     c.companyAddress = _companyAddressController.text.trim();
     c.rcNumber = _rcNumberController.text.trim();
@@ -99,11 +101,11 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _referralController.dispose();
     _fullNameController.dispose();
-    _phoneController.dispose();
     _companyNameController.dispose();
     _companyAddressController.dispose();
     _rcNumberController.dispose();
@@ -147,7 +149,16 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
     });
 
     try {
-      await fleetAuthController.requestSignupOtp();
+      final activeChallenge = fleetAuthController.pendingChallenge;
+      final cleanPhone = TermiiService.formatToLocal11Digits(_phoneController.text.trim());
+      final cleanEmail = _emailController.text.trim().toLowerCase();
+      final match = activeChallenge != null &&
+          ((activeChallenge.isSms && activeChallenge.phone == cleanPhone) ||
+           (!activeChallenge.isSms && activeChallenge.email.toLowerCase() == cleanEmail));
+
+      if (!match) {
+        await fleetAuthController.requestSignupOtp();
+      }
       if (!mounted) return;
 
       final verified = await context.push<bool>(FleetRoutePaths.otp);
@@ -335,7 +346,7 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
           ),
           const SizedBox(height: 28),
 
-          // Email
+          // Email Address
           Text(
             'Email Address',
             style: TextStyle(
@@ -352,14 +363,94 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
             decoration: _pillInputDecoration(
               hint: 'e.g. manager@fleetcompany.com',
               fillColor: inputFill,
+              prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF9CA3AF), size: 20),
             ),
             validator: (val) {
-              if (val == null || val.trim().isEmpty) return 'Email is required';
-              if (!val.contains('@') || !val.contains('.')) {
-                return 'Enter a valid email address';
-              }
+              final v = val?.trim() ?? '';
+              if (v.isEmpty) return 'Please enter your email address.';
+              final emailRegex = RegExp(r'^[\w.+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
+              if (!emailRegex.hasMatch(v)) return 'Enter a valid email address.';
               return null;
             },
+          ),
+          const SizedBox(height: 18),
+
+          // Phone Number (+234)
+          Text(
+            'Phone Number',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: labelTextColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // +234 country code dropdown
+              Container(
+                height: 58,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: inputFill,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: '+234',
+                    icon: Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: subtitleTextColor,
+                    ),
+                    style: TextStyle(
+                      color: primaryTextColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
+                    items: const [
+                      DropdownMenuItem(
+                        value: '+234',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('🇳🇬', style: TextStyle(fontSize: 18)),
+                            SizedBox(width: 4),
+                            Text('+234'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onChanged: (_) {},
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(color: primaryTextColor, fontSize: 15),
+                  decoration: _pillInputDecoration(
+                    hint: '08012345678',
+                    fillColor: inputFill,
+                  ),
+                  validator: (value) {
+                    final v = value?.trim() ?? '';
+                    if (v.isEmpty) return 'Please enter your phone number.';
+                    final digitsOnly = v.replaceAll(RegExp(r'\D'), '');
+                    if (digitsOnly.length != 11) {
+                      return 'Phone number must be exactly 11 digits.';
+                    }
+                    if (!digitsOnly.startsWith('0')) {
+                      return 'Phone number must start with 0 (e.g. 0801...).';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 18),
 
@@ -885,7 +976,7 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
           // ── Registered Address for Individual Operator ──
           if (!isCompany) ...[
             const SizedBox(height: 18),
-            Text('Registered / Residential Address',
+            Text('Residentail / Office address',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: labelTextColor)),
             const SizedBox(height: 8),
             TextFormField(
@@ -1184,7 +1275,7 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
               _buildReviewRow('RC Number', c.rcNumber, isDark),
             ],
             if (c.companyAddress.isNotEmpty)
-              _buildReviewRow(isCompany ? 'Company Address' : 'Registered Address', c.companyAddress, isDark),
+              _buildReviewRow(isCompany ? 'Company Address' : 'Residentail / Office address', c.companyAddress, isDark),
           ],
         ),
         const SizedBox(height: 16),
@@ -1351,6 +1442,7 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
   InputDecoration _pillInputDecoration({
     required String hint,
     required Color fillColor,
+    Widget? prefixIcon,
     Widget? suffixIcon,
   }) {
     return InputDecoration(
@@ -1359,6 +1451,9 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
       filled: true,
       fillColor: fillColor,
       contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+      prefixIcon: prefixIcon != null
+          ? Padding(padding: const EdgeInsets.only(left: 8), child: prefixIcon)
+          : null,
       suffixIcon: suffixIcon != null
           ? Padding(padding: const EdgeInsets.only(right: 8), child: suffixIcon)
           : null,

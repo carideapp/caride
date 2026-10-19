@@ -18,6 +18,11 @@ class DriverProfile {
     required this.totalRatings,
     required this.referralCode,
     required this.referralEarnings,
+    this.username = '',
+    this.country = 'Nigeria',
+    this.state = '',
+    this.coverPhotoUrl,
+    this.linkedFleetIds = const [],
     this.referredByCode,
     this.rejectionReason,
     this.createdAt,
@@ -28,7 +33,12 @@ class DriverProfile {
   final String email;
   final String fullName;
   final String phone;
+  final String username;
+  final String country;
+  final String state;
   final String profilePhotoUrl;
+  final String? coverPhotoUrl;
+  final List<String> linkedFleetIds;
   final String role;
   final bool isEmailVerified;
   final bool profileCompleted;
@@ -52,6 +62,7 @@ class DriverProfile {
   bool get isPending => approvalStatus == 'pending';
   bool get isApproved => approvalStatus == 'approved';
   bool get isRejected => approvalStatus == 'rejected';
+  double get rating => averageRating;
 
   factory DriverProfile.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     return DriverProfile.fromMap(uid: doc.id, data: doc.data() ?? {});
@@ -66,7 +77,15 @@ class DriverProfile {
       email: (data['email'] as String?) ?? '',
       fullName: (data['fullName'] as String?) ?? '',
       phone: (data['phone'] as String?) ?? '',
+      username: (data['username'] as String?) ?? '',
+      country: (data['country'] as String?) ?? 'Nigeria',
+      state: (data['state'] as String?) ?? '',
       profilePhotoUrl: (data['profilePhotoUrl'] as String?) ?? '',
+      coverPhotoUrl: (data['coverPhotoUrl'] as String?) ?? (data['businessCoverPhotoUrl'] as String?),
+      linkedFleetIds: (data['linkedFleetIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       role: (data['role'] as String?) ?? 'driver',
       isEmailVerified: (data['isEmailVerified'] as bool?) ?? false,
       profileCompleted: (data['profileCompleted'] as bool?) ?? false,
@@ -91,7 +110,12 @@ class DriverProfile {
       'email': email,
       'fullName': fullName,
       'phone': phone,
+      'username': username,
+      'country': country,
+      'state': state,
       'profilePhotoUrl': profilePhotoUrl,
+      'coverPhotoUrl': coverPhotoUrl,
+      'linkedFleetIds': linkedFleetIds,
       'role': role,
       'isEmailVerified': isEmailVerified,
       'profileCompleted': profileCompleted,

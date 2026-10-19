@@ -52,11 +52,11 @@ class DriverBankAccountRepository {
         .map((snap) => snap.docs.map(DriverBankAccount.fromDoc).toList());
   }
 
-  /// Fetches the list of Nigerian banks via the Paystack Cloud Function.
+  /// Fetches the list of Nigerian banks via the TransactPay Cloud Function.
   Future<List<BankOption>> fetchBanks() async {
     try {
       final result = await _functions
-          .httpsCallable('listPaystackBanks')
+          .httpsCallable('listTransactPayBanks')
           .call<Map<String, dynamic>>();
 
       final data = result.data;
@@ -141,8 +141,7 @@ class DriverBankAccountRepository {
       BankOption(code: '100', name: 'Opay'),
       BankOption(code: '999', name: 'Kuda Microfinance'),
       BankOption(code: '998', name: 'Palmpay'),
-      BankOption(code: '997', name: 'Flutterwave'),
-      BankOption(code: '996', name: 'Paystack'),
+      BankOption(code: '996', name: 'TransactPay'),
       BankOption(code: '995', name: 'Interswitch'),
       BankOption(code: '994', name: 'TagPay'),
       BankOption(code: '993', name: 'Mono'),
@@ -173,14 +172,14 @@ class DriverBankAccountRepository {
     ];
   }
 
-  /// Resolves an account name via the Paystack Cloud Function.
+  /// Resolves an account name via the TransactPay Cloud Function.
   Future<VerifiedBankAccountPreview> resolveAccount({
     required String bankCode,
     required String accountNumber,
   }) async {
     try {
       final result = await _functions
-          .httpsCallable('resolvePaystackBankAccount')
+          .httpsCallable('resolveTransactPayBankAccount')
           .call<Map<String, dynamic>>({
         'bankCode': bankCode,
         'accountNumber': accountNumber,

@@ -15,14 +15,6 @@
       },
       "oauth_client": [
         {
-          "client_id": "907513616513-0ti7r7vu5q80aoblvuu5mc8oj1i8900u.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.caride.app",
-            "certificate_hash": "db7beab73820599e7122ef502733fe7f35dcb55a"
-          }
-        },
-        {
           "client_id": "907513616513-d8h01qa783f0inc2dgk4cdecgkrajl80.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -58,6 +50,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "907513616513-c5rlj86g2mtfvc91nrj492u7khnitlho.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.caride.driver.driver_app",
+            "certificate_hash": "db7beab73820599e7122ef502733fe7f35dcb55a"
+          }
+        },
         {
           "client_id": "907513616513-d8h01qa783f0inc2dgk4cdecgkrajl80.apps.googleusercontent.com",
           "client_type": 3

@@ -13,11 +13,14 @@ import 'package:caride/core/services/app_update_service.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:lottie/lottie.dart' hide Marker;
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
+import 'package:shared_models/shared_models.dart';
+import 'package:caride/features/profile/data/address_repository.dart';
+import 'package:caride/core/services/weather_service.dart';
+import 'package:caride/core/services/pending_bank_transfer_service.dart';
+import 'package:caride/features/wallet/widgets/pending_bank_transfer_widgets.dart';
 
-/// Redesigned Passenger Home Screen around a map background, with floating frosted overlays.
+/// Redesigned Passenger Home Screen following modern UI standards and CaRide Brand Guidelines.
 class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
 
@@ -43,6 +46,17 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   double? _customerLng;
   static const double _nearbyRadiusKm = 10.0;
 
+  // ── Live Weather state ───────────────────────────────────────────────────
+  WeatherData? _weatherData = WeatherService.cachedData;
+  bool _isLoadingWeather = false;
+
+  // ── Service Availability state ──────────────────────────────────────────
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _availabilitySub;
+  Map<String, dynamic>? _serviceAvailability;
+
+  // ── Saved addresses repository ─────────────────────────────────────────
+  final AddressRepository _addressRepository = AddressRepository();
+
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
@@ -62,7 +76,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     );
 
     _slideAnimation =
-        Tween<Offset>(begin: const Offset(0.0, 0.1), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0.0, 0.06), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _animationController,
             curve: AppCurves.spring,
@@ -83,12 +97,38 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     unawaited(_checkPopupAnnouncements());
     unawaited(_initNearbyDrivers());
 
+    _availabilitySub = FirebaseFirestore.instance
+        .collection('config')
+        .doc('serviceAvailability')
+        .snapshots()
+        .listen((doc) {
+      if (mounted && doc.exists) {
+        setState(() {
+          _serviceAvailability = doc.data();
+        });
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(AppUpdateService.checkAndShowUpdateDialog(context));
+        unawaited(_checkPendingBankTransfer());
       }
     });
   }
+
+  Future<void> _checkPendingBankTransfer() async {
+    final pending =
+        await PendingBankTransferService.instance.getPendingTransfer();
+    if (pending != null && !pending.isDismissed && mounted) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+      await PendingBankTransferPromptSheet.show(context, pending: pending);
+    }
+  }
+
+  static const String _kLastKnownLatKey = 'customer_last_known_lat';
+  static const String _kLastKnownLngKey = 'customer_last_known_lng';
 
   Future<void> _initNearbyDrivers() async {
     // 1. Load car icon
@@ -101,33 +141,121 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       );
     } catch (_) {}
 
-    // 2. Get customer's current GPS position
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
-      _customerLat = pos.latitude;
-      _customerLng = pos.longitude;
-      if (mounted) {
-        setState(() {});
-      }
-      // Move map to customer location
-      _homeMapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 13.0),
-      );
-    } catch (_) {
-      // GPS unavailable — markers will still show relative to default center
-    }
-
-    // 3. Subscribe to all online driverPresence documents
+    // 2. Subscribe to all online driverPresence documents immediately
     _driverPresenceSub = FirebaseFirestore.instance
         .collection('driverPresence')
         .where('availabilityState', isEqualTo: 'online')
         .snapshots()
         .listen(_onDriverPresenceSnapshot);
+
+    // 3. Instantly load cached/last-known location for immediate display
+    await _loadCachedLastKnownLocation();
+
+    // 4. In background, fetch, capture and load updated live current location
+    unawaited(_refreshLiveLocationInBackground());
+  }
+
+  /// Instantly loads the last known location from local cache (SharedPreferences & OS cache)
+  Future<void> _loadCachedLastKnownLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedLat = prefs.getDouble(_kLastKnownLatKey);
+      final cachedLng = prefs.getDouble(_kLastKnownLngKey);
+
+      if (cachedLat != null && cachedLng != null) {
+        _customerLat = cachedLat;
+        _customerLng = cachedLng;
+        if (mounted) {
+          setState(() {});
+        }
+        unawaited(_fetchWeather(cachedLat, cachedLng));
+        return;
+      }
+
+      // If not yet in prefs, check OS device last known position cache
+      final lastPos = await Geolocator.getLastKnownPosition();
+      if (lastPos != null) {
+        _customerLat = lastPos.latitude;
+        _customerLng = lastPos.longitude;
+        if (mounted) {
+          setState(() {});
+        }
+        unawaited(_fetchWeather(lastPos.latitude, lastPos.longitude));
+        // Cache to preferences for subsequent instant boots
+        unawaited(prefs.setDouble(_kLastKnownLatKey, lastPos.latitude));
+        unawaited(prefs.setDouble(_kLastKnownLngKey, lastPos.longitude));
+      }
+    } catch (_) {}
+  }
+
+  /// In the background, queries high-accuracy GPS, updates state, and persists to cache
+  Future<void> _refreshLiveLocationInBackground() async {
+    try {
+      // Check & request location permission if needed
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          return;
+        }
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+
+      final isDifferent = _customerLat == null ||
+          _customerLng == null ||
+          (pos.latitude - _customerLat!).abs() > 0.0001 ||
+          (pos.longitude - _customerLng!).abs() > 0.0001;
+
+      _customerLat = pos.latitude;
+      _customerLng = pos.longitude;
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      // Save new coordinates to cache for future instant launches
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble(_kLastKnownLatKey, pos.latitude);
+        await prefs.setDouble(_kLastKnownLngKey, pos.longitude);
+      } catch (_) {}
+
+      if (isDifferent) {
+        unawaited(_fetchWeather(pos.latitude, pos.longitude));
+      }
+    } catch (_) {
+      // In case live fetch fails or times out, fallback to OS last known position
+      try {
+        final lastPos = await Geolocator.getLastKnownPosition();
+        if (lastPos != null && (_customerLat == null || _customerLng == null)) {
+          _customerLat = lastPos.latitude;
+          _customerLng = lastPos.longitude;
+          if (mounted) {
+            setState(() {});
+          }
+          unawaited(_fetchWeather(lastPos.latitude, lastPos.longitude));
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _fetchWeather(double lat, double lng) async {
+    if (_isLoadingWeather) return;
+    _isLoadingWeather = true;
+    final data = await WeatherService.fetchWeather(lat, lng);
+    if (mounted && data != null) {
+      setState(() {
+        _weatherData = data;
+        _isLoadingWeather = false;
+      });
+    }
   }
 
   void _onDriverPresenceSnapshot(QuerySnapshot<Map<String, dynamic>> snap) {
@@ -163,7 +291,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         rotation: heading,
         anchor: const Offset(0.5, 0.5),
         flat: true,
-        infoWindow: InfoWindow(title: 'Driver nearby'),
+        infoWindow: const InfoWindow(title: 'Driver nearby'),
       );
     }
 
@@ -219,7 +347,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         return;
       }
 
-      // Mark as dismissed immediately when we show it so it doesn't reappear on barrier tap dismissal
       await prefs.setStringList('dismissed_popup_announcements', [
         ...dismissedPopups,
         popupId,
@@ -308,6 +435,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   void dispose() {
     _activeRideSub?.cancel();
     _driverPresenceSub?.cancel();
+    _availabilitySub?.cancel();
     _homeMapController?.dispose();
     _animationController.dispose();
     super.dispose();
@@ -377,65 +505,42 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     return 'Guest';
   }
 
-  void _showActiveRideWarningDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        contentPadding: EdgeInsets.zero,
-        content: GlassSurface(
-          radius: AppRadius.lg,
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.warning_amber_rounded,
-                  color: AppColors.error,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Active Ride in Progress',
-                style: AppTextStyles.headlineSmall.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                "You cannot order another ride while there's a current active ride in progress.",
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMedium,
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryButton(
-                  label: 'View Current Ride',
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    context.go(CustomerRoutePaths.activity);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  String get _currentDetectedState {
+    final loc = _weatherData?.locationName.trim() ?? '';
+    if (loc.isNotEmpty) return loc;
+    final profileState =
+        customerAuthController.currentProfile?.state.trim() ?? '';
+    return profileState;
   }
 
-  Future<void> _confirmLogout(BuildContext context) async {
+  bool _isServiceAvailable(String serviceKey) {
+    if (_serviceAvailability == null) return true;
+    final entry = _serviceAvailability![serviceKey];
+    if (entry is! Map) return true;
+    final enabled = entry['enabled'];
+    if (enabled is bool && !enabled) return false;
+
+    final allStates = entry['allStates'];
+    if (allStates is bool && allStates) return true;
+
+    final userState = _currentDetectedState;
+    if (userState.isEmpty) return true;
+
+    final rawStates = entry['availableStates'];
+    if (rawStates is List) {
+      final permittedStates = rawStates
+          .map((e) => e.toString().trim().toLowerCase())
+          .toSet();
+      final normUser = userState.toLowerCase();
+      return permittedStates.any((p) =>
+          p == normUser || normUser.contains(p) || p.contains(normUser));
+    }
+    return true;
+  }
+
+  void _showActiveRideWarningSheet(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final confirmed = await showModalBottomSheet<bool>(
+    showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -444,11 +549,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
           color: isDark ? AppColors.darkSurface : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          12,
+          24,
+          MediaQuery.of(sheetCtx).viewInsets.bottom + 28,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag handle
+            // Top Drag Handle
             Container(
               width: 40,
               height: 4,
@@ -459,27 +569,28 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.10),
+                color: AppColors.error.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.logout_rounded,
+                Icons.warning_amber_rounded,
                 color: AppColors.error,
-                size: 32,
+                size: 34,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Sign Out',
+              'Active Ride in Progress',
               style: AppTextStyles.titleLarge.copyWith(
                 fontWeight: FontWeight.bold,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Are you sure you want to sign out of your account?',
+              "You cannot order another ride while there's a current active ride in progress.",
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyMedium.copyWith(
                 color: isDark
@@ -488,53 +599,48 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
               ),
             ),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(sheetCtx, false),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      side: BorderSide(
-                        color: isDark
-                            ? AppColors.glassBorderDark
-                            : const Color(0xFFE5E7EB),
-                      ),
-                    ),
-                    child: const Text('Cancel'),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(sheetCtx, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.error,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Sign Out',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                onPressed: () {
+                  Navigator.pop(sheetCtx);
+                  context.go(CustomerRoutePaths.activity);
+                },
+                child: const Text(
+                  'View Current Ride',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-              ],
+              ),
             ),
           ],
         ),
       ),
     );
+  }
 
-    if (confirmed == true && context.mounted) {
-      await customerAuthController.signOut();
+  void _onSavedAddressSelected(SavedAddress address) {
+    if (_activeRide != null) {
+      _showActiveRideWarningSheet(context);
+    } else {
+      context.push(
+        CustomerRoutePaths.rideSetPrice,
+        extra: {
+          'dropoffLabel': address.label.isNotEmpty
+              ? address.label
+              : address.address,
+          'dropoffLat': address.lat,
+          'dropoffLng': address.lng,
+        },
+      );
     }
   }
 
@@ -560,19 +666,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
                 final email = profile?.email ?? '';
 
                 return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.pagePadding,
-                    vertical: AppSpacing.lg,
+                    vertical: AppSpacing.md,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Header Section ──
+                      // ── Top Header Bar ──
                       Row(
                         children: [
                           CircleAvatar(
-                            radius: 24,
-                            backgroundColor: AppColors.brandGlass,
+                            radius: 22,
+                            backgroundColor: isDark
+                                ? Colors.white12
+                                : const Color(0xFFF3F4F6),
                             backgroundImage: photoUrl.isNotEmpty
                                 ? NetworkImage(photoUrl)
                                 : null,
@@ -580,227 +689,406 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
                                 ? const Icon(
                                     Icons.person_rounded,
                                     color: AppColors.brand,
+                                    size: 24,
                                   )
                                 : null,
                           ),
                           const SizedBox(width: AppSpacing.md),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _greeting(),
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                _displayName(fullName, email),
-                                style: AppTextStyles.titleLarge.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Spacer(),
-                          // ── Logout Button ──
-                          Tooltip(
-                            message: 'Sign Out',
-                            child: GestureDetector(
-                              onTap: () => _confirmLogout(context),
-                              child: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _greeting(),
+                                  style: AppTextStyles.bodySmall.copyWith(
                                     color: isDark
-                                        ? AppColors.glassBorderDark
-                                        : const Color(0xFFE5E7EB),
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  color: isDark
-                                      ? AppColors.darkSurface
-                                      : Colors.white,
                                 ),
-                                child: const Icon(
-                                  Icons.logout_rounded,
-                                  size: 20,
-                                  color: AppColors.error,
+                                Text(
+                                  _displayName(fullName, email),
+                                  style: AppTextStyles.titleMedium.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+                              ],
+                            ),
+                          ),
+                          // Dynamic Location & Weather Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.darkSurface
+                                  : const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.glassBorderDark
+                                    : const Color(0xFFE5E7EB),
                               ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _weatherData?.weatherIcon ??
+                                      Icons.wb_sunny_rounded,
+                                  color: AppColors.brand,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _weatherData != null
+                                      ? (_weatherData!.locationName.isNotEmpty
+                                            ? '${_weatherData!.formattedTemp} · ${_weatherData!.locationName}'
+                                            : _weatherData!.formattedTemp)
+                                      : (_isLoadingWeather
+                                            ? 'Loading weather...'
+                                            : 'Weather unavailable'),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : AppColors.textPrimaryLight,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.lg),
+                      const SizedBox(height: AppSpacing.xl),
 
-                      // ── Hero Section ──
-                      Text(
-                        'Where are you heading?',
-                        style: AppTextStyles.displayLarge.copyWith(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          height: 1.1,
-                          letterSpacing: -0.3,
-                        ),
+                      // ── Hero Headline ──
+                      // Text(
+                      //   'Where will you go today?',
+                      //   style: AppTextStyles.displayLarge.copyWith(
+                      //     fontSize: 26,
+                      //     fontWeight: FontWeight.w900,
+                      //     height: 1.15,
+                      //     letterSpacing: -0.4,
+                      //   ),
+                      // ),
+                      // const SizedBox(height: AppSpacing.md),
+
+                      // ── Pending Bank Transfer Banner ──
+                      const PendingBankTransferBanner(
+                        margin: EdgeInsets.only(bottom: AppSpacing.md),
                       ),
-                      const SizedBox(height: AppSpacing.md),
 
-                      // ── Clickable Address Field ──
+                      // ── Quick Search & Schedule Pill Bar (Reference Image 1) ──
                       GestureDetector(
                         onTap: () async {
                           if (_activeRide != null) {
-                            _showActiveRideWarningDialog(context);
+                            _showActiveRideWarningSheet(context);
                           } else {
                             await context.push(CustomerRoutePaths.rideSetPrice);
                           }
                         },
-                        child: AbsorbPointer(
-                          child: AppTextField(
-                            hint: 'Search destination...',
-                            obscureText: false,
-                            prefix: const Icon(
-                              Icons.search_rounded,
-                              color: AppColors.brand,
+                        child: Container(
+                          height: 56,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.darkSurface
+                                : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color: isDark
+                                  ? AppColors.glassBorderDark
+                                  : const Color(0xFFE5E7EB),
                             ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.search_rounded,
+                                color: AppColors.brand,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Where to?',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
 
-                      // ── Map Preview Container ──
+                      // ── Saved Addresses Card (Only saved addresses below Where to?) ──
+                      StreamBuilder<List<SavedAddress>>(
+                        stream: _addressRepository.watchAddresses(),
+                        builder: (context, snapshot) {
+                          final addresses = snapshot.data ?? const [];
+                          if (addresses.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _SavedAddressesCard(
+                                addresses: addresses,
+                                onSelect: _onSavedAddressSelected,
+                              ),
+                              const SizedBox(height: AppSpacing.lg),
+                            ],
+                          );
+                        },
+                      ),
+
+                      // ── Live Interactive Map Preview (Reference Image 2) ──
                       Container(
-                        height: 180,
+                        height: 122,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isDark
                                 ? AppColors.glassBorderDark
-                                : AppColors.glassBorderLight,
+                                : const Color(0xFFE5E7EB),
                           ),
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(19),
-                          child: AbsorbPointer(
-                            child: GoogleMap(
-                              initialCameraPosition: const CameraPosition(
-                                target: LatLng(9.0820, 8.6753),
-                                zoom: 13.0,
+                          borderRadius: BorderRadius.circular(11),
+                          child: Stack(
+                            children: [
+                              GoogleMap(
+                                initialCameraPosition: const CameraPosition(
+                                  target: LatLng(9.0820, 8.6753),
+                                  zoom: 13.0,
+                                ),
+                                onMapCreated: (ctrl) {
+                                  _homeMapController = ctrl;
+                                  final lat = _customerLat;
+                                  final lng = _customerLng;
+                                  if (lat != null && lng != null) {
+                                    ctrl.animateCamera(
+                                      CameraUpdate.newLatLngZoom(
+                                        LatLng(lat, lng),
+                                        13.0,
+                                      ),
+                                    );
+                                  }
+                                },
+                                myLocationEnabled: true,
+                                myLocationButtonEnabled: false,
+                                zoomControlsEnabled: false,
+                                compassEnabled: false,
+                                mapToolbarEnabled: false,
+                                zoomGesturesEnabled: false,
+                                scrollGesturesEnabled: false,
+                                tiltGesturesEnabled: false,
+                                rotateGesturesEnabled: false,
+                                style: isDark ? kGoogleMapDarkStyle : null,
+                                markers: {
+                                  ..._nearbyDriverMarkers.values,
+                                  if (_customerLat != null &&
+                                      _customerLng != null)
+                                    Marker(
+                                      markerId: const MarkerId('user_location'),
+                                      position: LatLng(
+                                        _customerLat!,
+                                        _customerLng!,
+                                      ),
+                                      icon:
+                                          BitmapDescriptor.defaultMarkerWithHue(
+                                            BitmapDescriptor.hueGreen,
+                                          ),
+                                      infoWindow: const InfoWindow(
+                                        title: 'My Location',
+                                      ),
+                                    ),
+                                },
                               ),
-                              onMapCreated: (ctrl) {
-                                _homeMapController = ctrl;
-                                // Animate to customer location if already fetched
-                                final lat = _customerLat;
-                                final lng = _customerLng;
-                                if (lat != null && lng != null) {
-                                  ctrl.animateCamera(
-                                    CameraUpdate.newLatLngZoom(
-                                      LatLng(lat, lng),
-                                      13.0,
-                                    ),
-                                  );
-                                }
-                              },
-                              myLocationEnabled: true,
-                              myLocationButtonEnabled: false,
-                              zoomControlsEnabled: false,
-                              compassEnabled: false,
-                              mapToolbarEnabled: false,
-                              zoomGesturesEnabled: false,
-                              scrollGesturesEnabled: false,
-                              tiltGesturesEnabled: false,
-                              rotateGesturesEnabled: false,
-                              style: isDark ? kGoogleMapDarkStyle : null,
-                              markers: {
-                                ..._nearbyDriverMarkers.values,
-                                if (_customerLat != null &&
-                                    _customerLng != null)
-                                  Marker(
-                                    markerId: const MarkerId('user_location'),
-                                    position: LatLng(
-                                      _customerLat!,
-                                      _customerLng!,
-                                    ),
-                                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                                      BitmapDescriptor.hueRed,
-                                    ),
-                                    infoWindow: const InfoWindow(
-                                      title: 'My Location',
-                                    ),
+
+                              // Invisible tap overlay to trigger booking
+                              Positioned.fill(
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () async {
+                                      if (_activeRide != null) {
+                                        _showActiveRideWarningSheet(context);
+                                      } else {
+                                        await context.push(
+                                          CustomerRoutePaths.rideSetPrice,
+                                        );
+                                      }
+                                    },
                                   ),
-                              },
-                            ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.xl),
 
-                      // ── Action Cards Title ──
+                      // ── Services Header ──
                       Text(
                         'Services',
-                        style: AppTextStyles.titleMedium.copyWith(
-                          fontWeight: FontWeight.bold,
+                        style: AppTextStyles.titleLarge.copyWith(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          color: Colors.black,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
 
-                      // ── Side-by-Side Quick Action Cards ──
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ActionCard(
+                      // ── Dynamic Services Row (With Keke & Bike Support) ──
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1. Regular Car Ride
+                            _ServiceItem(
                               title: 'Ride',
-                              imagePath:
-                                  'lib/assets/lottie/car_animation.lottie',
-                              isComingSoon: false,
+                              icon: Icons.directions_car_rounded,
+                              imagePath: 'lib/assets/icons/car.png',
                               onTap: () async {
                                 if (_activeRide != null) {
-                                  _showActiveRideWarningDialog(context);
+                                  _showActiveRideWarningSheet(context);
                                 } else {
                                   await context.push(
                                     CustomerRoutePaths.rideSetPrice,
+                                    extra: {
+                                      'initialRideType': 'Regular',
+                                      'operatingState': _currentDetectedState,
+                                    },
                                   );
                                 }
                               },
                             ),
-                          ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Expanded(
-                            child: _ActionCard(
-                              title: 'Send Items',
-                              imagePath:
-                                  'lib/assets/lottie/delivery_bike.lottie',
-                              isComingSoon: false,
-                              onTap: () async {
-                                if (_activeRide != null) {
-                                  _showActiveRideWarningDialog(context);
-                                } else {
-                                  await context.push(
-                                    CustomerRoutePaths.sendItems,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Expanded(
-                            child: _ActionCard(
-                              title: 'Car Rentals',
-                              imagePath:
-                                  'lib/assets/caride_branded/car_rental.png',
-                              isComingSoon: false,
+
+                            // 2. Commercial Tricycle (Keke) - respect state availability
+                            if (_isServiceAvailable('tricycle')) ...[
+                              const SizedBox(width: 18),
+                              _ServiceItem(
+                                title: 'Tricycle',
+                                icon: Icons.electric_rickshaw_rounded,
+                                imagePath: 'lib/assets/caride_branded/tricyle.png',
+                                onTap: () async {
+                                  if (_activeRide != null) {
+                                    _showActiveRideWarningSheet(context);
+                                  } else {
+                                    await context.push(
+                                      CustomerRoutePaths.rideSetPrice,
+                                      extra: {
+                                        'initialRideType': 'Tricycle',
+                                        'operatingState': _currentDetectedState,
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+
+                            // 3. Commercial Motorcycle (Bike) - respect state availability
+                            if (_isServiceAvailable('motorcycle')) ...[
+                              const SizedBox(width: 18),
+                              _ServiceItem(
+                                title: 'Motorcycle',
+                                icon: Icons.two_wheeler_rounded,
+                                imagePath: 'lib/assets/motorcycle.png',
+                                onTap: () async {
+                                  if (_activeRide != null) {
+                                    _showActiveRideWarningSheet(context);
+                                  } else {
+                                    await context.push(
+                                      CustomerRoutePaths.rideSetPrice,
+                                      extra: {
+                                        'initialRideType': 'Motorcycle',
+                                        'operatingState': _currentDetectedState,
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+
+                            // 4. Courier Delivery
+                            if (_isServiceAvailable('courier')) ...[
+                              const SizedBox(width: 18),
+                              _ServiceItem(
+                                title: 'Courier',
+                                icon: Icons.inventory_2_rounded,
+                                imagePath: 'lib/assets/icons/box.png',
+                                onTap: () async {
+                                  if (_activeRide != null) {
+                                    _showActiveRideWarningSheet(context);
+                                  } else {
+                                    await context.push(
+                                      CustomerRoutePaths.sendItems,
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+
+                            // 5. Rentals
+                            const SizedBox(width: 18),
+                            _ServiceItem(
+                              title: 'Rentals',
+                              icon: Icons.car_rental_rounded,
+                              imagePath: 'lib/assets/icons/rent.png',
                               onTap: () {
-                                _showCarRentalsComingSoonBottomSheet(context);
+                                context.push(CustomerRoutePaths.rentalBookings);
                               },
                             ),
-                          ),
-                        ],
+
+                            // 6. Blog
+                            const SizedBox(width: 18),
+                            _ServiceItem(
+                              title: 'Blog',
+                              icon: Icons.article_rounded,
+                              imagePath: 'lib/assets/icons/paper.png',
+                              onTap: () {
+                                context.push(CustomerRoutePaths.forYouPosts);
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.xl),
+
+                      // ── Educational & Community Blog: For You ──
+                      Text(
+                        'For you',
+                        style: AppTextStyles.titleLarge.copyWith(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const _ForYouContentSection(),
+                      const SizedBox(height: AppSpacing.xl),
+
+                      // ── Active Promotional Banners Carousel ──
                       const _BannerAdsCarousel(target: 'customers'),
+                      const SizedBox(height: AppSpacing.xxl),
                     ],
                   ),
                 );
@@ -811,348 +1099,448 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       ),
     );
   }
-
-  void _showCarRentalsComingSoonBottomSheet(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return BottomSheetShell(
-          title: 'Car Rentals',
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.pagePadding,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: AppSpacing.xs),
-                // Hero Image Card with Generated 2D Happy Passenger Illustration
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(
-                      color: isDark
-                          ? AppColors.glassBorderDark
-                          : AppColors.glassBorderLight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.brand.withValues(alpha: 0.15),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    child: Stack(
-                      alignment: Alignment.topRight,
-                      children: [
-                        AspectRatio(
-                          aspectRatio: 16 / 9,
-                          child: Image.asset(
-                            'lib/assets/caride_branded/happy_passenger.png',
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.brand,
-                              borderRadius: BorderRadius.circular(999),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 4,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              'COMING SOON',
-                              style: AppTextStyles.labelSmall.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.2,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                Text(
-                  'Rent Vehicles Anytime, Anywhere',
-                  style: AppTextStyles.headlineSmall.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  "We are expanding CaRide to give you direct access to flexible vehicle rentals tailored for every journey.",
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Feature Glimpse Tiles
-                const _RentalFeatureTile(
-                  icon: Icons.directions_car_rounded,
-                  iconColor: Color(0xFF3B82F6),
-                  title: 'Daily & Intercity Cars',
-                  subtitle:
-                      'Sedans, hatchbacks, and SUVs for personal errands, business, and road trips.',
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                const _RentalFeatureTile(
-                  icon: Icons.workspace_premium_rounded,
-                  iconColor: Color(0xFFF59E0B),
-                  title: 'Luxury & VIP Fleet',
-                  subtitle:
-                      'Premium executive cars & SUVs for special events, weddings, and high-profile rides.',
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                const _RentalFeatureTile(
-                  icon: Icons.local_shipping_rounded,
-                  iconColor: Color(0xFF10B981),
-                  title: 'Lorries & Cargo Haulage',
-                  subtitle:
-                      'Commercial trucks, vans, and lorries for heavy transport and logistics.',
-                ),
-                const SizedBox(height: AppSpacing.xl),
-
-                PrimaryButton(
-                  label: 'Got it',
-                  onPressed: () => Navigator.pop(context),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
-class _RentalFeatureTile extends StatelessWidget {
-  const _RentalFeatureTile({
+/// Circular & Clean Service Item (Aligned with Reference Image 1 & 2)
+class _ServiceItem extends StatelessWidget {
+  const _ServiceItem({
+    required this.title,
     required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return GlassContainer(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 22),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.titleMedium.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionCard extends StatefulWidget {
-  const _ActionCard({
-    required this.title,
-    required this.imagePath,
-    required this.isComingSoon,
+    this.imagePath,
     required this.onTap,
   });
 
   final String title;
-  final String imagePath;
-  final bool isComingSoon;
+  final IconData icon;
+  final String? imagePath;
   final VoidCallback onTap;
-
-  @override
-  State<_ActionCard> createState() => _ActionCardState();
-}
-
-class _ActionCardState extends State<_ActionCard>
-    with SingleTickerProviderStateMixin {
-  bool _isPressed = false;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.96 : 1.0,
-        duration: AppDurations.fast,
-        curve: AppCurves.spring,
-        child: GlassContainer(
-          borderColor: widget.isComingSoon
-              ? null
-              : (_isPressed ? AppColors.brand : null),
-          child: SizedBox(
-            height: 155,
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xs,
-                    vertical: AppSpacing.sm,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: widget.imagePath.endsWith('.lottie')
-                              ? Lottie.asset(
-                                  widget.imagePath,
-                                  height: 85,
-                                  fit: BoxFit.contain,
-                                  decoder: (bytes) {
-                                    return LottieComposition.decodeZip(
-                                      bytes,
-                                      filePicker: (files) {
-                                        return files.firstWhere(
-                                          (f) =>
-                                              f.name.startsWith(
-                                                'animations/',
-                                              ) &&
-                                              f.name.endsWith('.json'),
-                                        );
-                                      },
-                                    );
-                                  },
-                                )
-                              : Image.asset(
-                                  widget.imagePath,
-                                  height: 50,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Icon(
-                                      widget.title == 'Ride'
-                                          ? Icons.directions_car_rounded
-                                          : Icons.car_rental_rounded,
-                                      size: 50,
-                                      color: widget.isComingSoon
-                                          ? Colors.grey
-                                          : AppColors.brand,
-                                    );
-                                  },
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        widget.title,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+      onTap: onTap,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDark ? AppColors.darkSurface : const Color(0xFFF3F4F6),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.glassBorderDark
+                      : const Color(0xFFE5E7EB),
+                  width: 1,
                 ),
-                if (widget.isComingSoon)
-                  Positioned(
-                    top: AppSpacing.xs,
-                    right: AppSpacing.xs,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white10 : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'Soon',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+              ),
+              child: Center(
+                child: imagePath != null
+                    ? Image.asset(
+                        imagePath!,
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) =>
+                            Icon(icon, size: 28, color: AppColors.brand),
+                      )
+                    : Icon(icon, size: 28, color: AppColors.brand),
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: AppTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
+/// Saved Addresses List Card (Displays user's saved addresses below Where to?)
+class _SavedAddressesCard extends StatelessWidget {
+  const _SavedAddressesCard({required this.addresses, required this.onSelect});
+
+  final List<SavedAddress> addresses;
+  final ValueChanged<SavedAddress> onSelect;
+
+  IconData _iconForLabel(String label) {
+    final lower = label.toLowerCase();
+    if (lower.contains('home')) return Icons.home_rounded;
+    if (lower.contains('work') || lower.contains('office')) {
+      return Icons.work_rounded;
+    }
+    if (lower.contains('school') || lower.contains('uni')) {
+      return Icons.school_rounded;
+    }
+    if (lower.contains('gym')) return Icons.fitness_center_rounded;
+    return Icons.bookmark_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (addresses.isEmpty) return const SizedBox.shrink();
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Column(
+        children: [
+          for (int i = 0; i < addresses.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                indent: 64,
+                endIndent: 16,
+                color: isDark
+                    ? AppColors.glassBorderDark
+                    : const Color(0xFFF3F4F6),
+              ),
+            InkWell(
+              onTap: () => onSelect(addresses[i]),
+              borderRadius: BorderRadius.vertical(
+                top: i == 0 ? const Radius.circular(12) : Radius.zero,
+                bottom: i == addresses.length - 1
+                    ? const Radius.circular(12)
+                    : Radius.zero,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 13,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFF3F4F6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _iconForLabel(addresses[i].label),
+                        size: 20,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            addresses[i].label.isNotEmpty
+                                ? addresses[i].label
+                                : addresses[i].address,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (addresses[i].label.isNotEmpty &&
+                              addresses[i].address.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              addresses[i].address,
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: isDark ? Colors.white38 : Colors.grey[400],
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Dynamic Educational & Community Blog Cards ("For you" Section)
+class _ForYouContentSection extends StatelessWidget {
+  const _ForYouContentSection();
+
+  static final List<ForYouArticle> _fallbackArticles = [
+    ForYouArticle(
+      id: 'fallback-safety',
+      title: 'Ride Safety: Verifying Your Vehicle & Driver PIN',
+      shortDescription:
+          'Essential steps to confirm your driver before stepping in.',
+      category: 'Safety',
+      readTime: '3 min read',
+      coverImageUrl:
+          'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80',
+      content: '''
+### Stay Safe on Every Trip
+
+At CaRide, passenger safety is our top priority. Every driver on our platform undergoes background screening and vehicle inspection before they can accept trips.
+
+### 1. Verify Driver License Plate & Vehicle Model
+Before getting in, always match the license plate number, vehicle make, and model displayed in your app with the vehicle in front of you.
+
+### 2. Check Driver Photo & Name
+Confirm the driver matches their profile photo. Never board a vehicle if a different person is driving.
+
+### 3. Share Your Live Trip Status
+Use our built-in trip sharing tool to send your live location and route directly to family or loved ones with a single tap.
+
+### 4. Direct Emergency Assistance
+If you ever feel unsafe, use the emergency SOS button available on your active trip screen for immediate 24/7 security dispatch.
+''',
+    ),
+    ForYouArticle(
+      id: 'fallback-rental',
+      title: 'Car Rentals 101: How CaRide Vehicle Hire Works',
+      shortDescription:
+          'Everything you need to know about self-drive & chauffeur rentals.',
+      category: 'Guide',
+      readTime: '4 min read',
+      coverImageUrl:
+          'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+      content: '''
+### Renting Made Simple & Transparent
+
+Whether you need a luxury SUV for an event, a sedan for client meetings, or a commercial bus for interstate travel, CaRide Car Rental connects you with vetted fleet partners.
+
+### Flexible Booking Options
+* **With Chauffeur**: Enjoy relaxed travel with an experienced, professional driver.
+* **Self Drive**: Full independence and privacy for your journey.
+
+### Step-by-Step Rental Flow
+1. **Browse Fleet Catalog**: Choose category, price range, and location.
+2. **Submit Reservation**: Select dates and pickup hours.
+3. **Fleet Manager Confirmation**: The vehicle owner confirms availability within minutes.
+4. **Transparent Payment**: Pay securely via CaRide Wallet or direct card payment.
+5. **Start Your Trip**: Use your unique 4-digit PIN code upon vehicle handover.
+''',
+    ),
+    ForYouArticle(
+      id: 'fallback-courier',
+      title: 'Sending Items with CaRide Courier',
+      shortDescription:
+          'Quick door-to-door package delivery tips for seamless sending.',
+      category: 'Tips',
+      readTime: '2 min read',
+      coverImageUrl:
+          'https://images.unsplash.com/photo-1580674684081-7617fbf3d745?auto=format&fit=crop&w=800&q=80',
+      content: '''
+### Fast, Tracked Parcel Delivery
+
+Need documents, electronics, or personal items delivered across town? CaRide Courier provides secure, point-to-point delivery with real-time driver tracking.
+
+### Best Practices Before Dispatching:
+* **Secure Packaging**: Ensure fragile items are properly cushioned and sealed.
+* **Accurate Recipient Details**: Double check the recipient's phone number and dropoff landmark so the driver can connect effortlessly.
+* **Live In-App Tracking**: Watch the courier driver’s progress in real-time until delivery confirmation.
+''',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('for_you_articles')
+          .where('isActive', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        List<ForYouArticle> articles = [];
+
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          articles = snapshot.data!.docs.map((doc) {
+            return ForYouArticle.fromMap(doc.data(), doc.id);
+          }).toList();
+
+          // Sort by newest first
+          articles.sort((a, b) {
+            final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return bTime.compareTo(aTime);
+          });
+        }
+
+        // Use rich fallback articles if Firestore is empty or still loading initial items
+        if (articles.isEmpty) {
+          articles = _fallbackArticles;
+        }
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: articles.map((article) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: GestureDetector(
+                  onTap: () {
+                    context.push(
+                      CustomerRoutePaths.forYouDetail,
+                      extra: article,
+                    );
+                  },
+                  child: Container(
+                    width: 254,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.glassBorderDark
+                            : const Color(0xFFE5E7EB),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Cover Image with Category Chip overlay
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(11),
+                              child: Container(
+                                height: 112,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: AppColors.brand.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                ),
+                                child: article.coverImageUrl.isNotEmpty
+                                    ? Image.network(
+                                        article.coverImageUrl,
+                                        width: double.infinity,
+                                        height: 112,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            _cardPlaceholder(),
+                                      )
+                                    : _cardPlaceholder(),
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  article.category.toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Title
+                        Text(
+                          article.title,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF111827),
+                            letterSpacing: -0.2,
+                            height: 1.25,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const SizedBox(height: 5),
+
+                        // Short description
+                        Text(
+                          article.shortDescription,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : const Color(0xFF6B7280),
+                            height: 1.35,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _cardPlaceholder() {
+    return Container(
+      color: AppColors.brand.withValues(alpha: 0.08),
+      child: const Center(
+        child: Icon(Icons.menu_book_rounded, size: 38, color: AppColors.brand),
+      ),
+    );
+  }
+}
+
+/// Auto-Swiping Promotional Banners Carousel with Disk Caching
 class _BannerAdsCarousel extends StatefulWidget {
   const _BannerAdsCarousel({required this.target});
   final String target;
@@ -1183,7 +1571,7 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
 
   void _startAutoSwipe() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (_totalPages <= 1 || !mounted) return;
       if (!_pageController.hasClients) return;
       final nextPage = _pageController.page!.round() + 1;
@@ -1236,20 +1624,23 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
           }
         }
 
-        return GlassContainer(
-          borderColor: isDark
-              ? AppColors.glassBorderDark
-              : AppColors.glassBorderLight,
-          padding: EdgeInsets.zero,
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.glassBorderDark
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(11),
             child: AspectRatio(
-              aspectRatio: 16 / 9,
+              aspectRatio: 3.0,
               child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: (page) {
                   setState(() => _currentPage = page);
-                  // Restart timer to avoid immediate jumps
                   _startAutoSwipe();
                 },
                 itemCount: _totalPages <= 1 ? 1 : 100000,
@@ -1261,7 +1652,6 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
                   return Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Banner Image
                       DiskCachedImage(
                         imageUrl: imageUrl,
                         fit: BoxFit.cover,
@@ -1274,11 +1664,10 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
                           ),
                         ),
                       ),
-                      // Page Indicator Dots
                       if (docs.length > 1)
                         Positioned(
                           right: AppSpacing.md,
-                          top: AppSpacing.md,
+                          bottom: 8,
                           child: Row(
                             children: List.generate(docs.length, (dotIndex) {
                               final isActive =

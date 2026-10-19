@@ -9,7 +9,7 @@ import 'package:caride/features/profile/data/security_pin_repository.dart';
 import 'package:caride/features/profile/pickup_code_settings_sheet.dart';
 import 'package:caride/features/profile/trusted_contacts_screen.dart';
 
-/// Redesigned Customer Account & Security Screen.
+/// Minimalist Customer Account & Security Screen styled after the CaRide Profile design standards.
 class AccountSecurityScreen extends StatefulWidget {
   const AccountSecurityScreen({super.key});
 
@@ -44,7 +44,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     try {
       final uid = user.uid;
 
-      // 1. Delete customer Firestore data and subcollections
+      // 1. Delete customer Firestore subcollections & doc
       final txDocs = await FirebaseFirestore.instance
           .collection('customers')
           .doc(uid)
@@ -77,7 +77,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
       // 2. Delete Firebase Auth user
       await user.delete();
 
-      // 3. Sign out of local controller
+      // 3. Sign out
       await customerAuthController.signOut();
 
       if (mounted) {
@@ -92,63 +92,13 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         if (e.code == 'requires-recent-login') {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: Colors.transparent,
-              contentPadding: EdgeInsets.zero,
-              content: GlassSurface(
-                radius: AppRadius.lg,
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Recent Login Required',
-                      style: AppTextStyles.titleLarge.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Text(
-                      'For security reasons, you must log out and log back in before deleting your account.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SecondaryButton(
-                            label: 'Cancel',
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: PrimaryButton(
-                            label: 'Log Out',
-                            backgroundColor: AppColors.error,
-                            onPressed: () async {
-                              Navigator.pop(context);
-                              await customerAuthController.signOut();
-                              if (context.mounted) {
-                                context.go(CustomerRoutePaths.welcome);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          _showRecentLoginRequiredSheet();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to delete account: ${e.message}'),
               behavior: SnackBarBehavior.floating,
+              backgroundColor: AppColors.error,
             ),
           );
         }
@@ -159,6 +109,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
           SnackBar(
             content: Text('Error: $e'),
             behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -169,51 +120,215 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     }
   }
 
-  void _showDeleteConfirmation() {
-    showDialog(
+  void _showRecentLoginRequiredSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        contentPadding: EdgeInsets.zero,
-        content: GlassSurface(
-          radius: AppRadius.lg,
-          padding: const EdgeInsets.all(AppSpacing.xl),
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Delete Account?',
-                style: AppTextStyles.titleLarge.copyWith(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.bold,
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD1D5DB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              const Text(
-                'This action is permanent and cannot be undone. All your data, wallet balance, and ride history will be lost forever.',
-                textAlign: TextAlign.center,
+              const SizedBox(height: 20),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_reset_rounded,
+                  color: Color(0xFFD97706),
+                  size: 28,
+                ),
               ),
-              const SizedBox(height: AppSpacing.xl),
-              Row(
-                children: [
-                  Expanded(
-                    child: SecondaryButton(
-                      label: 'Cancel',
-                      onPressed: () => Navigator.pop(context),
+              const SizedBox(height: 16),
+              Text(
+                'Recent Login Required',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'For security reasons, you must log out and sign back in before permanently deleting your account.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await customerAuthController.signOut();
+                    if (mounted) {
+                      context.go(CustomerRoutePaths.welcome);
+                    }
+                  },
+                  child: const Text('Log Out Now', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'Proceed',
-                      backgroundColor: AppColors.error,
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showDoubleConfirmation();
-                      },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD1D5DB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_forever_rounded,
+                  color: AppColors.error,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Delete Account?',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This action is permanent and cannot be undone. All your data, wallet balance, and ride history will be permanently erased.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _showDoubleConfirmation();
+                  },
+                  child: const Text('Yes, Proceed to Delete', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563),
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -223,49 +338,104 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
   }
 
   void _showDoubleConfirmation() {
-    showDialog(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        contentPadding: EdgeInsets.zero,
-        content: GlassSurface(
-          radius: AppRadius.lg,
-          padding: const EdgeInsets.all(AppSpacing.xl),
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Confirm Deletion',
-                style: AppTextStyles.titleLarge.copyWith(
-                  fontWeight: FontWeight.bold,
+              Center(
+                child: Container(
+                  width: 48,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD1D5DB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              const Text(
-                'Are you absolutely sure? Click confirm to proceed with final account deletion.',
-                textAlign: TextAlign.center,
+              const SizedBox(height: 20),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: AppColors.error,
+                  size: 28,
+                ),
               ),
-              const SizedBox(height: AppSpacing.xl),
-              Row(
-                children: [
-                  Expanded(
-                    child: SecondaryButton(
-                      label: 'Cancel',
-                      onPressed: () => Navigator.pop(context),
+              const SizedBox(height: 16),
+              Text(
+                'Final Confirmation',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Are you absolutely sure? Click "Delete My Account Permanently" to erase your account forever.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _deleteAccount();
+                  },
+                  child: const Text('Delete My Account Permanently', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Keep My Account',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'DELETE',
-                      backgroundColor: AppColors.error,
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _deleteAccount();
-                      },
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -277,245 +447,278 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
 
     return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.darkBackground
-          : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: 'Account & Security',
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: ResponsiveContainer(
-          child: _isDeleting
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AppLoader(),
-                      SizedBox(height: AppSpacing.md),
-                      Text('Deleting account, please wait...'),
-                    ],
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pagePadding,
-                    vertical: AppSpacing.lg,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ─── Safety Section ───────────────────────────────
-                      const SizedBox(height: AppSpacing.xl),
-                      _buildSectionHeader(
-                        context: context,
-                        title: 'Safety',
-                        subtitle: 'Ride verification and emergency contacts',
+        child: _isDeleting
+            ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AppLoader(),
+                    SizedBox(height: 16),
+                    Text('Deleting account, please wait...'),
+                  ],
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 14,
+                  bottom: 50,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top App Bar with Circular Back Button
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => context.pop(),
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: isDark ? AppColors.darkSurface : Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 18,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Text(
+                          'Account & Security',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: primaryTextColor,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ── CARD GROUP 1 (Ride Safety & Contacts) ──
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        ),
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      GlassContainer(
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          children: [
-                            _buildMenuItem(
-                              context,
-                              icon: Icons.shield_rounded,
-                              title: 'Pickup Code',
-                              subtitle:
-                                  'Verify your driver before starting your trip',
-                              onTap: () => showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (_) => DraggableScrollableSheet(
-                                  expand: false,
-                                  initialChildSize: 0.50,
-                                  minChildSize: 0.50,
-                                  maxChildSize: 0.52,
-                                  builder: (_, ctrl) => GlassSurface(
-                                    radius: AppRadius.xl,
-                                    child: SingleChildScrollView(
-                                      controller: ctrl,
-                                      child: const PickupCodeSettingsSheet(),
-                                    ),
+                      child: Column(
+                        children: [
+                          _SecurityMenuItem(
+                            title: 'Pickup Code Verification',
+                            icon: Icons.shield_rounded,
+                            isDark: isDark,
+                            primaryTextColor: primaryTextColor,
+                            onTap: () => showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => DraggableScrollableSheet(
+                                expand: false,
+                                initialChildSize: 0.50,
+                                minChildSize: 0.50,
+                                maxChildSize: 0.55,
+                                builder: (_, ctrl) => Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark ? AppColors.darkSurface : Colors.white,
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                                  ),
+                                  child: SingleChildScrollView(
+                                    controller: ctrl,
+                                    child: const PickupCodeSettingsSheet(),
                                   ),
                                 ),
                               ),
                             ),
-                            Divider(
-                              height: 1,
-                              color: isDark
-                                  ? AppColors.glassBorderDark
-                                  : AppColors.glassBorderLight,
-                            ),
-                            _buildMenuItem(
-                              context,
-                              icon: Icons.people_rounded,
-                              title: 'Trusted Contacts',
-                              subtitle:
-                                  'Manage contacts for emergency alerts and trip sharing',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const TrustedContactsScreen(),
-                                ),
+                          ),
+                          _buildDivider(isDark),
+                          _SecurityMenuItem(
+                            title: 'Trusted Contacts',
+                            icon: Icons.people_rounded,
+                            isDark: isDark,
+                            primaryTextColor: primaryTextColor,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const TrustedContactsScreen(),
                               ),
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── CARD GROUP 2 (Credentials & Sessions) ──
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
                         ),
                       ),
-
-                      // ─── Privacy & Sessions ────────────────────────────
-                      const SizedBox(height: AppSpacing.xl),
-                      _buildSectionHeader(
-                        context: context,
-                        title: 'Privacy & Sessions',
-                        subtitle:
-                            'Control logins, connected devices, and account status',
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      GlassContainer(
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          children: [
-                            _buildMenuItem(
-                              context,
-                              icon: Icons.devices_rounded,
-                              title: 'Device Management',
-                              subtitle:
-                                  'Review and manage your active login sessions',
-                              onTap: () => context.push(
-                                CustomerRoutePaths.deviceManagement,
-                              ),
-                            ),
-                            Divider(
-                              height: 1,
-                              color: isDark
-                                  ? AppColors.glassBorderDark
-                                  : AppColors.glassBorderLight,
-                            ),
-                            _buildMenuItem(
-                              context,
-                              icon: Icons.lock_outline_rounded,
-                              title: 'Security PIN',
-                              subtitle: _hasPinSet == null
-                                  ? 'Loading...'
-                                  : (_hasPinSet!
-                                        ? 'Change or reset your transaction PIN'
-                                        : 'Set a transaction PIN to secure withdrawals'),
-                              onTap: () async {
-                                await context.push(
-                                  CustomerRoutePaths.securityPin,
-                                );
-                                _checkPinSet();
-                              },
-                            ),
-                            Divider(
-                              height: 1,
-                              color: isDark
-                                  ? AppColors.glassBorderDark
-                                  : AppColors.glassBorderLight,
-                            ),
-                            _buildMenuItem(
-                              context,
-                              icon: Icons.delete_forever_rounded,
-                              title: 'Delete Account',
-                              subtitle:
-                                  'Permanently erase your credentials and records',
-                              textColor: AppColors.error,
-                              iconColor: AppColors.error,
-                              showChevron: false,
-                              onTap: _showDeleteConfirmation,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader({
-    required BuildContext context,
-    required String title,
-    required String subtitle,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [Text(title, style: AppTextStyles.titleMedium)],
-    );
-  }
-
-  Widget _buildMenuItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    Color? textColor,
-    Color? iconColor,
-    bool showChevron = true,
-    required VoidCallback onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: (iconColor ?? AppColors.brand).withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Icon(
-                  icon,
-                  color: iconColor ?? AppColors.brand,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: textColor,
+                      child: Column(
+                        children: [
+                          _SecurityMenuItem(
+                            title: 'Device Management',
+                            icon: Icons.devices_rounded,
+                            isDark: isDark,
+                            primaryTextColor: primaryTextColor,
+                            onTap: () => context.push(CustomerRoutePaths.deviceManagement),
+                          ),
+                          _buildDivider(isDark),
+                          _SecurityMenuItem(
+                            title: 'Security PIN',
+                            icon: Icons.lock_outline_rounded,
+                            isDark: isDark,
+                            primaryTextColor: primaryTextColor,
+                            badge: _hasPinSet == null
+                                ? 'Loading'
+                                : (_hasPinSet! ? 'Active' : 'Not Set'),
+                            badgeColor: _hasPinSet == true ? AppColors.brand : const Color(0xFFF59E0B),
+                            onTap: () async {
+                              await context.push(CustomerRoutePaths.securityPin);
+                              _checkPinSet();
+                            },
+                          ),
+                          _buildDivider(isDark),
+                          _SecurityMenuItem(
+                            title: 'Delete Account',
+                            icon: Icons.delete_forever_rounded,
+                            isDark: isDark,
+                            primaryTextColor: AppColors.error,
+                            iconColor: AppColors.error,
+                            iconBgColor: AppColors.error.withValues(alpha: 0.1),
+                            showChevron: false,
+                            onTap: _showDeleteConfirmation,
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.xs),
-              if (showChevron)
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: isDark
-                      ? AppColors.textTertiaryDark
-                      : AppColors.textTertiaryLight,
-                  size: 20,
+      ),
+    );
+  }
+
+  Widget _buildDivider(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 68, right: 18),
+      child: Divider(
+        height: 1,
+        color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+      ),
+    );
+  }
+}
+
+class _SecurityMenuItem extends StatelessWidget {
+  const _SecurityMenuItem({
+    required this.title,
+    required this.icon,
+    required this.isDark,
+    required this.primaryTextColor,
+    required this.onTap,
+    this.iconColor,
+    this.iconBgColor,
+    this.badge,
+    this.badgeColor,
+    this.showChevron = true,
+  });
+
+  final String title;
+  final IconData icon;
+  final bool isDark;
+  final Color primaryTextColor;
+  final VoidCallback onTap;
+  final Color? iconColor;
+  final Color? iconBgColor;
+  final String? badge;
+  final Color? badgeColor;
+  final bool showChevron;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveIconBg = iconBgColor ?? (isDark ? Colors.white10 : const Color(0xFFF3F4F6));
+    final effectiveIconColor = iconColor ?? (isDark ? Colors.white70 : const Color(0xFF374151));
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: effectiveIconBg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: effectiveIconColor, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextColor,
+                  letterSpacing: -0.2,
                 ),
+              ),
+            ),
+            if (badge != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: (badgeColor ?? AppColors.brand).withValues(
+                    alpha: 0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  badge!,
+                  style: TextStyle(
+                    color: badgeColor ?? AppColors.brand,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
             ],
-          ),
+            if (showChevron)
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF9CA3AF),
+                size: 22,
+              ),
+          ],
         ),
       ),
     );

@@ -4,12 +4,16 @@ const String vehicleTypeRegular = 'regular';
 const String vehicleTypeComfort = 'comfort';
 const String vehicleTypeLuxury = 'luxury';
 const String vehicleTypeCourier = 'courier';
+const String vehicleTypeTricycle = 'tricycle';
+const String vehicleTypeMotorcycle = 'motorcycle';
 
 const List<String> supportedVehicleTypes = <String>[
   vehicleTypeRegular,
   vehicleTypeComfort,
   vehicleTypeLuxury,
   vehicleTypeCourier,
+  vehicleTypeTricycle,
+  vehicleTypeMotorcycle,
 ];
 
 const List<String> standardDriverDocumentTypes = <String>[
@@ -39,6 +43,41 @@ const List<String> courierDriverDocumentTypes = <String>[
   'vehicle_photo',
 ];
 
+/// Commercial Tricycle (Keke) requirements in Nigeria:
+/// FRSC Class A Driver's Licence (for 3-wheelers/motorcycles) / Rider's Permit,
+/// Vehicle Registration, Road Worthiness, Commercial Third Party Insurance,
+/// Proof of Ownership, Exterior Vehicle Photos, NIN, Guarantor, Address.
+const List<String> kekeDriverDocumentTypes = <String>[
+  'national_id',
+  'drivers_license',
+  'rider_permit',
+  'profile_photo',
+  'proof_of_address',
+  'guarantor_info',
+  'vehicle_registration',
+  'proof_of_ownership',
+  'proof_of_insurance',
+  'road_worthiness',
+  'vehicle_photo',
+];
+
+/// Commercial Motorcycle (Bike) requirements in Nigeria:
+/// FRSC Class A Driver's Licence / Rider's Permit, Commercial Road Worthiness,
+/// Vehicle Registration, Proof of Ownership, Third Party Insurance, Vehicle Photos, NIN, Guarantor.
+const List<String> motorcycleDriverDocumentTypes = <String>[
+  'national_id',
+  'drivers_license',
+  'rider_permit',
+  'profile_photo',
+  'proof_of_address',
+  'guarantor_info',
+  'vehicle_registration',
+  'proof_of_ownership',
+  'proof_of_insurance',
+  'road_worthiness',
+  'vehicle_photo',
+];
+
 class DriverDocumentDefinition {
   const DriverDocumentDefinition({
     required this.type,
@@ -58,11 +97,21 @@ String normalizeVehicleType(String? vehicleType) {
   if (supportedVehicleTypes.contains(normalized)) {
     return normalized;
   }
+  if (normalized == 'keke') return vehicleTypeTricycle;
+  if (normalized == 'bike') return vehicleTypeMotorcycle;
   return vehicleTypeRegular;
 }
 
 bool isCourierVehicleType(String? vehicleType) {
   return normalizeVehicleType(vehicleType) == vehicleTypeCourier;
+}
+
+bool isTricycleVehicleType(String? vehicleType) {
+  return normalizeVehicleType(vehicleType) == vehicleTypeTricycle;
+}
+
+bool isMotorcycleVehicleType(String? vehicleType) {
+  return normalizeVehicleType(vehicleType) == vehicleTypeMotorcycle;
 }
 
 String vehicleTypeLabel(String? vehicleType) {
@@ -71,6 +120,8 @@ String vehicleTypeLabel(String? vehicleType) {
     vehicleTypeComfort => 'Comfort',
     vehicleTypeLuxury => 'Luxury',
     vehicleTypeCourier => 'Courier',
+    vehicleTypeTricycle => 'Tricycle (Keke)',
+    vehicleTypeMotorcycle => 'Motorcycle',
     _ => 'Regular',
   };
 }
@@ -81,17 +132,45 @@ int seatCountForVehicleType(String? vehicleType) {
     vehicleTypeComfort => 4,
     vehicleTypeLuxury => 4,
     vehicleTypeCourier => 1,
+    vehicleTypeTricycle => 3,
+    vehicleTypeMotorcycle => 1,
     _ => 4,
   };
 }
 
-List<DriverDocumentDefinition> requiredDocumentsForVehicleType(String? vehicleType) {
-  final normalized = normalizeVehicleType(vehicleType);
-  final types = normalized == vehicleTypeCourier
-      ? courierDriverDocumentTypes
-      : standardDriverDocumentTypes;
+String vehicleTypeAsset(String? vehicleType) {
+  return switch (normalizeVehicleType(vehicleType)) {
+    vehicleTypeTricycle => 'lib/assets/caride_branded/tricyle.png',
+    vehicleTypeMotorcycle => 'lib/assets/motorcycle.png',
+    vehicleTypeComfort => 'lib/assets/ride_options/comfort.png',
+    vehicleTypeLuxury => 'lib/assets/ride_options/luxury.png',
+    vehicleTypeCourier => 'lib/assets/ride_options/courier.png',
+    _ => 'lib/assets/ride_options/regular.png',
+  };
+}
 
-  return types.map(documentDefinitionForType).toList(growable: false);
+List<DriverDocumentDefinition> requiredDocumentsForVehicleType(
+  String? vehicleType, {
+  String? operatingState,
+}) {
+  final normalized = normalizeVehicleType(vehicleType);
+  final List<String> baseTypes = switch (normalized) {
+    vehicleTypeCourier => [...courierDriverDocumentTypes],
+    vehicleTypeTricycle => [...kekeDriverDocumentTypes],
+    vehicleTypeMotorcycle => [...motorcycleDriverDocumentTypes],
+    _ => [...standardDriverDocumentTypes],
+  };
+
+  // State-specific regulations:
+  // Lagos State requires LASDRI recertification card for commercial drivers/riders
+  final state = operatingState?.trim().toLowerCase();
+  if (state == 'lagos') {
+    if (!baseTypes.contains('lasdri_card')) {
+      baseTypes.add('lasdri_card');
+    }
+  }
+
+  return baseTypes.map(documentDefinitionForType).toList(growable: false);
 }
 
 DriverDocumentDefinition documentDefinitionForType(String type) {
@@ -106,13 +185,14 @@ DriverDocumentDefinition documentDefinitionForType(String type) {
       type: 'drivers_license',
       label: "Driver's Licence",
       icon: Icons.badge_outlined,
-      description: 'Upload a valid government-issued driver licence.',
+      description:
+          'Valid FRSC Driver’s Licence (Class A for Bike/Tricycle, Class B/E for Cars).',
     ),
     'rider_permit' => const DriverDocumentDefinition(
       type: 'rider_permit',
-      label: 'Rider Permit',
+      label: 'Rider Permit / Commercial Badge',
       icon: Icons.two_wheeler_outlined,
-      description: 'Required for courier and delivery bike verification.',
+      description: 'Required commercial rider permit or state transport badge.',
     ),
     'proof_of_address' => const DriverDocumentDefinition(
       type: 'proof_of_address',
@@ -158,9 +238,9 @@ DriverDocumentDefinition documentDefinitionForType(String type) {
     ),
     'vehicle_photo_front' => const DriverDocumentDefinition(
       type: 'vehicle_photo_front',
-      label: 'Vehicle Photo',
+      label: 'Vehicle Photo (Front)',
       icon: Icons.photo_camera_outlined,
-      description: 'Front and rear photos of your vehicle.',
+      description: 'Front photo of your vehicle.',
     ),
     'vehicle_photo_back' => const DriverDocumentDefinition(
       type: 'vehicle_photo_back',
@@ -174,6 +254,12 @@ DriverDocumentDefinition documentDefinitionForType(String type) {
       icon: Icons.person_outline,
       description: 'Upload a clear headshot for your driver profile.',
     ),
+    'lasdri_card' => const DriverDocumentDefinition(
+      type: 'lasdri_card',
+      label: 'LASDRI Card',
+      icon: Icons.card_membership_outlined,
+      description: 'Lagos State Drivers Institute recertification card (Lagos operators).',
+    ),
     _ => DriverDocumentDefinition(
       type: type,
       label: type,
@@ -181,3 +267,4 @@ DriverDocumentDefinition documentDefinitionForType(String type) {
     ),
   };
 }
+

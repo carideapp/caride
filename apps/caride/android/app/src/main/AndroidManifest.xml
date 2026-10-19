@@ -15,11 +15,11 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAQPLeYuNmRW9OuPBK93sX5M01aebbiknI" />
+        <!-- Google Maps API Key -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -37,7 +37,7 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Android App Links for www.caride.ng -->
+            <!-- Primary Android App Links autoVerify for www.caride.ng -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -46,6 +46,12 @@
                     android:scheme="https"
                     android:host="www.caride.ng"
                     android:pathPrefix="/app" />
+            </intent-filter>
+            <!-- Secondary App Links filter for apex caride.ng domain -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
                     android:host="caride.ng"

@@ -3,6 +3,7 @@
 import 'package:caride/features/profile/data/card_repository.dart';
 import 'package:caride/features/profile/data/wallet_repository.dart';
 import 'package:caride/features/wallet/widgets/bank_transfer_bottom_sheet.dart';
+import 'package:caride/core/services/pending_bank_transfer_service.dart';
 import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -60,13 +61,11 @@ class _TopUpMethodScreenState extends State<TopUpMethodScreen> {
         if (!mounted) return;
         _showSuccessDialog(credited);
       } else if (_selected == _TopUpMethod.bankTransfer) {
-        final details = await _walletRepo.initializeBankTransfer(
-          amountNaira: widget.amountNaira,
-        );
-        if (!mounted) return;
+        setState(() => _loading = false);
         final credited = await BankTransferBottomSheet.show(
           context,
-          details: details,
+          amountNaira: widget.amountNaira,
+          transferType: PendingTransferType.walletTopUp,
         );
         if (credited != null && mounted) {
           context.go(CustomerRoutePaths.wallet);

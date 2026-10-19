@@ -9,6 +9,7 @@ import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/driver/models/driver_profile.dart';
 import 'package:caride/core/driver/models/driver_presence.dart';
 import 'package:caride/core/driver/models/ride_model.dart';
+import 'package:caride/core/config/app_config_repository.dart';
 import '../auth/data/driver_profile_repository.dart';
 import '../location/data/driver_presence_repository.dart';
 import '../location/data/location_repository.dart';
@@ -73,6 +74,7 @@ class DriverPresenceController extends ChangeNotifier {
   String? _errorMessage;
   String? _approvalStatus;
   String? _vehicleType;
+  double _walletBalance = 0.0;
   Position? _lastPublishedPosition;
   DateTime? _lastPublishedAt;
 
@@ -81,6 +83,7 @@ class DriverPresenceController extends ChangeNotifier {
   Position? get currentPosition => _currentPosition;
   bool get isBusy => _busy;
   String? get errorMessage => _errorMessage;
+  double get walletBalance => _walletBalance;
   bool get isOnline =>
       _presence?.availabilityState == DriverAvailabilityState.online ||
       _presence?.availabilityState == DriverAvailabilityState.onTrip;
@@ -187,6 +190,13 @@ class DriverPresenceController extends ChangeNotifier {
           return false;
         }
 
+        final driverSettings = await AppConfigRepository().getDriverSettings();
+        if (_walletBalance <= -driverSettings.maxNegativeBalanceNaira) {
+          _errorMessage = 'Commission debt limit reached. Please top up your wallet to go online.';
+          debugPrint('setOnline error: commission debt limit reached ($_walletBalance <= -${driverSettings.maxNegativeBalanceNaira})');
+          return false;
+        }
+
         final locationReady = await _ensureLocationReady();
         if (!locationReady) {
           debugPrint('setOnline error: location not ready. error: $_errorMessage');
@@ -249,6 +259,7 @@ class DriverPresenceController extends ChangeNotifier {
     final vehicle = await _profileRepository.getVehicleInfo(uid);
     _approvalStatus = profile?.approvalStatus;
     _vehicleType = vehicle?.vehicleType;
+    _walletBalance = profile?.walletBalance ?? 0.0;
   }
 
   Future<bool> _ensureLocationReady() async {

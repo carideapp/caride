@@ -23,6 +23,9 @@ class DriverNotificationRouter {
       case 'ride_cancelled':
         router.go(DriverRoutePaths.rides);
         return;
+      case 'rental_booking_assigned':
+        router.go(DriverRoutePaths.rentalBookings);
+        return;
       default:
         return;
     }

@@ -40,16 +40,4 @@ class AppEnv {
     'GOOGLE_MAPS_API_KEY',
     defaultValue: 'AIzaSyAQPLeYuNmRW9OuPBK93sX5M01aebbiknI',
   );
-  static const String flutterwavePublicKey = String.fromEnvironment(
-    'FLUTTERWAVE_PUBLIC_KEY',
-    defaultValue: 'FLWPUBK-fe77d17f787c0e5c4c68a8d15b81ab72-X',
-  );
-  static const String flutterwaveSecretKey = String.fromEnvironment(
-    'FLUTTERWAVE_SECRET_KEY',
-    defaultValue: 'FLWSECK-c201c6f7eb05eecf5245124fb70a2155-19ef45e6418vt-X',
-  );
-  static const String flutterwaveEncryptionKey = String.fromEnvironment(
-    'FLUTTERWAVE_ENCRYPTION_KEY',
-    defaultValue: 'c201c6f7eb0560cf125c1815',
-  );
 }

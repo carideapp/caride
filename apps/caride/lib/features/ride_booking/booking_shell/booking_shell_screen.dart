@@ -53,8 +53,12 @@ class _BookingShellScreenState extends State<BookingShellScreen> {
   );
   double? _lastRouteDriverLat;
   double? _lastRouteDriverLng;
+  String? _lastRideStatus;
 
   static const double _carBearingOffsetDeg = 0;
+
+  double? _fabDragX;
+  double? _fabDragY;
 
   @override
   void initState() {
@@ -104,6 +108,34 @@ class _BookingShellScreenState extends State<BookingShellScreen> {
         unawaited(_syncOverlay());
       }
     }
+
+    final currentStatus = _c.ride?.status;
+    if (currentStatus != _lastRideStatus) {
+      final wasTripInProgress = _lastRideStatus == 'inProgress' ||
+          _lastRideStatus == 'tripStarted' ||
+          _lastRideStatus == 'rideStarted';
+      final isTripInProgress = currentStatus == 'inProgress' ||
+          currentStatus == 'tripStarted' ||
+          currentStatus == 'rideStarted';
+
+      _lastRideStatus = currentStatus;
+
+      if (isTripInProgress && !wasTripInProgress) {
+        // Driver has started the ride!
+        // Immediately reset tracking route so polyline and camera switch to dropoff
+        _trackingRoutePoints.clear();
+        _lastRouteDriverLat = null;
+        _lastRouteDriverLng = null;
+        if (_driverLatLng != null) {
+          final loc = DriverRideLocation(
+            latitude: _driverLatLng!.latitude,
+            longitude: _driverLatLng!.longitude,
+          );
+          unawaited(_syncDriverMarker(loc));
+        }
+      }
+    }
+
     _maybeStartTracking();
     unawaited(_syncOverlay());
   }
@@ -111,10 +143,10 @@ class _BookingShellScreenState extends State<BookingShellScreen> {
   double _sheetHeightForStep(BookingShellStep step) {
     return switch (step) {
       BookingShellStep.fromTo => 336,
-      BookingShellStep.rideType => 400,
+      BookingShellStep.rideType => 420,
       BookingShellStep.fare => 430,
-      BookingShellStep.bids => 550,
-      BookingShellStep.tracking => 370,
+      BookingShellStep.bids => 450,
+      BookingShellStep.tracking => 370, // Reduced by 10% (370 -> 333)
     };
   }
 
@@ -547,16 +579,39 @@ class _BookingShellScreenState extends State<BookingShellScreen> {
                 ),
               ),
               if (_c.step == BookingShellStep.tracking)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.pagePadding),
+                Positioned(
+                  right: _fabDragX != null ? null : AppSpacing.pagePadding,
+                  left: _fabDragX,
+                  bottom: _fabDragY != null ? null : (sheetHeight + 108.0),
+                  top: _fabDragY,
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      setState(() {
+                        final screenWidth = MediaQuery.of(context).size.width;
+                        final screenHeight = MediaQuery.of(context).size.height;
+                        final currentX =
+                            _fabDragX ??
+                            (screenWidth - AppSpacing.pagePadding - 56);
+                        final currentY =
+                            _fabDragY ??
+                            (screenHeight - sheetHeight - 24.0 - 56);
+                        _fabDragX = (currentX + details.delta.dx).clamp(
+                          16.0,
+                          screenWidth - 72.0,
+                        );
+                        _fabDragY = (currentY + details.delta.dy).clamp(
+                          80.0,
+                          screenHeight - 100.0,
+                        );
+                      });
+                    },
                     child: FloatingActionButton(
                       heroTag: 'safety_fab_booking_shell',
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => EmergencyScreen(rideId: _c.ride?.id),
+                            builder: (_) =>
+                                EmergencyScreen(rideId: _c.ride?.id),
                           ),
                         );
                       },

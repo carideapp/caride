@@ -46,7 +46,7 @@ class WithdrawRepository {
   Future<List<BankOption>> fetchBanks() async {
     try {
       final result = await _functions
-          .httpsCallable('listPaystackBanks')
+          .httpsCallable('listTransactPayBanks')
           .call<Map<String, dynamic>>();
 
       final data = result.data;
@@ -101,7 +101,7 @@ class WithdrawRepository {
   }) async {
     try {
       final result = await _functions
-          .httpsCallable('resolvePaystackBankAccount')
+          .httpsCallable('resolveTransactPayBankAccount')
           .call<Map<String, dynamic>>({
         'bankCode': bankCode,
         'accountNumber': accountNumber,
@@ -135,7 +135,7 @@ class WithdrawRepository {
   }
 
   // ── Process withdrawal ───────────────────────────────────────────────
-  /// Verifies PIN, deducts wallet balance, and triggers Paystack transfer.
+  /// Verifies PIN, deducts wallet balance, and triggers TransactPay payout.
   /// Returns the transaction reference on success.
   Future<String> processWithdrawal({
     required String accountNumber,
@@ -147,20 +147,227 @@ class WithdrawRepository {
   }) async {
     if (_uid == null) throw Exception('Not signed in.');
 
-    final result = await _functions
-        .httpsCallable('processCustomerWithdrawal')
-        .call<Map<String, dynamic>>({
+    final requestParams = <String, dynamic>{
       'accountNumber': accountNumber,
       'bankCode': bankCode,
       'bankName': bankName,
       'accountName': accountName,
       'amountNaira': amountNaira,
       'pin': pin,
-    });
+    };
 
-    final data = result.data;
-    final reference = data['reference'] as String?;
-    if (reference == null) throw Exception('Invalid server response.');
-    return reference;
+    logTransactPayDebug(
+      action: 'DISPATCHING WITHDRAWAL TO TRANSACTPAY API',
+      requestParams: requestParams,
+    );
+
+    try {
+      final result = await _functions
+          .httpsCallable('processCustomerWithdrawal')
+          .call<Map<String, dynamic>>(requestParams);
+
+      final data = result.data;
+      logTransactPayDebug(
+        action: 'SUCCESSFUL CALLABLE RESPONSE RECEIVED',
+        requestParams: requestParams,
+        responseData: data,
+      );
+
+      // Check if upstream returned a failure payload inside HTTP 200
+      if (data['success'] == false ||
+          data['status'] == false ||
+          data['status'] == 'failed' ||
+          data['status'] == 'error') {
+        final errMsg = data['message'] ??
+            data['error'] ??
+            data['transactPayMessage'] ??
+            'Withdrawal failed upstream in TransactPay.';
+
+        logTransactPayDebug(
+          action: 'TRANSACTPAY UPSTREAM FAILURE PAYLOAD DETECTED',
+          requestParams: requestParams,
+          responseData: data,
+          error: errMsg,
+        );
+
+        throw WithdrawException(
+          message: errMsg.toString(),
+          details: data,
+        );
+      }
+
+      final reference = (data['reference'] ??
+          data['transactionReference'] ??
+          data['txRef']) as String?;
+
+      if (reference == null || reference.isEmpty) {
+        logTransactPayDebug(
+          action: 'TRANSACTPAY MISSING TRANSACTION REFERENCE',
+          requestParams: requestParams,
+          responseData: data,
+          error: 'No reference in response',
+        );
+
+        throw WithdrawException(
+          message: data['message']?.toString() ??
+              'Invalid server response: No transaction reference returned.',
+          details: data,
+        );
+      }
+
+      return reference;
+    } on FirebaseFunctionsException catch (e, stack) {
+      logTransactPayDebug(
+        action: 'TRANSACTPAY CALLABLE EXCEPTION (FirebaseFunctionsException)',
+        requestParams: requestParams,
+        error: e,
+        stackTrace: stack,
+      );
+
+      throw WithdrawException(
+        message: parseWithdrawError(e),
+        code: e.code,
+        details: e.details,
+        rawError: e,
+      );
+    } catch (e, stack) {
+      logTransactPayDebug(
+        action: 'TRANSACTPAY UNEXPECTED EXCEPTION',
+        requestParams: requestParams,
+        error: e,
+        stackTrace: stack,
+      );
+
+      if (e is WithdrawException) rethrow;
+      throw WithdrawException(
+        message: parseWithdrawError(e),
+        rawError: e,
+      );
+    }
   }
 }
+
+/// Rich exception class capturing raw TransactPay API details and error codes.
+class WithdrawException implements Exception {
+  WithdrawException({
+    required this.message,
+    this.code,
+    this.details,
+    this.rawError,
+  });
+
+  final String message;
+  final String? code;
+  final dynamic details;
+  final dynamic rawError;
+
+  @override
+  String toString() => message;
+}
+
+/// Formats and logs high-visibility TransactPay API diagnostic messages directly to terminal console.
+void logTransactPayDebug({
+  required String action,
+  Map<String, dynamic>? requestParams,
+  dynamic responseData,
+  dynamic error,
+  StackTrace? stackTrace,
+}) {
+  debugPrint('╔═══════════════════════════════════════════════════════════════════════════');
+  debugPrint('║ 💳 [TRANSACTPAY DEBUG CONSOLE] $action');
+  debugPrint('╠═══════════════════════════════════════════════════════════════════════════');
+  debugPrint('║ 🕒 Time: ${DateTime.now().toIso8601String()}');
+
+  if (requestParams != null && requestParams.isNotEmpty) {
+    debugPrint('╟───────────────────────────────────────────────────────────────────────────');
+    debugPrint('║ 📤 REQUEST SENT:');
+    requestParams.forEach((k, v) {
+      if (k.toLowerCase() == 'pin') {
+        debugPrint('║   • $k: **** (${v.toString().length} digits)');
+      } else {
+        debugPrint('║   • $k: $v');
+      }
+    });
+  }
+
+  if (responseData != null) {
+    debugPrint('╟───────────────────────────────────────────────────────────────────────────');
+    debugPrint('║ 📥 RESPONSE RECEIVED:');
+    final respLines = responseData.toString().split('\n');
+    for (final line in respLines) {
+      debugPrint('║   $line');
+    }
+  }
+
+  if (error != null) {
+    debugPrint('╟───────────────────────────────────────────────────────────────────────────');
+    debugPrint('║ ❌ ERROR DETAILS:');
+    if (error is FirebaseFunctionsException) {
+      debugPrint('║   • FirebaseFunctionsException Code: ${error.code}');
+      debugPrint('║   • FirebaseFunctionsException Message: ${error.message}');
+      debugPrint('║   • TransactPay Details: ${error.details}');
+    } else if (error is WithdrawException) {
+      debugPrint('║   • WithdrawException Code: ${error.code}');
+      debugPrint('║   • WithdrawException Message: ${error.message}');
+      debugPrint('║   • TransactPay Details: ${error.details}');
+      debugPrint('║   • Raw Error: ${error.rawError}');
+    } else {
+      debugPrint('║   • Raw Error: $error');
+    }
+    if (stackTrace != null) {
+      debugPrint('║ 📍 StackTrace: $stackTrace');
+    }
+  }
+  debugPrint('╚═══════════════════════════════════════════════════════════════════════════');
+}
+
+/// Parses raw backend/network errors into human-readable UI messages per AGENTS.md.
+String parseWithdrawError(dynamic error) {
+  if (error is WithdrawException) {
+    if (error.details != null && error.details is Map) {
+      final detailsMap = error.details as Map;
+      final tpMsg = detailsMap['transactPayMessage'] ??
+          detailsMap['message'] ??
+          detailsMap['error'] ??
+          detailsMap['upstreamError'];
+      if (tpMsg != null && tpMsg.toString().isNotEmpty) {
+        final lower = tpMsg.toString().toLowerCase();
+        if (lower.contains('allowable ips') || lower.contains('ip')) {
+          return 'Gateway IP restriction: TransactPay rejected this server IP. Please ensure the proxy IP is whitelisted in TransactPay.';
+        }
+        return tpMsg.toString();
+      }
+    }
+    return error.message;
+  }
+
+  final msg = error.toString().toLowerCase();
+  if (error is FirebaseFunctionsException) {
+    if (error.code == 'permission-denied' || msg.contains('incorrect security pin')) {
+      return 'Incorrect security PIN. Please double-check your 4-digit PIN and try again.';
+    }
+    if (error.code == 'failed-precondition' || msg.contains('insufficient wallet balance')) {
+      return 'Insufficient wallet balance to complete this withdrawal.';
+    }
+    if (error.code == 'invalid-argument') {
+      return 'Invalid account details or withdrawal amount. Please check your input.';
+    }
+    if (msg.contains('allowable ips not found') || msg.contains('ip') || msg.contains('whitelisted')) {
+      return 'Withdrawal service is currently undergoing gateway configuration maintenance. Please try again shortly or contact support.';
+    }
+    if (error.message != null && error.message!.isNotEmpty) {
+      return error.message!;
+    }
+  }
+  if (msg.contains('allowable ips not found') || msg.contains('ip') || msg.contains('whitelisted')) {
+    return 'Withdrawal service is currently undergoing gateway configuration maintenance. Please try again shortly or contact support.';
+  }
+  if (msg.contains('network') || msg.contains('connection') || msg.contains('socketexception') || msg.contains('timeout')) {
+    return 'Connection failure. Please check your internet connection and try again.';
+  }
+  if (msg.contains('account name was resolved as null') || msg.contains('could not verify account')) {
+    return 'Could not verify account details. Please check the account number and selected bank.';
+  }
+  return error.toString().replaceAll(RegExp(r'^(Exception|FirebaseFunctionsException):\s*'), '');
+}
+

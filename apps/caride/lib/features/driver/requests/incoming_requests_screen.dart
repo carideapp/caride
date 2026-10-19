@@ -15,6 +15,9 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:navigation/navigation.dart';
 import 'package:shared_widgets/shared_widgets.dart';
+import 'package:caride/core/config/app_config_repository.dart';
+import 'package:caride/features/driver/widgets/driver_counter_offer_bottom_sheet.dart';
+import 'package:caride/features/driver/widgets/driver_debt_prompt_bottom_sheet.dart';
 import 'package:caride/core/driver/notifications/driver_alert_controller.dart';
 import 'package:caride/core/driver/utils/distance_helper.dart';
 
@@ -353,13 +356,37 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
     super.dispose();
   }
 
+  Future<bool> _checkDebtLimit() async {
+    final uid = driverAuthController.currentUid;
+    if (uid == null) return false;
+    final profile = await _profileRepo.getDriverProfile(uid);
+    final settings = await AppConfigRepository().getDriverSettings();
+    final balance = profile?.walletBalance ?? 0.0;
+    if (balance <= -settings.maxNegativeBalanceNaira) {
+      if (mounted) {
+        await DriverDebtPromptBottomSheet.show(
+          context,
+          currentBalance: balance,
+          maxNegativeBalance: settings.maxNegativeBalanceNaira,
+        );
+      }
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _acceptCustomerPrice() async {
+    final isRestricted = await _checkDebtLimit();
+    if (isRestricted) return;
     await _sendBid(widget.ride.customerOffer);
   }
 
   Future<void> _sendBid(double amount) async {
     final uid = driverAuthController.currentUid;
     if (uid == null) return;
+
+    final isRestricted = await _checkDebtLimit();
+    if (isRestricted) return;
 
     setState(() => _placing = true);
     try {
@@ -385,8 +412,8 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
         driverName: profile?.fullName ?? 'Driver',
         offerNaira: amount,
         etaMinutes: eta,
-        driverRating: 5.0,
-        driverRides: 0,
+        driverRating: profile?.rating ?? 0.0,
+        driverRides: profile?.completedRides ?? 0,
       );
       if (!mounted) return;
 
@@ -421,104 +448,14 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
     }
   }
 
-  void _showCounterSheet() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final sheetColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final primaryTextColor = isDark ? Colors.white : AppColors.slate900;
-    final mutedTextColor = isDark ? Colors.grey[400]! : const Color(0xFF6E7191);
-    final basePrice = widget.ride.customerOffer;
+  Future<void> _showCounterSheet() async {
+    final isRestricted = await _checkDebtLimit();
+    if (isRestricted || !mounted) return;
 
-    showModalBottomSheet(
+    DriverCounterOfferBottomSheet.show(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => SafeArea(
-        child: Container(
-          decoration: BoxDecoration(
-            color: sheetColor,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-          ),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[700] : Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Set Your Fare',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: primaryTextColor,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Suggest a higher price to the customer.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: mutedTextColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Row(
-                children: [
-                  _priceOption(ctx, basePrice + 200),
-                  const SizedBox(width: AppSpacing.sm),
-                  _priceOption(ctx, basePrice + 500),
-                  const SizedBox(width: AppSpacing.sm),
-                  _priceOption(ctx, basePrice + 1000),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _priceOption(BuildContext ctx, double price) {
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          Navigator.pop(ctx);
-          _sendBid(price);
-        },
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.primaryGreen.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
-          ),
-          child: Center(
-            child: Text(
-              NgnFormat.whole(price),
-              style: const TextStyle(
-                color: AppColors.primaryGreen,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ),
+      customerOffer: widget.ride.customerOffer,
+      onSubmit: (price) => _sendBid(price),
     );
   }
 

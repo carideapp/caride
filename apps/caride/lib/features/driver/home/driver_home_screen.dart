@@ -14,7 +14,10 @@ import 'package:caride/features/driver/location/driver_presence_controller.dart'
 import 'package:caride/features/driver/profile/data/driver_tier_repository.dart';
 import 'package:caride/core/services/app_update_service.dart';
 import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
+import 'package:caride/core/config/app_config_repository.dart';
+import 'package:caride/features/driver/widgets/driver_debt_prompt_bottom_sheet.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_models/shared_models.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 
 /// Redesigned map-centric Home Screen with Apple Liquid Glass overlay bottom sheet and cards.
@@ -34,7 +37,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   String? _dismissedCancelledRideId;
 
   StreamSubscription? _profileSubscription;
+  StreamSubscription? _driverSettingsSub;
   bool _promptedCompleteProfile = false;
+  double _walletBalance = 0.0;
+  double _maxNegativeBalance = 3000.0;
 
   @override
   void initState() {
@@ -42,6 +48,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _presenceController.initialize();
     _presenceController.addListener(_handlePresenceChanged);
     _listenToProfile();
+    _listenToDriverSettings();
     unawaited(_checkPopupAnnouncements());
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -171,12 +178,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final uid = driverAuthController.currentUid;
     if (uid != null) {
       _profileSubscription = _profileRepo.streamDriverProfile(uid).listen((profile) {
-        if (profile != null && !profile.profileCompleted && !_promptedCompleteProfile) {
-          _promptedCompleteProfile = true;
-          _showCompleteProfileDialog();
+        if (profile != null) {
+          _walletBalance = profile.walletBalance;
+          if (!profile.profileCompleted && !_promptedCompleteProfile) {
+            _promptedCompleteProfile = true;
+            _showCompleteProfileDialog();
+          }
         }
       });
     }
+  }
+
+  void _listenToDriverSettings() {
+    _driverSettingsSub = AppConfigRepository().watchDriverSettings().listen((settings) {
+      if (mounted) {
+        setState(() {
+          _maxNegativeBalance = settings.maxNegativeBalanceNaira;
+        });
+      }
+    });
   }
 
   void _showCompleteProfileDialog() {
@@ -254,6 +274,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void dispose() {
     _presenceController.removeListener(_handlePresenceChanged);
     _profileSubscription?.cancel();
+    _driverSettingsSub?.cancel();
     super.dispose();
   }
 
@@ -279,6 +300,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       originLat: originLat,
       originLng: originLng,
     );
+  }
+
+  Stream<RentalBooking?> _streamActiveRentalTrip(String? uid) {
+    if (uid == null) return Stream.value(null);
+    return FirebaseFirestore.instance
+        .collection('rental_bookings')
+        .where('assignedDriverId', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+      for (final doc in snap.docs) {
+        final b = RentalBooking.fromMap(doc.data(), doc.id);
+        if (b.status == RentalBookingStatus.confirmed ||
+            b.status == RentalBookingStatus.inProgress) {
+          return b;
+        }
+      }
+      return null;
+    });
   }
 
   @override
@@ -416,6 +455,127 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Active Rental Trip Overlay
+                  StreamBuilder<RentalBooking?>(
+                    stream: _streamActiveRentalTrip(uid),
+                    builder: (context, snapshot) {
+                      final booking = snapshot.data;
+                      if (booking == null) return const SizedBox.shrink();
+
+                      final isStarted = booking.status == RentalBookingStatus.inProgress;
+                      final isEnRoute = booking.rentalTripStatus == RentalTripStatus.headingToPickup;
+
+                      String tripPhaseLabel;
+                      if (isStarted) {
+                        tripPhaseLabel = 'Rental in Progress';
+                      } else if (isEnRoute) {
+                        tripPhaseLabel = 'Rental: Heading to Pickup';
+                      } else {
+                        tripPhaseLabel = 'Assigned Rental Booking';
+                      }
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkSurfaceRaised : Colors.white,
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                          border: Border.all(
+                            color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE5E7EB),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brand.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.car_rental_rounded,
+                                        color: AppColors.brand,
+                                        size: 14,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        tripPhaseLabel,
+                                        style: AppTextStyles.caption.copyWith(
+                                          color: AppColors.brand,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () => context.push(DriverRoutePaths.rentalBookings),
+                                  child: Text(
+                                    'View All',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.brand,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              '${booking.vehicleTitle} • ${booking.customerName}',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.location_on_rounded,
+                                  size: 14,
+                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    booking.pickupLocation,
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            PrimaryButton(
+                              label: isStarted
+                                  ? 'Manage Rental Trip'
+                                  : (isEnRoute ? 'View Rental Trip' : 'Open Rental Trip'),
+                              icon: Icons.directions_car_rounded,
+                              showShadow: false,
+                              onPressed: () {
+                                context.push(DriverRoutePaths.rentalTrip, extra: booking);
+                              },
+                              height: 44,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
                   // Active ride overlay
                   StreamBuilder<RideModel?>(
                     stream: _rideRepo.streamAssignedRide(),
@@ -496,6 +656,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 icon: ride.status == 'driverArrived'
                                     ? Icons.play_arrow_rounded
                                     : Icons.navigation_rounded,
+                                showShadow: false,
                                 onPressed: () {
                                   if (isPickupPhase) {
                                     context.push(DriverRoutePaths.tripPickup);
@@ -607,6 +768,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           onChanged: _presenceController.isBusy
                               ? null
                               : (value) async {
+                                  if (value && _walletBalance <= -_maxNegativeBalance) {
+                                    await DriverDebtPromptBottomSheet.show(
+                                      context,
+                                      currentBalance: _walletBalance,
+                                      maxNegativeBalance: _maxNegativeBalance,
+                                    );
+                                    return;
+                                  }
                                   await _presenceController.setOnline(value);
                                 },
                         ),
@@ -752,12 +921,13 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
         }
 
         return GlassContainer(
+          radius: 12,
           borderColor: isDark ? AppColors.glassBorderDark : AppColors.glassBorderLight,
           padding: EdgeInsets.zero,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(11),
             child: AspectRatio(
-              aspectRatio: 16 / 9,
+              aspectRatio: 2.4,
               child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: (page) {

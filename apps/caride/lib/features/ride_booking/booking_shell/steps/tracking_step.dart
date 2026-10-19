@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:caride/core/services/cashback_service.dart';
 import 'package:caride/core/utils/phone_launcher.dart';
 import 'package:caride/features/chat/conversation_screen.dart';
 import 'package:caride/features/chat/data/chat_repository.dart';
@@ -31,6 +32,7 @@ class _TrackingStepState extends State<TrackingStep> {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _presenceSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _vehicleSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _reviewSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _driverDocSub;
   StreamSubscription<int>? _unreadSub;
 
   final ChatRepository _chatRepo = ChatRepository();
@@ -41,11 +43,44 @@ class _TrackingStepState extends State<TrackingStep> {
   int _lastUnreadCount = 0;
   bool _hasPromptedRate = false;
 
+  GeoPoint? _lastDriverGeoPoint;
+  String? _lastRideStatus;
+
   // Vehicle info fields
   String? _color;
   String? _make;
   String? _model;
   String? _plateNumber;
+
+  void _recalculateEta({required RideModel ride, GeoPoint? driverLoc, bool force = false}) {
+    final isTripInProgress = ride.status == 'inProgress' ||
+        ride.status == 'tripStarted' ||
+        ride.status == 'rideStarted';
+    final destLat = isTripInProgress
+        ? (ride.dropoffLat ?? ride.pickupLat ?? 7.0581922)
+        : (ride.pickupLat ?? 7.0581922);
+    final destLng = isTripInProgress
+        ? (ride.dropoffLng ?? ride.pickupLng ?? 6.2855659)
+        : (ride.pickupLng ?? 6.2855659);
+
+    final dLat = driverLoc?.latitude ?? (isTripInProgress ? (ride.pickupLat ?? destLat) : null);
+    final dLng = driverLoc?.longitude ?? (isTripInProgress ? (ride.pickupLng ?? destLng) : null);
+
+    if (dLat != null && dLng != null) {
+      _arrivalCalculator
+          .calculateEta(
+            driverLat: dLat,
+            driverLng: dLng,
+            destinationLat: destLat,
+            destinationLng: destLng,
+            isToPickup: !isTripInProgress,
+          )
+          .then((eta) {
+        if (!mounted) return;
+        setState(() => _etaText = eta);
+      });
+    }
+  }
 
   void _updateStreams(String driverUid, RideModel ride) {
     if (_cachedDriverUid != driverUid || _vehicleSub == null) {
@@ -69,31 +104,10 @@ class _TrackingStepState extends State<TrackingStep> {
           final data = doc.data();
           if (data != null) {
             final GeoPoint? lastLoc = data['lastLocation'] as GeoPoint?;
-
             if (lastLoc != null) {
-              final isTripInProgress = ride.status == 'inProgress' ||
-                  ride.status == 'tripStarted' ||
-                  ride.status == 'rideStarted';
-              final destLat = isTripInProgress
-                  ? (ride.dropoffLat ?? ride.pickupLat ?? 7.0581922)
-                  : (ride.pickupLat ?? 7.0581922);
-              final destLng = isTripInProgress
-                  ? (ride.dropoffLng ?? ride.pickupLng ?? 6.2855659)
-                  : (ride.pickupLng ?? 6.2855659);
-
-              // Use ArrivalCalculator for accurate Google Maps-based ETA
-              _arrivalCalculator
-                  .calculateEta(
-                    driverLat: lastLoc.latitude,
-                    driverLng: lastLoc.longitude,
-                    destinationLat: destLat,
-                    destinationLng: destLng,
-                    isToPickup: !isTripInProgress,
-                  )
-                  .then((eta) {
-                if (!mounted) return;
-                setState(() => _etaText = eta);
-              });
+              _lastDriverGeoPoint = lastLoc;
+              final currentRide = widget.controller.ride ?? ride;
+              _recalculateEta(ride: currentRide, driverLoc: lastLoc);
             }
           }
         });
@@ -104,10 +118,8 @@ class _TrackingStepState extends State<TrackingStep> {
       _vehicleSub = null;
       _reviewSub?.cancel();
       _reviewSub = null;
-      _color = null;
-      _make = null;
-      _model = null;
-      _plateNumber = null;
+      _driverDocSub?.cancel();
+      _driverDocSub = null;
 
       if (driverUid.isNotEmpty) {
         _vehicleSub = FirebaseFirestore.instance
@@ -157,6 +169,27 @@ class _TrackingStepState extends State<TrackingStep> {
             }
           }
         });
+
+        // Direct driver doc listener fallback for vehicle fields
+        _driverDocSub = FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(driverUid)
+            .snapshots()
+            .listen((doc) {
+          if (!mounted) return;
+          final data = doc.data();
+          if (data != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() {
+                _plateNumber ??= (data['plateNumber'] as String?)?.trim() ?? (data['licensePlate'] as String?)?.trim();
+                _make ??= (data['vehicleMake'] as String?)?.trim() ?? (data['vehicleName'] as String?)?.trim();
+                _model ??= (data['vehicleModel'] as String?)?.trim();
+                _color ??= (data['vehicleColor'] as String?)?.trim();
+              });
+            });
+          }
+        });
       }
     }
   }
@@ -178,6 +211,15 @@ class _TrackingStepState extends State<TrackingStep> {
   @override
   void initState() {
     super.initState();
+    final bid = widget.controller.acceptedBid;
+    if (bid != null) {
+      if (bid.etaMinutes > 0) {
+        _etaText = 'Pickup in ${bid.etaMinutes} mins';
+      }
+      if (bid.vehicleName.isNotEmpty) {
+        _make = bid.vehicleName;
+      }
+    }
     widget.controller.addListener(_onControllerChanged);
     final rideId = widget.controller.rideId;
     if (rideId != null && rideId.isNotEmpty) {
@@ -190,6 +232,26 @@ class _TrackingStepState extends State<TrackingStep> {
     if (rideId != null && rideId.isNotEmpty && _unreadSub == null) {
       _listenUnreadCount(rideId);
     }
+
+    final ride = widget.controller.ride;
+    if (ride != null) {
+      final currentStatus = ride.status;
+      final isTripInProgress = currentStatus == 'inProgress' ||
+          currentStatus == 'tripStarted' ||
+          currentStatus == 'rideStarted';
+      final wasTripInProgress = _lastRideStatus == 'inProgress' ||
+          _lastRideStatus == 'tripStarted' ||
+          _lastRideStatus == 'rideStarted';
+
+      if (currentStatus != _lastRideStatus) {
+        _lastRideStatus = currentStatus;
+        if (isTripInProgress && !wasTripInProgress) {
+          // Instantly calculate ETA/distance to dropoff without waiting for driver movement!
+          _recalculateEta(ride: ride, driverLoc: _lastDriverGeoPoint, force: true);
+        }
+      }
+    }
+
     if (mounted) setState(() {});
   }
 
@@ -199,6 +261,7 @@ class _TrackingStepState extends State<TrackingStep> {
     _presenceSub?.cancel();
     _vehicleSub?.cancel();
     _reviewSub?.cancel();
+    _driverDocSub?.cancel();
     _unreadSub?.cancel();
     super.dispose();
   }
@@ -219,6 +282,20 @@ class _TrackingStepState extends State<TrackingStep> {
     if (ride.status == 'cancelled' || ride.status == 'completed') {
       if (ride.status == 'completed' && !_hasPromptedRate) {
         _hasPromptedRate = true;
+        // Award first ride cashback if eligible
+        CashbackService.instance.awardFirstRideCashbackIfEligible(
+          customerUid: ride.customerUid,
+          rideId: rideId,
+        );
+        // Award % trip cashback if trip fare >= ₦5,000 threshold
+        final tripFare = ride.finalFare ?? ride.amountNaira ?? ride.customerOffer;
+        if (tripFare > 0) {
+          CashbackService.instance.awardTripCashbackIfEligible(
+            customerUid: ride.customerUid,
+            rideId: rideId,
+            fareAmount: tripFare,
+          );
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           Navigator.of(context, rootNavigator: true).push(
@@ -254,9 +331,11 @@ class _TrackingStepState extends State<TrackingStep> {
             final profile = profSnap.data;
             final driverName = (profile?.fullName.trim().isNotEmpty ?? false)
                 ? profile!.fullName
-                : (ride.driverName?.trim().isNotEmpty ?? false)
-                    ? ride.driverName!
-                    : 'Driver';
+                : (widget.controller.acceptedBid?.driverName.trim().isNotEmpty ?? false)
+                    ? widget.controller.acceptedBid!.driverName
+                    : (ride.driverName?.trim().isNotEmpty ?? false)
+                        ? ride.driverName!
+                        : 'Driver';
 
             final photoUrl = profile?.profilePhotoUrl ?? '';
 
@@ -266,10 +345,22 @@ class _TrackingStepState extends State<TrackingStep> {
               if (_make != null && _make!.isNotEmpty) _make,
               if (_model != null && _model!.isNotEmpty) _model,
             ].join(' ');
+            final effectiveVehicleDesc = vehicleDesc.isNotEmpty
+                ? vehicleDesc
+                : (widget.controller.acceptedBid?.vehicleName.trim().isNotEmpty ?? false)
+                    ? widget.controller.acceptedBid!.vehicleName.trim()
+                    : 'Vehicle info loading...';
 
             final isTripStarted = ride.status == 'inProgress' ||
                 ride.status == 'tripStarted' ||
                 ride.status == 'rideStarted';
+
+            final displayEta = (_etaText == 'Calculating...' &&
+                    !isTripStarted &&
+                    widget.controller.acceptedBid != null &&
+                    widget.controller.acceptedBid!.etaMinutes > 0)
+                ? 'Pickup in ${widget.controller.acceptedBid!.etaMinutes} mins'
+                : _etaText;
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -280,7 +371,7 @@ class _TrackingStepState extends State<TrackingStep> {
                   const SizedBox(height: 8),
                 // 1. Dynamic ETA / Driver Status Title
                 Text(
-                  isTripStarted ? 'Heading to your Destination' : _etaText,
+                  isTripStarted ? 'Heading to your destination' : displayEta,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                     color: isDark ? Colors.white : AppColors.slate900,
@@ -291,7 +382,7 @@ class _TrackingStepState extends State<TrackingStep> {
                 if (isTripStarted) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Estimated arrival: $_etaText',
+                    'Estimated destination: ${displayEta.replaceAll('Pickup in ', 'Dropoff in ')}',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: AppColors.primaryGreen,
                       fontWeight: FontWeight.w700,
@@ -322,13 +413,12 @@ class _TrackingStepState extends State<TrackingStep> {
                             radius: 36,
                             backgroundColor: isDark ? const Color(0xFF2E2E2E) : const Color(0xFFF1F5F9),
                             backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                            child: photoUrl.isEmpty
-                                ? Icon(
-                                    Icons.person_rounded,
-                                    size: 36,
-                                    color: isDark ? Colors.white30 : Colors.black26,
-                                  )
-                                : null,
+                            onBackgroundImageError: photoUrl.isNotEmpty ? (_, __) {} : null,
+                            child: Icon(
+                              Icons.person_rounded,
+                              size: 36,
+                              color: isDark ? Colors.white30 : Colors.black26,
+                            ),
                           ),
                         ),
                         // Verified gold badge
@@ -357,33 +447,59 @@ class _TrackingStepState extends State<TrackingStep> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Plate Number Badge
-                          if (_plateNumber != null && _plateNumber!.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF2E2E2E) : const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08),
-                                  width: 0.8,
+                          Row(
+                            children: [
+                              // Plate Number Badge
+                              if (_plateNumber != null && _plateNumber!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF2E2E2E) : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _plateNumber!,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: isDark ? Colors.white.withValues(alpha: 0.9) : AppColors.slate900,
+                                      letterSpacing: 0.5,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              child: Text(
-                                _plateNumber!,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                  color: isDark ? Colors.white.withValues(alpha: 0.9) : AppColors.slate900,
-                                  letterSpacing: 0.5,
-                                  fontSize: 13,
+                              if (ride.rideType.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryGreen.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    ride.rideType.toLowerCase() == 'tricycle'
+                                        ? '🛺 Tricycle'
+                                        : ride.rideType.toLowerCase() == 'motorcycle'
+                                            ? '🏍️ Motorcycle'
+                                            : '🚗 ${ride.rideType}',
+                                    style: const TextStyle(
+                                      color: AppColors.primaryGreen,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              ],
+                            ],
+                          ),
                           const SizedBox(height: 6),
 
                           // Color · Make Model
                           Text(
-                            vehicleDesc.isNotEmpty ? vehicleDesc : 'Vehicle info loading...',
+                            effectiveVehicleDesc,
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: isDark ? Colors.white : AppColors.slate900,

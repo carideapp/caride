@@ -1,0 +1,27 @@
+# CaRide TransactPay Proxy - Caddy SSL Configuration
+# Replace {$PROXY_DOMAIN:proxy.caride.ng} with your actual domain pointing to the VPS static IP.
+# Caddy will automatically provision and renew Let's Encrypt TLS certificates.
+
+{$PROXY_DOMAIN:proxy.caride.ng} {
+    # Forward all traffic to the Node.js proxy container
+    reverse_proxy transactpay-proxy:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
+    # Access logs
+    log {
+        output stdout
+        format console
+    }
+}

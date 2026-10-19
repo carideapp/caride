@@ -275,21 +275,19 @@ class _DriverVehicleInfoScreenState extends State<DriverVehicleInfoScreen> {
                         const SizedBox(height: AppSpacing.sm),
                         Column(
                           children: [
-                            Row(
-                              children: [
-                                Expanded(child: _buildVehicleTypeCard(context, _vehicleTypes[0])),
-                                const SizedBox(width: AppSpacing.md),
-                                Expanded(child: _buildVehicleTypeCard(context, _vehicleTypes[1])),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            Row(
-                              children: [
-                                Expanded(child: _buildVehicleTypeCard(context, _vehicleTypes[2])),
-                                const SizedBox(width: AppSpacing.md),
-                                Expanded(child: _buildVehicleTypeCard(context, _vehicleTypes[3])),
-                              ],
-                            ),
+                            for (int i = 0; i < _vehicleTypes.length; i += 2) ...[
+                              if (i > 0) const SizedBox(height: AppSpacing.md),
+                              Row(
+                                children: [
+                                  Expanded(child: _buildVehicleTypeCard(context, _vehicleTypes[i])),
+                                  const SizedBox(width: AppSpacing.md),
+                                  if (i + 1 < _vehicleTypes.length)
+                                    Expanded(child: _buildVehicleTypeCard(context, _vehicleTypes[i + 1]))
+                                  else
+                                    const Spacer(),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: AppSpacing.xl),
@@ -411,13 +409,21 @@ class _DriverVehicleInfoScreenState extends State<DriverVehicleInfoScreen> {
                 alignment: Alignment.center,
                 children: [
                   Image.asset(
-                    'lib/assets/ride_options/$type.png',
+                    vehicleTypeAsset(type),
                     height: 60,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      return const SizedBox(
+                      return SizedBox(
                         height: 60,
-                        child: Icon(Icons.directions_car, size: 40),
+                        child: Icon(
+                          type == vehicleTypeTricycle
+                              ? Icons.electric_rickshaw_rounded
+                              : type == vehicleTypeMotorcycle
+                                  ? Icons.two_wheeler_rounded
+                                  : Icons.directions_car,
+                          size: 40,
+                          color: AppColors.primaryGreen,
+                        ),
                       );
                     },
                   ),

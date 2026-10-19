@@ -3,6 +3,7 @@ import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:navigation/navigation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'controllers/fleet_auth_controller.dart';
 import 'controllers/fleet_auth_error_helper.dart';
@@ -35,12 +36,31 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
   @override
   void initState() {
     super.initState();
-    _startCountdown();
+    _initSessionAndCountdown();
+  }
+
+  Future<void> _initSessionAndCountdown() async {
+    if (fleetAuthController.pendingChallenge == null) {
+      final restored = await fleetAuthController.restorePendingSession();
+      if (!restored && mounted) {
+        setState(() => _errorMessage = 'Session expired. Please request a new OTP.');
+      }
+    }
+    if (mounted) {
+      _startCountdown();
+    }
   }
 
   void _startCountdown() {
     _timer?.cancel();
-    setState(() => _secondsRemaining = _timerSeconds);
+    final challenge = fleetAuthController.pendingChallenge;
+    if (challenge != null) {
+      final diff = challenge.expiresAt.difference(DateTime.now()).inSeconds;
+      setState(() => _secondsRemaining = diff.clamp(0, _timerSeconds));
+    } else {
+      setState(() => _secondsRemaining = _timerSeconds);
+    }
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining > 0) {
         setState(() => _secondsRemaining--);
@@ -48,6 +68,23 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
         timer.cancel();
       }
     });
+  }
+
+  Future<void> _openEmailApp() async {
+    try {
+      final mailtoUri = Uri.parse('mailto:');
+      if (await canLaunchUrl(mailtoUri)) {
+        await launchUrl(mailtoUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('[FleetManagerOtpScreen] Error opening email app: $e');
+    }
+  }
+
+  void _onChangeEmail() {
+    fleetAuthController.pendingChallenge = null;
+    fleetAuthController.setStep(0);
+    context.pop(false);
   }
 
   @override
@@ -98,8 +135,8 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
     }
   }
 
-  Future<void> _handleResend() async {
-    if (_secondsRemaining > 0 || _isResending) return;
+  Future<void> _handleResendPhone() async {
+    if (_isResending) return;
 
     setState(() {
       _isResending = true;
@@ -107,12 +144,49 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
     });
 
     try {
-      await fleetAuthController.requestSignupOtp();
+      final challenge = fleetAuthController.pendingChallenge;
+      if (challenge?.isSms == true) {
+        await fleetAuthController.requestSignupOtp();
+      } else {
+        await fleetAuthController.switchToPhoneOtp();
+      }
       _startCountdown();
       if (!mounted) return;
+      final phone = fleetAuthController.phone;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('A fresh verification code has been sent to your email.'),
+          content: Text('A fresh verification code has been sent via SMS to $phone.'),
+          backgroundColor: AppColors.brand,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final parsed = FleetAuthErrorHelper.parseError(e);
+      setState(() => _errorMessage = parsed);
+      FleetAuthErrorHelper.showErrorSnackBar(context, parsed);
+    } finally {
+      if (mounted) setState(() => _isResending = false);
+    }
+  }
+
+  Future<void> _handleSendEmail() async {
+    if (_isResending) return;
+
+    setState(() {
+      _isResending = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await fleetAuthController.switchToEmailOtp();
+      _startCountdown();
+      if (!mounted) return;
+      final email = fleetAuthController.email;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('A verification code has been sent to your email: $email.'),
           backgroundColor: AppColors.brand,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -134,7 +208,9 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
     final primaryTextColor = isDark ? Colors.white : Colors.black;
     final subtitleTextColor = isDark ? AppColors.textSecondaryDark : _subtitleColor;
     final inputFill = isDark ? AppColors.darkSurface : _lightInputFill;
-    final email = fleetAuthController.email;
+    final challenge = fleetAuthController.pendingChallenge;
+    final isSms = challenge?.isSms == true;
+    final destination = isSms ? (challenge?.phone ?? fleetAuthController.phone) : fleetAuthController.email;
 
     final formattedCountdown =
         '00:${_secondsRemaining.toString().padLeft(2, '0')}';
@@ -195,16 +271,26 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
 
                     // Subtitle
                     Text(
-                      email.isNotEmpty
-                          ? 'Enter the 6-digit code sent to $email'
-                          : 'Enter the code sent to your email to verify your account.',
+                      destination.isNotEmpty
+                          ? 'Enter the 6-digit code sent to $destination'
+                          : (isSms
+                              ? 'Enter the code sent to your phone to verify your account.'
+                              : 'Enter the code sent to your email to verify your account.'),
                       style: TextStyle(
                         fontSize: 15,
                         color: subtitleTextColor,
                         height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Leaving the app to copy the code won\'t reset your progress.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: subtitleTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
 
                     // Error Banner
                     if (_errorMessage != null)
@@ -268,9 +354,27 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
                         );
                       }),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 20),
 
-                    // Resend Link / Countdown
+                    if (!isSms) ...[
+                      const SizedBox(height: 16),
+                      Center(
+                        child: OutlinedButton.icon(
+                          onPressed: _openEmailApp,
+                          icon: const Icon(Icons.mail_outline_rounded, size: 18),
+                          label: const Text('Open Email App', style: TextStyle(fontWeight: FontWeight.w600)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.brand,
+                            side: BorderSide(color: AppColors.brand.withValues(alpha: 0.5)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+
+                    // Resend Link / Countdown for current channel
                     Center(
                       child: _secondsRemaining > 0
                           ? Row(
@@ -294,7 +398,7 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
                               ],
                             )
                           : GestureDetector(
-                              onTap: _isResending ? null : _handleResend,
+                              onTap: _isResending ? null : (isSms ? _handleResendPhone : _handleSendEmail),
                               child: _isResending
                                   ? const SizedBox(
                                       height: 18,
@@ -304,15 +408,37 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
                                         valueColor: AlwaysStoppedAnimation(AppColors.brand),
                                       ),
                                     )
-                                  : const Text(
-                                      'Resend Code',
-                                      style: TextStyle(
+                                  : Text(
+                                      isSms ? 'Resend code via Phone Number' : 'Resend code via Email',
+                                      style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.brand,
                                       ),
                                     ),
                             ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Alternative verification option (Phone <-> Email switch)
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed: _isResending ? null : (isSms ? _handleSendEmail : _handleResendPhone),
+                        icon: Icon(
+                          isSms ? Icons.mark_email_read_outlined : Icons.phone_android_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          isSms ? 'Verify account via Email OTP' : 'Send code via SMS (Phone Number)',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.brand,
+                          side: BorderSide(color: AppColors.brand.withValues(alpha: 0.5)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 36),
 
@@ -346,6 +472,20 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: TextButton(
+                        onPressed: _onChangeEmail,
+                        child: Text(
+                          isSms ? 'Wrong number? Change number' : 'Wrong email? Change email',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: subtitleTextColor,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),

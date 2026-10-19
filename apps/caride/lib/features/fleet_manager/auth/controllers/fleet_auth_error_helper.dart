@@ -53,6 +53,14 @@ class FleetAuthErrorHelper {
 
     final str = error.toString().toLowerCase();
 
+    if (str.contains('termii') ||
+        str.contains('country inactive') ||
+        str.contains('sms is unavailable') ||
+        str.contains('sms code') ||
+        str.contains('unable to send verification sms')) {
+      return 'OTP code via sms is unavailable at the moment, please try again later.';
+    }
+
     if (str.contains('user-not-found') || str.contains('not-found')) {
       return 'No Fleet Manager account found with this email. Please verify or register.';
     } else if (str.contains('wrong-password') || str.contains('invalid-credential')) {

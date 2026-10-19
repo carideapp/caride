@@ -46,51 +46,101 @@ class _RatingsScreenState extends State<RatingsScreen> {
         isDark ? AppColors.darkBackground : AppColors.lightBackground;
     final user = FirebaseAuth.instance.currentUser;
 
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+
     if (user == null) {
       return Scaffold(
         backgroundColor: backgroundColor,
-        appBar: AppBar(
-          backgroundColor: backgroundColor,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          centerTitle: true,
-          title: Text(
-            'Ratings & Reviews',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkSurface : Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 18,
+                          color: primaryTextColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Text(
+                      'Ratings & Reviews',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: primaryTextColor,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Expanded(
+                child: Center(
+                  child: Text('Please sign in to view your ratings.'),
+                ),
+              ),
+            ],
           ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: const Center(
-          child: Text('Please sign in to view your ratings.'),
         ),
       );
     }
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        title: Text(
-          'Ratings & Reviews',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
       body: SafeArea(
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    'Ratings & Reviews',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _ratingsStream,
           builder: (context, snapshot) {
             final isWaiting = snapshot.connectionState == ConnectionState.waiting;
@@ -171,8 +221,11 @@ class _RatingsScreenState extends State<RatingsScreen> {
           },
         ),
       ),
-    );
-  }
+    ],
+  ),
+),
+);
+}
 
   Widget _buildOverallCard(
     BuildContext context,

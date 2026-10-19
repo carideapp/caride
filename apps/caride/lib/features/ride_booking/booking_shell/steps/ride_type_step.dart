@@ -132,6 +132,15 @@ class _RideTypeStepState extends State<RideTypeStep> {
                                       width: 44,
                                       height: 44,
                                       fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => Icon(
+                                        opt.type.toLowerCase().contains('tricycle') || opt.type.toLowerCase().contains('keke')
+                                            ? Icons.electric_rickshaw_rounded
+                                            : opt.type.toLowerCase().contains('motorcycle') || opt.type.toLowerCase().contains('bike')
+                                                ? Icons.two_wheeler_rounded
+                                                : Icons.directions_car,
+                                        size: 32,
+                                        color: AppColors.brand,
+                                      ),
                                     ),
                                     const SizedBox(width: AppSpacing.md),
                                     Expanded(

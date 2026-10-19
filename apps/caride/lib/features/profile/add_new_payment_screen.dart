@@ -1,9 +1,8 @@
+import 'package:caride/features/profile/data/wallet_repository.dart';
 import 'package:design_system/design_system.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
-import 'package:caride/features/profile/data/wallet_repository.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class AddNewPaymentScreen extends StatefulWidget {
   const AddNewPaymentScreen({super.key});
@@ -15,16 +14,6 @@ class AddNewPaymentScreen extends StatefulWidget {
 class _AddNewPaymentScreenState extends State<AddNewPaymentScreen> {
   final _walletRepo = WalletRepository();
   bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   Future<void> _startCardSetup() async {
     if (_loading) return;
@@ -59,6 +48,7 @@ class _AddNewPaymentScreenState extends State<AddNewPaymentScreen> {
           SnackBar(
             content: Text('Card verification failed: $e'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -71,98 +61,288 @@ class _AddNewPaymentScreenState extends State<AddNewPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(
-          'Add New Payment',
-          style: AppTextStyles.titleLarge.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
-            onPressed: () {},
-          ),
-        ],
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: ResponsiveContainer(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: AppSpacing.xl),
-              Icon(Icons.add_card_rounded, size: 80, color: AppColors.primaryGreen.withValues(alpha: 0.8)),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Link Your Card',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.headlineSmall.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'To verify your card, a small refundable charge of ₦100 will be made. '
-                'This amount will be immediately credited to your CaRide Wallet.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyLarge.copyWith(color: Colors.grey[600]),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              const Divider(),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Supported Payments:',
-                style: AppTextStyles.titleMedium.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
+        child: Column(
+          children: [
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
                 children: [
-                  _buildPaymentIcon(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(width: 15, height: 15, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
-                        Transform.translate(offset: const Offset(-5, 0), child: Container(width: 15, height: 15, decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.8), shape: BoxShape.circle))),
-                      ],
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: primaryTextColor,
+                      ),
                     ),
                   ),
-                  _buildPaymentIcon(child: const Text('VISA', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic))),
-                  _buildPaymentIcon(child: const Text('Verve', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic))),
+                  const SizedBox(width: 14),
+                  Text(
+                    'Link Payment Card',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
                 ],
               ),
-            ],
-          ),
-        ),
-        ),
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: PrimaryButton(
-          label: _loading ? 'Processing...' : 'Proceed to Verify Card',
-          onPressed: _loading ? null : _startCardSetup,
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 20),
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        color: AppColors.brand.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.credit_card_rounded,
+                        size: 44,
+                        color: AppColors.brand,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Link Your Debit or Credit Card',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: primaryTextColor,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'To securely verify and tokenize your card, a small refundable verification of ₦100 will be made. The full amount is instantly credited to your CaRide Wallet.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: secondaryTextColor,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Security Info Card
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppColors.brand.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.lock_outline_rounded,
+                              color: AppColors.brand,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Bank-Grade Security',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: primaryTextColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Your card credentials are tokenized with 256-bit encryption through TransactPay. CaRide does not store your full card number or CVV.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: secondaryTextColor,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Supported Card Channels
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Accepted Card Networks',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: primaryTextColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _buildNetworkBadge(
+                          isDark: isDark,
+                          borderColor: borderColor,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 14,
+                                height: 14,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFEB001B),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              Transform.translate(
+                                offset: const Offset(-4, 0),
+                                child: Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF79E1B).withValues(alpha: 0.9),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Mastercard',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: primaryTextColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _buildNetworkBadge(
+                          isDark: isDark,
+                          borderColor: borderColor,
+                          child: Text(
+                            'VISA',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              fontStyle: FontStyle.italic,
+                              color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _buildNetworkBadge(
+                          isDark: isDark,
+                          borderColor: borderColor,
+                          child: Text(
+                            'Verve',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Bottom CTA Button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _startCardSetup,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    elevation: 0,
+                    disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Proceed to Verify Card',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildPaymentIcon({required Widget child}) {
+  Widget _buildNetworkBadge({
+    required bool isDark,
+    required Color borderColor,
+    required Widget child,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: Colors.grey.shade200),
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
       ),
       child: child,
     );

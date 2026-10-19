@@ -1,11 +1,16 @@
-import 'package:design_system/design_system.dart';
+import 'dart:io';
+
+import 'package:caride/core/auth/pending_otp_session.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/features/driver/profile/driver_terms_screen.dart';
+import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+/// Redesigned Driver Signup Screen matching the driver_login_screen.dart minimalist pill aesthetic.
 class DriverSignupScreen extends StatefulWidget {
   const DriverSignupScreen({super.key});
 
@@ -15,20 +20,152 @@ class DriverSignupScreen extends StatefulWidget {
 
 class _DriverSignupScreenState extends State<DriverSignupScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _fullName = TextEditingController();
+  final _username = TextEditingController();
   final _email = TextEditingController();
+  final _phone = TextEditingController();
   final _password = TextEditingController();
   final _referralCode = TextEditingController();
+  File? _profilePhotoFile;
   bool _obscurePassword = true;
   bool _loading = false;
   bool _acceptTerms = false;
   String? _errorMessage;
+  String? _pendingSessionEmail;
+
+  String _selectedCountry = 'Nigeria';
+  String? _selectedState;
+
+  static const Color _primaryBrand = AppColors.brand; // Color(0xFF16A34A)
+  static const Color _lightInputFill = Color(0xFFF3F4F6);
+  static const Color _labelColor = Color(0xFF1F2937);
+  static const Color _hintColor = Color(0xFF9CA3AF);
+  static const Color _subtitleColor = Color(0xFF6B7280);
+
+  static const List<String> _countries = [
+    'Nigeria',
+  ];
+
+  static const Map<String, List<String>> _countryStates = {
+    'Nigeria': [
+      'Abia',
+      'Adamawa',
+      'Akwa Ibom',
+      'Anambra',
+      'Bauchi',
+      'Bayelsa',
+      'Benue',
+      'Borno',
+      'Cross River',
+      'Delta',
+      'Ebonyi',
+      'Edo',
+      'Ekiti',
+      'Enugu',
+      'FCT (Abuja)',
+      'Gombe',
+      'Imo',
+      'Jigawa',
+      'Kaduna',
+      'Kano',
+      'Katsina',
+      'Kebbi',
+      'Kogi',
+      'Kwara',
+      'Lagos',
+      'Nasarawa',
+      'Niger',
+      'Ogun',
+      'Ondo',
+      'Osun',
+      'Oyo',
+      'Plateau',
+      'Rivers',
+      'Sokoto',
+      'Taraba',
+      'Yobe',
+      'Zamfara',
+    ],
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDraftAndSession();
+  }
+
+  Future<void> _loadDraftAndSession() async {
+    final session = await PendingOtpSessionService.instance.loadSession(roleFilter: 'driver');
+    if (session != null && mounted) {
+      setState(() {
+        final dest = session.challenge.isSms && session.challenge.phone != null
+            ? session.challenge.phone!
+            : session.challenge.email;
+        _pendingSessionEmail = dest;
+        if (_fullName.text.isEmpty && session.fullName != null) _fullName.text = session.fullName!;
+        if (_email.text.isEmpty && session.email != null) _email.text = session.email!;
+        if (_phone.text.isEmpty && session.phone != null) _phone.text = session.phone!;
+        if (_username.text.isEmpty && session.username != null) _username.text = session.username!;
+        if (_referralCode.text.isEmpty && session.referralCode != null) _referralCode.text = session.referralCode!;
+      });
+    } else {
+      final draft = await PendingOtpSessionService.instance.loadDraft('driver');
+      if (draft != null && mounted) {
+        setState(() {
+          if (_fullName.text.isEmpty && draft['fullName'] != null) _fullName.text = draft['fullName'] as String;
+          if (_email.text.isEmpty && draft['email'] != null) _email.text = draft['email'] as String;
+          if (_phone.text.isEmpty && draft['phone'] != null) _phone.text = draft['phone'] as String;
+          if (_username.text.isEmpty && draft['username'] != null) _username.text = draft['username'] as String;
+          if (_referralCode.text.isEmpty && draft['referralCode'] != null) _referralCode.text = draft['referralCode'] as String;
+          if (_selectedState == null && draft['state'] != null) _selectedState = draft['state'] as String;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
+    _fullName.dispose();
+    _username.dispose();
     _email.dispose();
+    _phone.dispose();
     _password.dispose();
     _referralCode.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1080,
+      );
+      if (picked == null) return;
+
+      final file = File(picked.path);
+      final ext = picked.name.split('.').last.toLowerCase();
+      if (ext != 'jpg' && ext != 'jpeg' && ext != 'png') {
+        setState(() => _errorMessage = "Only JPG and PNG images are supported for profile photo.");
+        return;
+      }
+
+      final bytes = await file.length();
+      if (bytes > 5 * 1024 * 1024) {
+        final sizeMb = (bytes / (1024 * 1024)).toStringAsFixed(1);
+        setState(() => _errorMessage = "Profile photo exceeds the 5MB size limit (actual: $sizeMb MB). Please select a smaller image.");
+        return;
+      }
+
+      setState(() {
+        _profilePhotoFile = file;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      debugPrint('[DriverSignupScreen] Error picking profile photo: $e');
+    }
   }
 
   Future<void> _submit() async {
@@ -43,13 +180,36 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     });
     try {
       final code = _referralCode.text.trim().isEmpty ? null : _referralCode.text.trim();
-      await driverAuthController.signUpWithEmailAndPassword(
-        email: _email.text.trim(),
-        password: _password.text,
+      final rawUsername = _username.text.trim().replaceAll('@', '').toLowerCase();
+      final cleanFullName = _fullName.text.trim();
+      final phoneNum = _phone.text.trim();
+      final emailAddr = _email.text.trim();
+
+      await PendingOtpSessionService.instance.saveDraft('driver', {
+        'fullName': cleanFullName,
+        'username': _username.text.trim(),
+        'email': emailAddr,
+        'phone': phoneNum,
+        'referralCode': _referralCode.text.trim(),
+        'state': _selectedState,
+      });
+
+      await driverAuthController.requestOtpForSignup(
+        phoneNum,
+        emailAddr,
         referralCode: code,
-        fullName: null,
-        phone: null,
+        fullName: cleanFullName,
+        password: _password.text,
+        username: rawUsername,
+        country: _selectedCountry,
+        state: _selectedState ?? '',
       );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selected_role', 'driver');
+
+      if (!mounted) return;
+      context.push(DriverRoutePaths.otp);
     } catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = _friendlyError(e));
@@ -60,13 +220,21 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
   String _friendlyError(Object e) {
     final msg = e.toString().toLowerCase();
+    if (msg.contains('termii') ||
+        msg.contains('country inactive') ||
+        msg.contains('sms is unavailable') ||
+        msg.contains('sms code') ||
+        msg.contains('unable to send verification sms')) {
+      return 'OTP code via sms is unavailable at the moment, please try again later.';
+    }
+
     if (msg.contains('canceled') ||
         msg.contains('cancelled') ||
         msg.contains('sign_in_canceled') ||
         msg.contains('cancelled by user') ||
         msg.contains('googlesigninexceptioncode.canceled') ||
         msg.contains('12501')) {
-      return 'Google sign-in was cancelled.';
+      return 'Sign-in was cancelled.';
     }
 
     if (e is FirebaseAuthException) {
@@ -112,181 +280,961 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   }
 
   void _onBack() {
-    context.go(CustomerRoutePaths.welcome);
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(CustomerRoutePaths.welcome);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final inputFill = isDark ? AppColors.darkSurface : _lightInputFill;
+    final primaryTextColor = isDark ? Colors.white : Colors.black;
+    final labelTextColor = isDark ? AppColors.textPrimaryDark : _labelColor;
+    final subtitleTextColor = isDark ? AppColors.textSecondaryDark : _subtitleColor;
+
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        title: 'Drive with CaRide',
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: _onBack,
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.pagePadding,
-          vertical: AppSpacing.xl,
-        ),
-        child: Form(
-          key: _formKey,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 500),
-              child: GlassSurface(
-              radius: AppRadius.xxl,
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
+      backgroundColor: isDark ? AppColors.darkBackground : Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top Bar with Back Button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              child: Row(
                 children: [
-                  Text(
-                    'Create Account',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.headlineMedium.copyWith(
-                      fontWeight: FontWeight.bold,
+                  IconButton(
+                    icon: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 20,
+                      color: primaryTextColor,
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Sign up to get started as a driver',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  AppTextField(
-                    controller: _email,
-                    hint: 'Email Address',
-                    keyboardType: TextInputType.emailAddress,
-                    prefixIcon: Icons.email_outlined,
-                    validator: FormValidators.email,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _password,
-                    hint: 'Password',
-                    obscureText: _obscurePassword,
-                    prefixIcon: Icons.lock_outline_rounded,
-                    suffix: GestureDetector(
-                      onTap: () => setState(() => _obscurePassword = !_obscurePassword),
-                      child: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                        color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
-                        size: 20,
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Password is required.';
-                      if (v.length < 6) return 'Password must be at least 6 characters.';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _referralCode,
-                    hint: 'Referral Code (Optional)',
-                    keyboardType: TextInputType.text,
-                    prefixIcon: Icons.card_giftcard_outlined,
-                    textCapitalization: TextCapitalization.characters,
-                  ),
-                  if (_errorMessage != null) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    InlineError(message: _errorMessage!),
-                  ],
-                  const SizedBox(height: AppSpacing.md),
-
-                  Row(
-                    children: [
-                      SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: Checkbox(
-                          value: _acceptTerms,
-                          activeColor: AppColors.primaryGreen,
-                          onChanged: (val) {
-                            setState(() {
-                              _acceptTerms = val ?? false;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const DriverTermsScreen(),
-                              ),
-                            );
-                          },
-                          child: Text.rich(
-                            TextSpan(
-                              text: 'I accept the ',
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: 'Terms & Conditions',
-                                  style: const TextStyle(
-                                    color: AppColors.primaryGreen,
-                                    fontWeight: FontWeight.bold,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  PrimaryButton(
-                    label: 'Create Account',
-                    isLoading: _loading,
-                    onPressed: _submit,
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Already have an account? ',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => context.go(DriverRoutePaths.login),
-                        child: Text(
-                          'Sign In',
-                          style: AppTextStyles.titleMedium.copyWith(
-                            color: AppColors.brand,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
+                    onPressed: _onBack,
                   ),
                 ],
               ),
             ),
-          ),
+
+            // Scrollable Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 8.0,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+
+                      // Title
+                      Text(
+                        'Create Account',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: primaryTextColor,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Subtitle
+                      Text(
+                        'Sign up to get started as a driver',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: subtitleTextColor,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Pending OTP resume banner if any
+                      if (_pendingSessionEmail != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandGlass,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.brand.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.mark_email_read_outlined,
+                                    color: AppColors.brand,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'A verification code is active for $_pendingSessionEmail',
+                                      style: TextStyle(
+                                        color: primaryTextColor,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.brand,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(vertical: 8),
+                                      ),
+                                      onPressed: () async {
+                                        final router = GoRouter.of(context);
+                                        await driverAuthController.restorePendingSession();
+                                        if (mounted) router.push(DriverRoutePaths.otp);
+                                      },
+                                      child: const Text('Enter Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TextButton(
+                                    onPressed: () async {
+                                      await driverAuthController.clearPendingChallenge();
+                                      if (mounted) setState(() => _pendingSessionEmail = null);
+                                    },
+                                    child: Text(
+                                      'Dismiss',
+                                      style: TextStyle(color: subtitleTextColor, fontSize: 13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Error Banner
+                      if (_errorMessage != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.error.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                color: AppColors.error,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: const TextStyle(
+                                    color: AppColors.error,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Profile Photo Picker Section
+                      Text(
+                        'Profile Photo',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: _pickProfilePhoto,
+                        child: Container(
+                          height: 130,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: inputFill,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                              width: 1.5,
+                            ),
+                            image: _profilePhotoFile != null
+                                ? DecorationImage(
+                                    image: FileImage(_profilePhotoFile!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: _profilePhotoFile == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: _primaryBrand.withValues(alpha: 0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.add_a_photo_rounded,
+                                        color: _primaryBrand,
+                                        size: 26,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Select Profile Photo',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: primaryTextColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'JPG or PNG (max 5MB)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: subtitleTextColor,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Align(
+                                  alignment: Alignment.topRight,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: InkWell(
+                                      onTap: () => setState(() => _profilePhotoFile = null),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black87,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close_rounded,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Full Name Field
+                      Text(
+                        'Full Name',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _fullName,
+                        textCapitalization: TextCapitalization.words,
+                        keyboardType: TextInputType.name,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter full name (e.g. John Doe)',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.person_outline_rounded,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Full name is required.';
+                          if (v.trim().length < 2) return 'Full name must be at least 2 characters.';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Username Field
+                      Text(
+                        'Username',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _username,
+                        keyboardType: TextInputType.text,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter username (e.g. johndoe)',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.alternate_email_rounded,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Username is required.';
+                          final clean = v.trim().replaceAll('@', '');
+                          if (clean.length < 3) return 'Username must be at least 3 characters.';
+                          if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(clean)) {
+                            return 'Only letters, numbers, and underscores are allowed.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Email Field
+                      Text(
+                        'Email Address',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter email address',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.email_outlined,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          final v = value?.trim() ?? '';
+                          if (v.isEmpty) return 'Please enter your email address.';
+                          final emailRegex = RegExp(r'^[\w.+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
+                          if (!emailRegex.hasMatch(v)) return 'Enter a valid email address.';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Phone Number (+234)
+                      Text(
+                        'Phone Number',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // +234 country code dropdown
+                          Container(
+                            height: 58,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: inputFill,
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: '+234',
+                                icon: Icon(
+                                  Icons.arrow_drop_down_rounded,
+                                  color: subtitleTextColor,
+                                ),
+                                style: TextStyle(
+                                  color: primaryTextColor,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: '+234',
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text('🇳🇬', style: TextStyle(fontSize: 18)),
+                                        SizedBox(width: 4),
+                                        Text('+234'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (_) {},
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _phone,
+                              keyboardType: TextInputType.number,
+                              style: TextStyle(
+                                color: primaryTextColor,
+                                fontSize: 15,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: '08012345678',
+                                hintStyle: const TextStyle(
+                                  color: _hintColor,
+                                  fontSize: 14,
+                                ),
+                                filled: true,
+                                fillColor: inputFill,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 18,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: const BorderSide(
+                                    color: _primaryBrand,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              validator: (value) {
+                                final v = value?.trim() ?? '';
+                                if (v.isEmpty) return 'Please enter your phone number.';
+                                final digitsOnly = v.replaceAll(RegExp(r'\D'), '');
+                                if (digitsOnly.length != 11) {
+                                  return 'Phone number must be exactly 11 digits.';
+                                }
+                                if (!digitsOnly.startsWith('0')) {
+                                  return 'Phone number must start with 0 (e.g. 0801...).';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Password Field
+                      Text(
+                        'Password',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _password,
+                        obscureText: _obscurePassword,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter password',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.lock_outline_rounded,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                color: _primaryBrand,
+                                size: 22,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a password.';
+                          }
+                          if (value.length < 6) {
+                            return 'Password must be at least 6 characters.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Country Dropdown Field
+                      Text(
+                        'Country',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedCountry,
+                        isExpanded: true,
+                        dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Select Country',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.public_rounded,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        items: _countries.map((country) {
+                          return DropdownMenuItem<String>(
+                            value: country,
+                            child: Text(country),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null && val != _selectedCountry) {
+                            setState(() {
+                              _selectedCountry = val;
+                              _selectedState = null;
+                            });
+                          }
+                        },
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Please select your country.';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // State Dropdown Field
+                      Text(
+                        'State',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey(_selectedCountry),
+                        initialValue: _selectedState,
+                        isExpanded: true,
+                        dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Select State',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.location_city_rounded,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        items: (_countryStates[_selectedCountry] ?? []).map((st) {
+                          return DropdownMenuItem<String>(
+                            value: st,
+                            child: Text(st),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setState(() => _selectedState = val);
+                        },
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Please select your state.';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Referral Code Field
+                      Text(
+                        'Referral Code (Optional)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: labelTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _referralCode,
+                        textCapitalization: TextCapitalization.characters,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter referral code if any',
+                          hintStyle: const TextStyle(
+                            color: _hintColor,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.card_giftcard_outlined,
+                            color: _hintColor,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: inputFill,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: _primaryBrand,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Terms and Conditions Checkbox Row
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: Checkbox(
+                              value: _acceptTerms,
+                              activeColor: _primaryBrand,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              onChanged: (val) {
+                                setState(() {
+                                  _acceptTerms = val ?? false;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const DriverTermsScreen(),
+                                  ),
+                                );
+                              },
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'I accept the ',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    color: subtitleTextColor,
+                                  ),
+                                  children: const [
+                                    TextSpan(
+                                      text: 'Terms & Conditions',
+                                      style: TextStyle(
+                                        color: _primaryBrand,
+                                        fontWeight: FontWeight.w700,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Submit Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryBrand,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          onPressed: _loading ? null : _submit,
+                          child: _loading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  'Create Account',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+
+                      // Footer Link
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Already have an account ? ",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: subtitleTextColor,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => context.go(DriverRoutePaths.login),
+                            child: const Text(
+                              'Sign In',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: _primaryBrand,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-    ),
-  );
+    );
   }
 }

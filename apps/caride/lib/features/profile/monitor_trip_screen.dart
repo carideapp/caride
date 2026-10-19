@@ -10,7 +10,6 @@ import 'package:caride/core/maps/dark_map_style.dart';
 import 'package:caride/core/maps/google_map_utils.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 class MonitorTripScreen extends StatefulWidget {
   const MonitorTripScreen({super.key, this.params});
@@ -360,20 +359,62 @@ class _MonitorTripScreenState extends State<MonitorTripScreen> {
           ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14),
               child: Row(
                 children: [
-                  IconButton.filledTonal(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: isDark ? Colors.white : const Color(0xFF111827),
+                      ),
+                    ),
                   ),
                   const Spacer(),
-                  IconButton.filledTonal(
-                    onPressed: loc == null ? null : _recenter,
-                    icon: Icon(
-                      _followDriver
-                          ? Icons.my_location_rounded
-                          : Icons.location_searching_rounded,
+                  GestureDetector(
+                    onTap: loc == null ? null : _recenter,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _followDriver
+                            ? Icons.my_location_rounded
+                            : Icons.location_searching_rounded,
+                        size: 20,
+                        color: AppColors.brand,
+                      ),
                     ),
                   ),
                 ],
@@ -383,13 +424,22 @@ class _MonitorTripScreenState extends State<MonitorTripScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-              child: AppCard(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.md,
+              padding: const EdgeInsets.all(20),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: SafeArea(
                   top: false,
@@ -397,7 +447,10 @@ class _MonitorTripScreenState extends State<MonitorTripScreen> {
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(AppSpacing.md),
-                            child: CircularProgressIndicator(),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.brand),
+                            ),
                           ),
                         )
                       : Column(
@@ -407,17 +460,18 @@ class _MonitorTripScreenState extends State<MonitorTripScreen> {
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primaryGreen.withValues(alpha: 0.16),
-                                    borderRadius: BorderRadius.circular(999),
+                                    color: AppColors.brand.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
-                                    'Monitoring Code: $_code',
+                                    'Code: $_code',
                                     style: const TextStyle(
-                                      color: AppColors.primaryGreen,
-                                      fontSize: 12,
+                                      color: AppColors.brand,
+                                      fontSize: 13,
                                       fontWeight: FontWeight.w700,
+                                      letterSpacing: 1,
                                     ),
                                   ),
                                 ),

@@ -1,7 +1,6 @@
 import 'package:caride/features/profile/data/emergency_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 /// Bottom sheet for managing the Pickup Code (startCode) feature.
 /// Allows the passenger to toggle startCode verification on or off.
@@ -36,7 +35,10 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update setting: $e')),
+          SnackBar(
+            content: Text('Failed to update setting: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -47,15 +49,35 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.xl),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 14, 20, MediaQuery.of(context).padding.bottom + 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // Header
           Row(
             children: [
               Container(
@@ -63,20 +85,29 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
                 height: 44,
                 decoration: BoxDecoration(
                   color: AppColors.brand.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.shield_rounded, color: AppColors.brand, size: 22),
               ),
-              const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Pickup Code', style: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.w800)),
                     Text(
-                      'Verify your driver at pickup',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      'Pickup PIN Verification',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Verify your driver before departure',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: secondaryTextColor,
                       ),
                     ),
                   ],
@@ -84,32 +115,45 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: 20),
 
-          // Explanation card
-          GlassContainer(
-            padding: const EdgeInsets.all(AppSpacing.md),
+          // Explanation Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'How it works',
-                  style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: primaryTextColor,
+                  ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                _bulletPoint('A unique 4-digit code is generated when you book a ride.'),
-                _bulletPoint('You share the code with your driver at pickup.'),
-                _bulletPoint('Your driver enters the code to start the trip — verifying your identity before departure.'),
-                _bulletPoint('If the code is wrong, the driver cannot start the trip.'),
+                const SizedBox(height: 10),
+                _bulletPoint('A unique 4-digit code is generated when your ride is assigned.', secondaryTextColor),
+                _bulletPoint('You verbally share the code with your driver at pickup.', secondaryTextColor),
+                _bulletPoint('The driver enters the code to initiate trip recording.', secondaryTextColor),
+                _bulletPoint('If the code does not match, the trip cannot start.', secondaryTextColor),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 14),
 
-          // Toggle row
-          GlassContainer(
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          // Toggle Row
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor),
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -118,19 +162,22 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
                     children: [
                       Text(
                         'Require Pickup Code',
-                        style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: primaryTextColor,
+                        ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
                         _enabled == null
-                            ? 'Loading...'
+                            ? 'Loading preference...'
                             : _enabled!
-                                ? 'Your driver must enter the correct code to start'
-                                : 'Driver can start without a code',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
+                                ? 'Driver must enter code before departing'
+                                : 'Driver can start trip immediately without code',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: secondaryTextColor,
                         ),
                       ),
                     ],
@@ -138,11 +185,17 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
                 ),
                 if (_enabled == null || _loading)
                   const SizedBox(
-                      width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.brand),
+                    ),
+                  )
                 else
                   Switch.adaptive(
                     value: _enabled!,
-                    activeThumbColor: AppColors.brand,
+                    activeTrackColor: AppColors.brand,
                     onChanged: _toggle,
                   ),
               ],
@@ -150,24 +203,26 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
           ),
 
           if (_enabled == false) ...[
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 18),
-                  const SizedBox(width: AppSpacing.sm),
+                  Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 20),
+                  SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Pickup Code is recommended for your safety. Enable it to ensure only the right driver starts your ride.',
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: Colors.amber.shade800),
+                      'Pickup PIN is strongly recommended to protect against unauthorized vehicles.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                      ),
                     ),
                   ),
                 ],
@@ -175,12 +230,27 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
             ),
           ],
 
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: 22),
           SizedBox(
             width: double.infinity,
-            child: SecondaryButton(
-              label: 'Done',
+            height: 54,
+            child: ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brand,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
+              child: const Text(
+                'Done',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
         ],
@@ -188,19 +258,22 @@ class _PickupCodeSettingsSheetState extends State<PickupCodeSettingsSheet> {
     );
   }
 
-  Widget _bulletPoint(String text) {
+  Widget _bulletPoint(String text, Color secondaryTextColor) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.only(top: 5),
-            child: Icon(Icons.circle, size: 6, color: AppColors.brand),
+            padding: EdgeInsets.only(top: 6),
+            child: Icon(Icons.circle, size: 5, color: AppColors.brand),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(text, style: AppTextStyles.bodySmall),
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: secondaryTextColor, height: 1.35),
+            ),
           ),
         ],
       ),

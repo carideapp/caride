@@ -154,6 +154,7 @@ class AuthRepository {
           'isEmailVerified': true,
           'profileCompleted': false,
           'fullName': fullName ?? '',
+          'displayName': fullName ?? '',
           if (phone != null) 'phone': phone,
           if (profilePhotoUrl != null) 'photoUrl': profilePhotoUrl,
           'referredByCode': referredByCode != null && referredByCode.trim().isNotEmpty
@@ -162,6 +163,12 @@ class AuthRepository {
           'createdAt': now,
           'updatedAt': now,
         });
+      } else if (fullName != null && fullName.trim().isNotEmpty) {
+        await customerRef.set({
+          'fullName': fullName.trim(),
+          'displayName': fullName.trim(),
+          'updatedAt': now,
+        }, SetOptions(merge: true));
       }
     }
 
@@ -181,15 +188,19 @@ class AuthRepository {
         'createdAt': now,
         'updatedAt': now,
         'lastLogin': now,
+        if (fullName != null && fullName.trim().isNotEmpty) 'fullName': fullName.trim(),
+        if (fullName != null && fullName.trim().isNotEmpty) 'displayName': fullName.trim(),
       });
     } else {
-      await userRef.update({
+      await userRef.set({
         'activeRole': selectedRole,
         'customerExists': customerExists,
         'driverExists': driverExists,
         'updatedAt': now,
         'lastLogin': now,
-      });
+        if (fullName != null && fullName.trim().isNotEmpty) 'fullName': fullName.trim(),
+        if (fullName != null && fullName.trim().isNotEmpty) 'displayName': fullName.trim(),
+      }, SetOptions(merge: true));
     }
 
     // 4. Process signup referral if code was provided

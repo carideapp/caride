@@ -53,8 +53,25 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final raw = e.toString().toLowerCase();
+        String userFriendlyError = 'Unable to complete ride. Please check your connection and try again.';
+        if (raw.contains('network') || raw.contains('unavailable') || raw.contains('connection')) {
+          userFriendlyError = 'Network connection issue. Please check your internet connection and tap "End Ride" again.';
+        } else if (raw.contains('not the assigned driver')) {
+          userFriendlyError = 'You are not listed as the assigned driver for this ride.';
+        } else if (raw.contains('not in started state') || raw.contains('failed-precondition')) {
+          userFriendlyError = 'The ride status has changed. Please refresh your trip status.';
+        } else if (raw.contains('not found')) {
+          userFriendlyError = 'Ride details could not be found. Please refresh your trip status.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to complete ride: $e')),
+          SnackBar(
+            content: Text(userFriendlyError),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
         );
       }
     } finally {
@@ -226,6 +243,14 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                             'Customer',
                                             style: AppTextStyles.bodySmall,
                                           ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          NgnFormat.whole(displayFare),
+                                          style: AppTextStyles.titleMedium.copyWith(
+                                            color: AppColors.brand,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -270,23 +295,6 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                         },
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        NgnFormat.whole(displayFare),
-                                        style: AppTextStyles.titleMedium.copyWith(
-                                          color: AppColors.brand,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      Text(
-                                        'OFFER',
-                                        style: AppTextStyles.caption.copyWith(fontSize: 9),
-                                      ),
-                                    ],
                                   ),
                                 ],
                               ),

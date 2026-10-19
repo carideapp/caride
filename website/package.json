@@ -1,0 +1,13 @@
+{
+  "name": "caride-website",
+  "version": "1.0.0",
+  "description": "CaRide official website - Nigeria's smart ride-hailing platform",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

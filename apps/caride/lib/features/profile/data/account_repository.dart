@@ -18,9 +18,10 @@ class AccountProfile {
     required this.referralCode,
     required this.referredByCode,
     required this.referralEarnings,
-    this.paystackDedicatedAccountNumber,
-    this.paystackDedicatedAccountBankName,
-    this.paystackDedicatedAccountName,
+    this.state = '',
+    this.virtualAccountNumber,
+    this.virtualAccountBankName,
+    this.virtualAccountName,
   });
 
   final String fullName;
@@ -29,14 +30,15 @@ class AccountProfile {
   final String photoUrl;
   final String gender;
   final String dateOfBirth;
+  final String state;
   final double walletBalance;
   final double creditBalance;
   final String referralCode;
   final String? referredByCode;
   final double referralEarnings;
-  final String? paystackDedicatedAccountNumber;
-  final String? paystackDedicatedAccountBankName;
-  final String? paystackDedicatedAccountName;
+  final String? virtualAccountNumber;
+  final String? virtualAccountBankName;
+  final String? virtualAccountName;
 
   factory AccountProfile.fromMap(Map<String, dynamic> data) {
     return AccountProfile(
@@ -46,17 +48,15 @@ class AccountProfile {
       photoUrl: (data['photoUrl'] as String?) ?? '',
       gender: (data['gender'] as String?) ?? '',
       dateOfBirth: (data['dateOfBirth'] as String?) ?? '',
+      state: (data['state'] as String?) ?? '',
       walletBalance: (data['walletBalance'] as num?)?.toDouble() ?? 0.0,
       creditBalance: (data['creditBalance'] as num?)?.toDouble() ?? 0.0,
       referralCode: (data['referralCode'] as String?) ?? '',
       referredByCode: data['referredByCode'] as String?,
       referralEarnings: (data['referralEarnings'] as num?)?.toDouble() ?? 0.0,
-      paystackDedicatedAccountNumber: (data['paystackDedicatedAccountNumber'] as String?) ??
-          (data['paystackVirtualAccount'] as Map<dynamic, dynamic>?)?['accountNumber'] as String?,
-      paystackDedicatedAccountBankName: (data['paystackDedicatedAccountBankName'] as String?) ??
-          (data['paystackVirtualAccount'] as Map<dynamic, dynamic>?)?['bankName'] as String?,
-      paystackDedicatedAccountName: (data['paystackDedicatedAccountName'] as String?) ??
-          (data['paystackVirtualAccount'] as Map<dynamic, dynamic>?)?['accountName'] as String?,
+      virtualAccountNumber: data['virtualAccountNumber'] as String?,
+      virtualAccountBankName: data['virtualAccountBankName'] as String?,
+      virtualAccountName: data['virtualAccountName'] as String?,
     );
   }
 }

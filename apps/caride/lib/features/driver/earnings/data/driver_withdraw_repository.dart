@@ -46,7 +46,7 @@ class DriverWithdrawRepository {
   Future<List<BankOption>> fetchBanks() async {
     try {
       final result = await _functions
-          .httpsCallable('listPaystackBanks')
+          .httpsCallable('listTransactPayBanks')
           .call<Map<String, dynamic>>();
 
       final data = result.data;
@@ -101,7 +101,7 @@ class DriverWithdrawRepository {
   }) async {
     try {
       final result = await _functions
-          .httpsCallable('resolvePaystackBankAccount')
+          .httpsCallable('resolveTransactPayBankAccount')
           .call<Map<String, dynamic>>({
         'bankCode': bankCode,
         'accountNumber': accountNumber,
@@ -135,7 +135,7 @@ class DriverWithdrawRepository {
   }
 
   // ── Process withdrawal ───────────────────────────────────────────────
-  /// Verifies PIN, deducts wallet balance, and triggers Paystack transfer.
+  /// Verifies PIN, deducts wallet balance, and triggers TransactPay payout.
   /// Returns the transaction reference on success.
   Future<String> processWithdrawal({
     required String accountNumber,
@@ -147,20 +147,59 @@ class DriverWithdrawRepository {
   }) async {
     if (_uid == null) throw Exception('Not signed in.');
 
-    final result = await _functions
-        .httpsCallable('processDriverWithdrawal')
-        .call<Map<String, dynamic>>({
-      'accountNumber': accountNumber,
-      'bankCode': bankCode,
-      'bankName': bankName,
-      'accountName': accountName,
-      'amountNaira': amountNaira,
-      'pin': pin,
-    });
+    try {
+      final result = await _functions
+          .httpsCallable('processDriverWithdrawal')
+          .call<Map<String, dynamic>>({
+        'accountNumber': accountNumber,
+        'bankCode': bankCode,
+        'bankName': bankName,
+        'accountName': accountName,
+        'amountNaira': amountNaira,
+        'pin': pin,
+      });
 
-    final data = result.data;
-    final reference = data['reference'] as String?;
-    if (reference == null) throw Exception('Invalid server response.');
-    return reference;
+      final data = result.data;
+      final reference = data['reference'] as String?;
+      if (reference == null) throw Exception('Invalid server response.');
+      return reference;
+    } on FirebaseFunctionsException catch (e) {
+      throw parseDriverWithdrawError(e);
+    } catch (e) {
+      throw parseDriverWithdrawError(e);
+    }
   }
 }
+
+/// Parses raw backend/network errors into human-readable UI messages per AGENTS.md.
+String parseDriverWithdrawError(dynamic error) {
+  final msg = error.toString().toLowerCase();
+  if (error is FirebaseFunctionsException) {
+    if (error.code == 'permission-denied' || msg.contains('incorrect security pin')) {
+      return 'Incorrect security PIN. Please double-check your 4-digit PIN and try again.';
+    }
+    if (error.code == 'failed-precondition' || msg.contains('insufficient wallet balance')) {
+      return 'Insufficient wallet balance to complete this withdrawal.';
+    }
+    if (error.code == 'invalid-argument') {
+      return 'Invalid account details or withdrawal amount. Please check your input.';
+    }
+    if (msg.contains('allowable ips not found') || msg.contains('ip') || msg.contains('whitelisted')) {
+      return 'Withdrawal service is currently undergoing gateway configuration maintenance. Please try again shortly or contact support.';
+    }
+    if (error.message != null && error.message!.isNotEmpty) {
+      return error.message!;
+    }
+  }
+  if (msg.contains('allowable ips not found') || msg.contains('ip') || msg.contains('whitelisted')) {
+    return 'Withdrawal service is currently undergoing gateway configuration maintenance. Please try again shortly or contact support.';
+  }
+  if (msg.contains('network') || msg.contains('connection') || msg.contains('socketexception') || msg.contains('timeout')) {
+    return 'Connection failure. Please check your internet connection and try again.';
+  }
+  if (msg.contains('account name was resolved as null') || msg.contains('could not verify account')) {
+    return 'Could not verify account details. Please check the account number and selected bank.';
+  }
+  return error.toString().replaceAll(RegExp(r'^(Exception|FirebaseFunctionsException):\s*'), '');
+}
+

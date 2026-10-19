@@ -1,7 +1,6 @@
 import 'package:caride/features/profile/data/trusted_contacts_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 /// Form screen or bottom sheet for adding or editing a trusted contact.
 class TrustedContactFormScreen extends StatefulWidget {
@@ -22,6 +21,8 @@ class TrustedContactFormScreen extends StatefulWidget {
     BuildContext context, {
     TrustedContact? existing,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -30,17 +31,13 @@ class TrustedContactFormScreen extends StatefulWidget {
         final keyboardHeight = MediaQuery.of(ctx).viewInsets.bottom;
         return Padding(
           padding: EdgeInsets.only(bottom: keyboardHeight),
-          child: DraggableScrollableSheet(
-            expand: false,
-            initialChildSize: 0.65,
-            minChildSize: 0.40,
-            maxChildSize: 0.95,
-            builder: (_, ctrl) => GlassSurface(
-              radius: AppRadius.xl,
-              child: SingleChildScrollView(
-                controller: ctrl,
-                child: TrustedContactFormScreen(existing: existing, isSheet: true),
-              ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: SingleChildScrollView(
+              child: TrustedContactFormScreen(existing: existing, isSheet: true),
             ),
           ),
         );
@@ -49,8 +46,7 @@ class TrustedContactFormScreen extends StatefulWidget {
   }
 
   @override
-  State<TrustedContactFormScreen> createState() =>
-      _TrustedContactFormScreenState();
+  State<TrustedContactFormScreen> createState() => _TrustedContactFormScreenState();
 }
 
 class _TrustedContactFormScreenState extends State<TrustedContactFormScreen> {
@@ -110,7 +106,7 @@ class _TrustedContactFormScreenState extends State<TrustedContactFormScreen> {
       }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) setState(() => _error = 'Failed to save contact: $e');
+      if (mounted) setState(() => _error = 'Failed to save contact. Please verify details and try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -119,13 +115,17 @@ class _TrustedContactFormScreenState extends State<TrustedContactFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final inputBg = isDark ? AppColors.darkSurface : const Color(0xFFF3F4F6);
 
     final formContent = Padding(
       padding: EdgeInsets.fromLTRB(
-        AppSpacing.pagePadding,
-        widget.isSheet ? AppSpacing.md : AppSpacing.pagePadding,
-        AppSpacing.pagePadding,
-        AppSpacing.pagePadding + (widget.isSheet ? 0 : MediaQuery.of(context).viewInsets.bottom),
+        20,
+        widget.isSheet ? 16 : 20,
+        20,
+        24 + (widget.isSheet ? 0 : MediaQuery.of(context).viewInsets.bottom),
       ),
       child: Form(
         key: _formKey,
@@ -134,6 +134,17 @@ class _TrustedContactFormScreenState extends State<TrustedContactFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.isSheet) ...[
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
               Row(
                 children: [
                   Container(
@@ -141,124 +152,188 @@ class _TrustedContactFormScreenState extends State<TrustedContactFormScreen> {
                     height: 44,
                     decoration: BoxDecoration(
                       color: AppColors.brand.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      _isEditing
-                          ? Icons.edit_rounded
-                          : Icons.person_add_rounded,
+                      _isEditing ? Icons.edit_rounded : Icons.person_add_rounded,
                       color: AppColors.brand,
                       size: 22,
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.md),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _isEditing ? 'Edit Contact' : 'Add Trusted Contact',
-                          style: AppTextStyles.titleMedium.copyWith(
+                          _isEditing ? 'Edit Trusted Contact' : 'Add Trusted Contact',
+                          style: TextStyle(
+                            fontSize: 17,
                             fontWeight: FontWeight.w800,
+                            color: primaryTextColor,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          'Emergency alerts will be sent to this email',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
+                          'Ride emergency alerts will be routed here',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: secondaryTextColor,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-            ],
-            GlassContainer(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    color: AppColors.brand,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'This person will receive an email alert if you trigger an emergency during a ride.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: primaryTextColor,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: 20),
+            ],
+
+            // In-View Error Banner
+            if (_error != null) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.error),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             Text(
               'Full Name',
-              style: AppTextStyles.bodyLarge.copyWith(
+              style: TextStyle(
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
+                color: primaryTextColor,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
-            AppTextField(
+            const SizedBox(height: 8),
+            _buildPillField(
               controller: _nameCtrl,
               hint: 'e.g. Sarah Johnson',
-              prefixIcon: Icons.person_rounded,
-              validator: (v) =>
-                  (v?.trim().isEmpty ?? true) ? 'Name is required' : null,
+              icon: Icons.person_outline_rounded,
+              isDark: isDark,
+              borderColor: borderColor,
+              inputBg: inputBg,
+              primaryTextColor: primaryTextColor,
+              secondaryTextColor: secondaryTextColor,
+              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Name is required' : null,
               textInputAction: TextInputAction.next,
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: 16),
+
             Text(
               'Email Address',
-              style: AppTextStyles.bodyLarge.copyWith(
+              style: TextStyle(
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
+                color: primaryTextColor,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
-            AppTextField(
+            const SizedBox(height: 8),
+            _buildPillField(
               controller: _emailCtrl,
-              hint: 'e.g. sarah@email.com',
-              prefixIcon: Icons.email_outlined,
+              hint: 'e.g. sarah@example.com',
+              icon: Icons.email_outlined,
+              isDark: isDark,
+              borderColor: borderColor,
+              inputBg: inputBg,
+              primaryTextColor: primaryTextColor,
+              secondaryTextColor: secondaryTextColor,
               keyboardType: TextInputType.emailAddress,
               validator: _validateEmail,
               textInputAction: TextInputAction.next,
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: 16),
+
             Text(
               'Relationship (optional)',
-              style: AppTextStyles.bodyLarge.copyWith(
+              style: TextStyle(
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
+                color: primaryTextColor,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
-            AppTextField(
+            const SizedBox(height: 8),
+            _buildPillField(
               controller: _relationshipCtrl,
-              hint: 'e.g. Sister, Friend, Partner',
-              prefixIcon: Icons.favorite_border_rounded,
+              hint: 'e.g. Sister, Friend, Spouse',
+              icon: Icons.favorite_border_rounded,
+              isDark: isDark,
+              borderColor: borderColor,
+              inputBg: inputBg,
+              primaryTextColor: primaryTextColor,
+              secondaryTextColor: secondaryTextColor,
               textInputAction: TextInputAction.done,
             ),
-            if (_error != null) ...[
-              const SizedBox(height: AppSpacing.md),
-              InlineError(message: _error!),
-            ],
-            const SizedBox(height: AppSpacing.xl),
-            PrimaryButton(
-              label: _isEditing ? 'Save Changes' : 'Add Contact',
-              isLoading: _loading,
-              onPressed: _submit,
+            const SizedBox(height: 24),
+
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  elevation: 0,
+                  disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        _isEditing ? 'Save Contact Changes' : 'Add Trusted Contact',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+              ),
             ),
           ],
         ),
@@ -270,17 +345,106 @@ class _TrustedContactFormScreenState extends State<TrustedContactFormScreen> {
     }
 
     return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.darkBackground
-          : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    _isEditing ? 'Edit Contact' : 'Add Trusted Contact',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(child: formContent),
+            ),
+          ],
         ),
-        title: _isEditing ? 'Edit Contact' : 'Add Trusted Contact',
       ),
-      body: SafeArea(child: SingleChildScrollView(child: formContent)),
+    );
+  }
+
+  Widget _buildPillField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    required bool isDark,
+    required Color borderColor,
+    required Color inputBg,
+    required Color primaryTextColor,
+    required Color secondaryTextColor,
+    TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      validator: validator,
+      style: TextStyle(
+        fontSize: 15,
+        color: primaryTextColor,
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
+          fontSize: 14,
+          color: secondaryTextColor,
+        ),
+        filled: true,
+        fillColor: inputBg,
+        prefixIcon: Icon(icon, color: AppColors.brand, size: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: const BorderSide(color: AppColors.brand, width: 1.8),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(28),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.8),
+        ),
+      ),
     );
   }
 }

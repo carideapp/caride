@@ -17,6 +17,7 @@ class TopUpAmountBottomSheet extends StatefulWidget {
     return showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) => TopUpAmountBottomSheet(initialAmount: initialAmount),
     );

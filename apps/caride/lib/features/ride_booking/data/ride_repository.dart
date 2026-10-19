@@ -47,7 +47,7 @@ class DriverBid {
       id: id,
       driverUid: (data['driverUid'] as String?) ?? '',
       driverName: (data['driverName'] as String?) ?? 'Driver',
-      driverRating: (data['driverRating'] as num?)?.toDouble() ?? 5.0,
+      driverRating: (data['driverRating'] as num?)?.toDouble() ?? 0.0,
       driverRides: (data['driverRides'] as num?)?.toInt() ?? 0,
       vehicleName: (data['vehicleName'] as String?) ?? '',
       offerNaira: (data['offerNaira'] as num?)?.toDouble() ?? 0,
@@ -120,6 +120,66 @@ class RideModel {
   final String? receiverPhone;
   /// 4-digit PIN for delivery confirmation at dropoff (Send Items only).
   final String? deliveryPin;
+
+  RideModel copyWith({
+    String? id,
+    String? customerUid,
+    String? status,
+    String? pickupLabel,
+    double? pickupLat,
+    double? pickupLng,
+    String? dropoffLabel,
+    double? dropoffLat,
+    double? dropoffLng,
+    String? rideType,
+    double? customerOffer,
+    double? amountNaira,
+    String? paymentMethod,
+    String? paymentStatus,
+    String? driverUid,
+    String? driverName,
+    int? driverRating,
+    String? driverRatingComment,
+    double? finalFare,
+    DateTime? ratedAt,
+    DateTime? createdAt,
+    DateTime? acceptedAt,
+    DateTime? completedAt,
+    String? startCode,
+    String? receiverName,
+    String? receiverPhone,
+    String? deliveryPin,
+  }) {
+    return RideModel(
+      id: id ?? this.id,
+      customerUid: customerUid ?? this.customerUid,
+      status: status ?? this.status,
+      pickupLabel: pickupLabel ?? this.pickupLabel,
+      pickupLat: pickupLat ?? this.pickupLat,
+      pickupLng: pickupLng ?? this.pickupLng,
+      dropoffLabel: dropoffLabel ?? this.dropoffLabel,
+      dropoffLat: dropoffLat ?? this.dropoffLat,
+      dropoffLng: dropoffLng ?? this.dropoffLng,
+      rideType: rideType ?? this.rideType,
+      customerOffer: customerOffer ?? this.customerOffer,
+      amountNaira: amountNaira ?? this.amountNaira,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      driverUid: driverUid ?? this.driverUid,
+      driverName: driverName ?? this.driverName,
+      driverRating: driverRating ?? this.driverRating,
+      driverRatingComment: driverRatingComment ?? this.driverRatingComment,
+      finalFare: finalFare ?? this.finalFare,
+      ratedAt: ratedAt ?? this.ratedAt,
+      createdAt: createdAt ?? this.createdAt,
+      acceptedAt: acceptedAt ?? this.acceptedAt,
+      completedAt: completedAt ?? this.completedAt,
+      startCode: startCode ?? this.startCode,
+      receiverName: receiverName ?? this.receiverName,
+      receiverPhone: receiverPhone ?? this.receiverPhone,
+      deliveryPin: deliveryPin ?? this.deliveryPin,
+    );
+  }
 
   factory RideModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -245,6 +305,18 @@ class RideRepository {
       if (deliveryPin != null) 'deliveryPin': deliveryPin,
     });
     return doc.id;
+  }
+
+  /// Updates the passenger's broadcast offer on an active requested/bidding ride.
+  Future<void> updateCustomerOffer({
+    required String rideId,
+    required double newOfferNaira,
+  }) async {
+    await _ridesCol.doc(rideId).update({
+      'customerOffer': newOfferNaira,
+      'amountNaira': newOfferNaira,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Watches a single ride document in real time.

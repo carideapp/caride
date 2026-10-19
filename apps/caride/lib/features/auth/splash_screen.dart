@@ -1,4 +1,7 @@
 import 'package:caride/core/auth/customer_auth_controller.dart';
+import 'package:caride/core/auth/pending_otp_session.dart';
+import 'package:caride/core/driver/auth/driver_auth_controller.dart';
+import 'package:caride/features/fleet_manager/auth/controllers/fleet_auth_controller.dart';
 import 'package:caride/features/fleet_manager/controllers/fleet_manager_controller.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +48,7 @@ class _SplashScreenState extends State<SplashScreen>
     });
   }
 
-  void _navigateNext() {
+  Future<void> _navigateNext() async {
     if (_hasNavigated || !mounted) return;
     _hasNavigated = true;
 
@@ -66,6 +69,27 @@ class _SplashScreenState extends State<SplashScreen>
         }
       }
     } else {
+      // Check if there is an active, unexpired pending OTP session that was interrupted
+      // (e.g., when the user minimized the app to copy the code from Gmail and the OS recycled the process).
+      final session = await PendingOtpSessionService.instance.loadSession();
+      if (!mounted) return;
+
+      if (session != null) {
+        if (session.role == 'fleet') {
+          await fleetAuthController.restorePendingSession();
+          if (mounted) context.go(FleetRoutePaths.otp);
+          return;
+        } else if (session.role == 'driver') {
+          await driverAuthController.restorePendingSession();
+          if (mounted) context.go(DriverRoutePaths.otp);
+          return;
+        } else {
+          await customerAuthController.restorePendingSession();
+          if (mounted) context.go(CustomerRoutePaths.otp);
+          return;
+        }
+      }
+
       context.go(CustomerRoutePaths.welcome);
     }
   }

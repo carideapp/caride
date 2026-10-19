@@ -238,7 +238,7 @@ class _DriverBankAccountScreenState extends State<DriverBankAccountScreen> {
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
                               child: Text(
-                                'Verify your payout account securely with Paystack before it is saved for wallet withdrawals.',
+                                'Verify your payout account securely with TransactPay before it is saved for wallet withdrawals.',
                                 style: AppTextStyles.bodySmall.copyWith(
                                   color: isDark
                                       ? AppColors.textSecondaryDark

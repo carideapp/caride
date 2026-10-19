@@ -2,7 +2,6 @@ import 'package:caride/features/profile/data/wallet_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
@@ -33,9 +32,8 @@ class _WebviewScreenState extends State<WebviewScreen> {
   @override
   void initState() {
     super.initState();
-    // Release any lingering Flutter focus so the native WebView can summon the keyboard
     FocusManager.instance.primaryFocus?.unfocus();
-    
+
     final url = _paymentUrl;
     if (url == null) {
       _simulatePayment();
@@ -57,7 +55,6 @@ class _WebviewScreenState extends State<WebviewScreen> {
           return NavigationDecision.navigate;
         },
         onWebResourceError: (error) {
-          // Only treat main frame errors as fatal
           if (error.isForMainFrame == true) {
             debugPrint('WebView error: ${error.description}');
             if (mounted) {
@@ -88,7 +85,11 @@ class _WebviewScreenState extends State<WebviewScreen> {
         uri.queryParameters['trxref'] ??
         _reference;
     final status = uri.queryParameters['status'];
-    if (txRef != null && (status == 'successful' || url.contains('callback') || url.contains('verify') || url.contains('payment-callback'))) {
+    if (txRef != null &&
+        (status == 'successful' ||
+            url.contains('callback') ||
+            url.contains('verify') ||
+            url.contains('payment-callback'))) {
       _verifyPayment(txRef);
     }
   }
@@ -100,7 +101,7 @@ class _WebviewScreenState extends State<WebviewScreen> {
       final credited = await _walletRepo.verifyTopUp(reference: reference);
       if (!mounted) return;
       _verified = true;
-      _showSuccessDialog(credited);
+      _showSuccessBottomSheet(credited);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -114,63 +115,118 @@ class _WebviewScreenState extends State<WebviewScreen> {
     }
   }
 
-  void _showSuccessDialog(double credited) {
+  void _showSuccessBottomSheet(double credited) {
     if (!mounted) return;
-    final theme = Theme.of(context);
     final formatted =
         '₦${credited.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
-    
-    // Capture the navigators/contexts before showDialog to avoid using stale context after pops.
     final navigator = Navigator.of(context);
     final currentContext = context;
 
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.xl)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: const BoxDecoration(
-                color: AppColors.primaryGreen,
-                shape: BoxShape.circle,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+        final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+        final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+        final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(top: BorderSide(color: borderColor)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            16,
+            24,
+            MediaQuery.of(ctx).padding.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : const Color(0xFFD1D5DB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-              child: const Icon(Icons.check, color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(_isSetupCard ? 'Card Saved!' : 'Top Up Successful!',
-                style: theme.textTheme.headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              _isSetupCard
-                  ? 'Your card has been verified and saved for future payments.'
-                  : '$formatted has been added to your CaRide Wallet.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            PrimaryButton(
-              label: 'Done',
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                if (_isSetupCard) {
-                  navigator.pop(true);
-                } else {
-                  if (currentContext.mounted) {
-                    currentContext.go(CustomerRoutePaths.wallet);
-                  }
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 24),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check_rounded, color: AppColors.brand, size: 36),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                _isSetupCard ? 'Card Saved Successfully!' : 'Top Up Successful!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: primaryTextColor,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _isSetupCard
+                    ? 'Your card has been verified and saved for future bookings.'
+                    : '$formatted has been added to your CaRide Wallet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: secondaryTextColor,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    if (_isSetupCard) {
+                      navigator.pop(true);
+                    } else {
+                      if (currentContext.mounted) {
+                        currentContext.go(CustomerRoutePaths.wallet);
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -186,106 +242,177 @@ class _WebviewScreenState extends State<WebviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
     final hasRealUrl = _paymentUrl != null;
     final ctrl = _controller;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(_isSetupCard ? 'Add New Card' : 'Secure Payment'),
-        centerTitle: true,
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            if (hasRealUrl && ctrl != null && !_hasError)
-              Builder(builder: (context) {
-                if (WebViewPlatform.instance is AndroidWebViewPlatform) {
-                  return WebViewWidget.fromPlatformCreationParams(
-                    params: AndroidWebViewWidgetCreationParams(
-                      controller: ctrl.platform as AndroidWebViewController,
-                      displayWithHybridComposition: true,
-                    ),
-                  );
-                }
-                return WebViewWidget(controller: ctrl);
-              })
-            else if (_hasError)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline,
-                          size: 56,
-                          color: theme.colorScheme.error),
-                      const SizedBox(height: AppSpacing.md),
-                      Text('Something went wrong',
-                          style: theme.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                          'Unable to load the payment page. Please try again.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant)),
-                      const SizedBox(height: AppSpacing.lg),
-                      PrimaryButton(
-                        label: 'Retry',
-                        onPressed: _retryLoad,
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
                       ),
-                    ],
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: primaryTextColor,
+                      ),
+                    ),
                   ),
-                ),
-              )
-            else if (!hasRealUrl)
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(
-                        color: AppColors.primaryGreen),
-                    const SizedBox(height: AppSpacing.xl),
-                    Text('Processing Payment...',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text('Please do not close this window',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant)),
-                  ],
-                ),
+                  const SizedBox(width: 14),
+                  Text(
+                    _isSetupCard ? 'Add New Card' : 'Secure Payment',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
               ),
-            if (_isLoading && hasRealUrl && !_hasError)
-              const Center(
-                child: CircularProgressIndicator(
-                    color: AppColors.primaryGreen),
-              ),
-            if (_verifying)
-              Container(
-                color: Colors.black.withValues(alpha: 0.5),
-                child: const Center(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.xl),
+            ),
+
+            Expanded(
+              child: Stack(
+                children: [
+                  if (hasRealUrl && ctrl != null && !_hasError)
+                    Builder(builder: (context) {
+                      if (WebViewPlatform.instance is AndroidWebViewPlatform) {
+                        return WebViewWidget.fromPlatformCreationParams(
+                          params: AndroidWebViewWidgetCreationParams(
+                            controller: ctrl.platform as AndroidWebViewController,
+                            displayWithHybridComposition: true,
+                          ),
+                        );
+                      }
+                      return WebViewWidget(controller: ctrl);
+                    })
+                  else if (_hasError)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline_rounded,
+                                size: 56, color: AppColors.error),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Something went wrong',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: primaryTextColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Unable to load the payment page. Please check your internet connection and try again.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: secondaryTextColor,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: 160,
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: _retryLoad,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brand,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Retry',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (!hasRealUrl)
+                    Center(
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          CircularProgressIndicator(
-                              color: AppColors.primaryGreen),
-                          SizedBox(height: AppSpacing.md),
-                          Text('Verifying payment...'),
+                          const CircularProgressIndicator(color: AppColors.brand),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Processing Payment...',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Please do not close this window',
+                            style: TextStyle(fontSize: 14, color: secondaryTextColor),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                ),
+                  if (_isLoading && hasRealUrl && !_hasError)
+                    const Center(
+                      child: CircularProgressIndicator(color: AppColors.brand),
+                    ),
+                  if (_verifying)
+                    Container(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkSurface : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(color: AppColors.brand),
+                              SizedBox(height: 16),
+                              Text(
+                                'Verifying payment...',
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

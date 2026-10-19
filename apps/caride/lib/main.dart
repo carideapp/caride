@@ -69,9 +69,35 @@ Future<void> main() async {
 
         // ── Crashlytics: capture all Flutter & async errors ─────────────────
         final crashlytics = FirebaseCrashlytics.instance;
-        FlutterError.onError = crashlytics.recordFlutterFatalError;
+        bool isRecoverableError(String errorStr) {
+          return errorStr.contains('HTTP request failed') ||
+              errorStr.contains('NetworkImage') ||
+              errorStr.contains('HttpException') ||
+              errorStr.contains('SocketException') ||
+              errorStr.contains('HandshakeException') ||
+              errorStr.contains('fonts.gstatic.com') ||
+              errorStr.contains('Failed host lookup') ||
+              errorStr.contains('permission-denied') ||
+              errorStr.contains('ListTile background color') ||
+              errorStr.contains('A RenderFlex overflowed') ||
+              errorStr.contains('SignInHubActivity') ||
+              errorStr.contains('already_active') ||
+              errorStr.contains('Image picker is already active');
+        }
+
+        FlutterError.onError = (FlutterErrorDetails details) {
+          final String errorStr = details.exceptionAsString();
+          if (isRecoverableError(errorStr)) {
+            crashlytics.recordFlutterError(details, fatal: false);
+          } else {
+            crashlytics.recordFlutterFatalError(details);
+          }
+        };
+
         PlatformDispatcher.instance.onError = (error, stack) {
-          crashlytics.recordError(error, stack, fatal: true);
+          final String errorStr = error.toString();
+          final bool nonFatal = isRecoverableError(errorStr);
+          crashlytics.recordError(error, stack, fatal: !nonFatal);
           return true;
         };
 
@@ -81,10 +107,22 @@ Future<void> main() async {
       }
     },
     (error, stack) {
-      // Crashlytics may not be initialized yet if Firebase bootstrap failed,
-      // so guard the call safely.
+      final String errorStr = error.toString();
+      final bool nonFatal = errorStr.contains('HTTP request failed') ||
+          errorStr.contains('NetworkImage') ||
+          errorStr.contains('HttpException') ||
+          errorStr.contains('SocketException') ||
+          errorStr.contains('HandshakeException') ||
+          errorStr.contains('fonts.gstatic.com') ||
+          errorStr.contains('Failed host lookup') ||
+          errorStr.contains('permission-denied') ||
+          errorStr.contains('ListTile background color') ||
+          errorStr.contains('SignInHubActivity') ||
+          errorStr.contains('already_active') ||
+          errorStr.contains('Image picker is already active');
+
       try {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: !nonFatal);
       } catch (_) {
         debugPrint('Unhandled error (Crashlytics unavailable): $error\n$stack');
       }

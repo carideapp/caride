@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_models/shared_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/auth/auth_challenge.dart';
 import '../../../../core/config/app_env.dart';
@@ -285,7 +286,13 @@ class FleetAuthRepository {
     }
   }
 
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('selected_role');
+    } catch (_) {}
+    await _auth.signOut();
+  }
 
   // ── Document & Registration Submission ────────────────────────────────
 

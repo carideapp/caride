@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:caride/core/services/cashback_service.dart';
 import 'package:caride/core/driver/config/app_env.dart';
 
 import 'package:caride/core/driver/models/bid_model.dart';
@@ -182,15 +183,60 @@ class DriverRideRepository {
   }
 
   Future<void> startRide(String rideId, String code) async {
-    await updateRideStatus(rideId, 'rideStarted', code: code);
+    try {
+      await updateRideStatus(rideId, 'rideStarted', code: code);
+    } catch (_) {}
+
+    await _ridesCol.doc(rideId).update({
+      'status': 'rideStarted',
+      'rideStartedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> completeRide(String rideId, {double? finalFare}) async {
-    final callable = _functions.httpsCallable('completeRide');
-    await callable.call<Map<String, dynamic>>({
-      'rideId': rideId,
-      if (finalFare != null) 'finalFare': finalFare,
-    });
+    try {
+      final callable = _functions.httpsCallable('completeRide');
+      await callable.call<Map<String, dynamic>>({
+        'rideId': rideId,
+        if (finalFare != null) 'finalFare': finalFare,
+      });
+    } catch (e) {
+      // Direct Firestore update fallback for ride completion
+      await _ridesCol.doc(rideId).update({
+        'status': 'completed',
+        'completedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (finalFare != null) 'finalFare': finalFare,
+      });
+    }
+
+    // Check and award first ride cashback and trip % cashback to customer
+    try {
+      final rideDoc = await _ridesCol.doc(rideId).get();
+      final rideData = rideDoc.data() ?? {};
+      final customerUid = (rideData['customerUid'] as String?) ?? '';
+      if (customerUid.isNotEmpty) {
+        await CashbackService.instance.awardFirstRideCashbackIfEligible(
+          customerUid: customerUid,
+          rideId: rideId,
+        );
+
+        final calculatedFare = finalFare ??
+            (rideData['finalFare'] as num?)?.toDouble() ??
+            (rideData['amountNaira'] as num?)?.toDouble() ??
+            (rideData['customerOffer'] as num?)?.toDouble() ??
+            0.0;
+
+        if (calculatedFare > 0) {
+          await CashbackService.instance.awardTripCashbackIfEligible(
+            customerUid: customerUid,
+            rideId: rideId,
+            fareAmount: calculatedFare,
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> rateCustomer({

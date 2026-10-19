@@ -21,10 +21,12 @@ class CustomerMainShell extends StatelessWidget {
         if (isFleet) {
           int fleetIndex = 0;
           if (navigationShell.currentIndex == 1) {
-            fleetIndex = 2; // Chat
+            fleetIndex = 1; // Bookings / Rental
           } else if (navigationShell.currentIndex == 2) {
-            fleetIndex = 1; // Bookings / Activity
+            fleetIndex = 2; // Chat
           } else if (navigationShell.currentIndex == 3) {
+            fleetIndex = 1; // Bookings / Activity
+          } else if (navigationShell.currentIndex == 4) {
             fleetIndex = 4; // Profile
           }
 
@@ -54,6 +56,11 @@ class CustomerMainShell extends StatelessWidget {
                     icon: Icons.home_outlined,
                     activeIcon: Icons.home_rounded,
                     label: 'Home',
+                  ),
+                  const GlassNavItem(
+                    icon: Icons.car_rental_outlined,
+                    activeIcon: Icons.car_rental_rounded,
+                    label: 'Rental',
                   ),
                   GlassNavItem(
                     icon: Icons.chat_bubble_outline_rounded,

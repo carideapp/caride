@@ -4,6 +4,7 @@ import 'package:design_system/design_system.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/driver/verification/driver_verification_config.dart';
 import 'package:caride/features/driver/profile/data/driver_document_repository.dart';
+import 'package:caride/core/utils/safe_image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_widgets/shared_widgets.dart';
@@ -26,7 +27,6 @@ class DriverDocumentUploadScreen extends StatefulWidget {
 class _DriverDocumentUploadScreenState
     extends State<DriverDocumentUploadScreen> {
   final _repo = DriverDocumentRepository();
-  final _picker = ImagePicker();
   File? _selectedFile;
   bool _isUploading = false;
   String? _errorMessage;
@@ -46,7 +46,7 @@ class _DriverDocumentUploadScreenState
     if (source == null) return;
 
     try {
-      final picked = await _picker.pickImage(
+      final picked = await SafeImagePicker.pickImage(
         source: source,
         imageQuality: 85,
         maxWidth: 1920,

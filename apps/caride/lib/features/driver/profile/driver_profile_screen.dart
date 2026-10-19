@@ -1,21 +1,15 @@
-import 'package:design_system/design_system.dart';
 import 'package:caride/app/theme_mode_controller.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
-import 'package:caride/core/auth/customer_auth_controller.dart';
-import 'package:caride/core/driver/models/driver_document.dart';
 import 'package:caride/core/driver/models/driver_profile.dart';
 import 'package:caride/core/driver/models/vehicle_info.dart';
-import 'package:caride/core/driver/verification/driver_verification_config.dart';
 import 'package:caride/features/driver/auth/data/driver_profile_repository.dart';
-import 'package:caride/features/driver/profile/data/driver_document_repository.dart';
 import 'package:caride/features/driver/profile/widgets/vehicle_info_requirement_dialog.dart';
-import 'package:caride/features/driver/wallet/data/driver_wallet_repository.dart';
+import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
-/// Redesigned Driver Profile screen featuring high-fidelity Liquid Glass cards,
-/// grouped sections, status headers, and an iOS-style bottom sheet logout dialog.
+/// Redesigned Driver Account Screen matching the modern emerald hero card
+/// and grouped section layout from the design specifications.
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
 
@@ -25,27 +19,47 @@ class DriverProfileScreen extends StatefulWidget {
 
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   final _profileRepo = DriverProfileRepository();
-  final _documentRepo = DriverDocumentRepository();
-  final _walletRepo = DriverWalletRepository();
 
   void _showLogoutBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BottomSheetShell(
-          title: 'Sign Out',
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 12,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 28,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: AppSpacing.md),
+              // Drag Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
               Container(
-                width: 64,
-                height: 64,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.10),
+                  color: AppColors.error.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -54,526 +68,187 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   size: 28,
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: 16),
               Text(
-                'Are you sure you want to sign out?',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.titleMedium,
+                'Sign Out',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
               ),
-              const SizedBox(height: AppSpacing.xs),
+              const SizedBox(height: 6),
               Text(
-                'You will need to sign in again to use your driver account.',
+                'Are you sure you want to sign out? You will need to sign in again to use your driver account.',
                 textAlign: TextAlign.center,
-                style: AppTextStyles.bodySmall,
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Row(
-                children: [
-                  Expanded(
-                    child: SecondaryButton(
-                      label: 'Cancel',
-                      onPressed: () => Navigator.of(sheetContext).pop(),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'Yes, Sign Out',
-                      backgroundColor: AppColors.error,
-                      onPressed: () async {
-                        Navigator.of(sheetContext).pop();
-                        await driverAuthController.signOut();
-                        if (!context.mounted) return;
-                        context.go(DriverRoutePaths.login);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildProfileHero(
-    BuildContext context, {
-    required String name,
-    required String subtitle,
-    required String? photoUrl,
-    required String? uid,
-    required DriverProfile? profile,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            AppColors.brandLight,
-            AppColors.brand,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        boxShadow: AppShadows.glowDark,
-      ),
-      child: Row(
-        children: [
-          Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.22),
-                  shape: BoxShape.circle,
-                ),
-                child: CircleAvatar(
-                  radius: 36,
-                  backgroundColor: Colors.white,
-                  backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                      ? NetworkImage(photoUrl)
-                      : null,
-                  child: (photoUrl == null || photoUrl.isEmpty)
-                      ? Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : 'D',
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.brand,
-                          ),
-                        )
-                      : null,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : const Color(0xFF6B7280),
                 ),
               ),
-              Positioned(
-                bottom: 2,
-                right: 2,
-                child: _buildVerificationBadge(context, uid, profile),
-              ),
-            ],
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Text(
-                    'Driver Profile',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.88),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => context.push(DriverRoutePaths.profileDetail),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.edit_outlined,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVerificationBadge(
-      BuildContext context, String? uid, DriverProfile? profile) {
-    if (uid == null || profile == null) return const SizedBox.shrink();
-
-    return StreamBuilder<VehicleInfo?>(
-      stream: _profileRepo.streamVehicleInfo(uid),
-      builder: (context, vehicleSnapshot) {
-        final vehicleInfo = vehicleSnapshot.data;
-        if (vehicleInfo == null) return const SizedBox.shrink();
-
-        return StreamBuilder<List<DriverDocument>>(
-          stream: _documentRepo.streamDocuments(uid),
-          builder: (context, docsSnapshot) {
-            final documents = docsSnapshot.data ?? [];
-            final requiredDocs =
-                requiredDocumentsForVehicleType(vehicleInfo.vehicleType);
-            final allApproved = requiredDocs.every((docDef) {
-              final document = documents.firstWhere(
-                (d) => d.documentType == docDef.type,
-                orElse: () => DriverDocument(
-                  documentType: '',
-                  fileUrl: '',
-                  status: 'pending',
-                ),
-              );
-              return document.isApproved;
-            });
-
-            if (!allApproved) return const SizedBox.shrink();
-
-            return Container(
-              padding: const EdgeInsets.all(3),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.verified_rounded,
-                color: AppColors.brand,
-                size: 14,
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildWalletCard(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return StreamBuilder<double>(
-      stream: _walletRepo.streamWalletBalance(),
-      builder: (context, snapshot) {
-        final balance = snapshot.data ?? 0.0;
-        final formattedBalance =
-            '₦${balance.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
-
-        return GlassContainer(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.brandGlass,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet_outlined,
-                  color: AppColors.brand,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      formattedBalance,
-                      style: AppTextStyles.titleLarge,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Available balance',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 24),
               SizedBox(
-                width: 80,
-                height: 36,
-                child: PrimaryButton(
-                  label: 'View',
-                  onPressed: () => context.push(DriverRoutePaths.wallet),
-                  height: 36,
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () async {
+                    Navigator.of(sheetContext).pop();
+                    await driverAuthController.signOut();
+                    if (!context.mounted) return;
+                    context.go(DriverRoutePaths.login);
+                  },
+                  child: const Text('Yes, Sign Out',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
               ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSectionHeader(
-    BuildContext context, {
-    required String title,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: AppTextStyles.titleMedium.copyWith(
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMenuSection(
-    BuildContext context, {
-    required List<Widget> children,
-  }) {
-    return GlassContainer(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Column(children: children),
-    );
-  }
-
-  Widget _buildMenuItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    Color? textColor,
-    Color? iconColor,
-    bool showChevron = true,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: (iconColor ?? AppColors.brand)
-                      .withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Icon(
-                  icon,
-                  color: iconColor ?? AppColors.brand,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  title,
-                  style: AppTextStyles.titleMedium.copyWith(
-                    color: textColor ??
-                        (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26)),
+                  ),
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : const Color(0xFF4B5563),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.xs),
-              trailing ??
-                  (showChevron
-                      ? Icon(
-                          Icons.chevron_right_rounded,
-                          color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
-                          size: 20,
-                        )
-                      : const SizedBox.shrink()),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVehicleMenuItem(BuildContext context, {String? uid}) {
-    return _buildMenuItem(
-      context,
-      icon: Icons.drive_eta_rounded,
-      title: 'Vehicle Information',
-      onTap: () => context.push(DriverRoutePaths.profileVehicle),
-    );
-  }
-
-  Widget _buildDocumentsMenuItem(BuildContext context, {String? uid}) {
-    if (uid == null) {
-      return _buildMenuItem(
-        context,
-        icon: Icons.folder_copy_outlined,
-        title: 'Documents',
-        onTap: () => showVehicleInfoRequiredDialog(context),
-      );
-    }
-    return StreamBuilder<VehicleInfo?>(
-      stream: _profileRepo.streamVehicleInfo(uid),
-      builder: (context, vehicleSnapshot) {
-        final vehicle = vehicleSnapshot.data;
-        return _buildMenuItem(
-          context,
-          icon: Icons.folder_copy_outlined,
-          title: 'Documents',
-          onTap: () {
-            if (vehicle == null) {
-              showVehicleInfoRequiredDialog(context);
-              return;
-            }
-            context.push(DriverRoutePaths.profileDocuments);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildRatingsMenuItem(BuildContext context, {String? uid}) {
-    return _buildMenuItem(
-      context,
-      icon: Icons.star_outline_rounded,
-      title: 'Ratings & Reviews',
-      onTap: () => context.push(DriverRoutePaths.profileRatings),
-    );
-  }
-
-  Widget _buildTierMenuItem(BuildContext context, {String? uid}) {
-    if (uid == null) {
-      return _buildMenuItem(
-        context,
-        icon: Icons.workspace_premium_outlined,
-        title: 'Driver Tiers',
-        onTap: () => context.push(DriverRoutePaths.profileTiers),
-      );
-    }
-    return StreamBuilder<DriverProfile?>(
-      stream: _profileRepo.streamDriverProfile(uid),
-      builder: (context, snapshot) {
-        final profile = snapshot.data;
-        final tier = (profile?.tier ?? 'bronze').toUpperCase();
-        return _buildMenuItem(
-          context,
-          icon: Icons.workspace_premium_outlined,
-          title: 'Driver Tiers',
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.brandGlass,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: AppColors.brandGlassBorder),
-            ),
-            child: Text(
-              tier,
-              style: const TextStyle(
-                color: AppColors.brand,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-              ),
-            ),
-          ),
-          onTap: () => context.push(DriverRoutePaths.profileTiers),
         );
       },
     );
   }
 
   void _showAppearanceBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (sheetContext) {
         ThemeMode tempMode = customerThemeMode.value;
 
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            return BottomSheetShell(
-              title: 'App Appearance',
+            return SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                padding: EdgeInsets.only(
+                  left: 24,
+                  right: 24,
+                  top: 16,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: AppSpacing.sm),
-                    _buildThemeOptionTile(
-                      context,
-                      title: 'Light Mode',
-                      subtitle: 'Bright and clean white appearance',
-                      icon: Icons.light_mode_rounded,
-                      mode: ThemeMode.light,
-                      selectedMode: tempMode,
-                      onTap: () => setSheetState(() => tempMode = ThemeMode.light),
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD1D5DB),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    _buildThemeOptionTile(
-                      context,
-                      title: 'Dark Mode',
-                      subtitle: 'Sleek dark interface easy on the eyes',
-                      icon: Icons.dark_mode_rounded,
-                      mode: ThemeMode.dark,
-                      selectedMode: tempMode,
-                      onTap: () => setSheetState(() => tempMode = ThemeMode.dark),
+                    const SizedBox(height: 20),
+                    Text(
+                      'App Appearance',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    _buildThemeOptionTile(
-                      context,
-                      title: 'System Default Mode',
-                      subtitle: 'Matches your device display settings',
+                    const SizedBox(height: 6),
+                    Text(
+                      'Choose how CaRide looks on your device',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF6B7280),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildThemeOption(
+                      title: 'System Default',
                       icon: Icons.brightness_auto_rounded,
                       mode: ThemeMode.system,
                       selectedMode: tempMode,
-                      onTap: () => setSheetState(() => tempMode = ThemeMode.system),
+                      isDark: isDark,
+                      onTap: () {
+                        setSheetState(() => tempMode = ThemeMode.system);
+                        customerThemeMode.setTheme(ThemeMode.system);
+                      },
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SecondaryButton(
-                            label: 'Cancel',
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                          ),
+                    const SizedBox(height: 12),
+                    _buildThemeOption(
+                      title: 'Light Mode',
+                      icon: Icons.light_mode_rounded,
+                      mode: ThemeMode.light,
+                      selectedMode: tempMode,
+                      isDark: isDark,
+                      onTap: () {
+                        setSheetState(() => tempMode = ThemeMode.light);
+                        customerThemeMode.setTheme(ThemeMode.light);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildThemeOption(
+                      title: 'Dark Mode',
+                      icon: Icons.dark_mode_rounded,
+                      mode: ThemeMode.dark,
+                      selectedMode: tempMode,
+                      isDark: isDark,
+                      onTap: () {
+                        setSheetState(() => tempMode = ThemeMode.dark);
+                        customerThemeMode.setTheme(ThemeMode.dark);
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brand,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(26)),
                         ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: PrimaryButton(
-                            label: 'Apply',
-                            onPressed: () {
-                              customerThemeMode.setTheme(tempMode);
-                              Navigator.of(sheetContext).pop();
-                            },
-                          ),
-                        ),
-                      ],
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: const Text('Done',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
                     ),
                   ],
                 ),
@@ -585,87 +260,77 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     );
   }
 
-  Widget _buildThemeOptionTile(
-    BuildContext context, {
+  Widget _buildThemeOption({
     required String title,
-    required String subtitle,
     required IconData icon,
     required ThemeMode mode,
     required ThemeMode selectedMode,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
     final isSelected = mode == selectedMode;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const activeColor = AppColors.brand;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          decoration: BoxDecoration(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.brand.withValues(alpha: 0.1)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : const Color(0xFFF9FAFB)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
             color: isSelected
-                ? activeColor.withValues(alpha: 0.12)
-                : (isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8F9FC)),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(
-              color: isSelected
-                  ? activeColor.withValues(alpha: 0.5)
-                  : (isDark ? Colors.white10 : const Color(0xFFE9EAF0)),
-              width: isSelected ? 1.5 : 1,
+                ? AppColors.brand
+                : (isDark
+                    ? AppColors.glassBorderDark
+                    : const Color(0xFFE5E7EB)),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.brand
+                    : (isDark ? Colors.white10 : const Color(0xFFF3F4F6)),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.white70 : const Color(0xFF374151)),
+                size: 18,
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? activeColor.withValues(alpha: 0.2)
-                      : (isDark ? Colors.white10 : Colors.grey[200]),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: isSelected ? activeColor : (isDark ? Colors.grey[400] : Colors.grey[700]),
-                  size: 20,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF111827),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                        color: isDark ? Colors.white : AppColors.slate900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                color: isSelected ? activeColor : (isDark ? Colors.grey[600] : Colors.grey[400]),
-                size: 22,
-              ),
-            ],
-          ),
+            ),
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: isSelected
+                  ? AppColors.brand
+                  : (isDark ? Colors.white30 : const Color(0xFF9CA3AF)),
+              size: 20,
+            ),
+          ],
         ),
       ),
     );
@@ -674,30 +339,31 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
     final uid = driverAuthController.currentUid;
 
-    return AppScaffold(
-      extendBody: true,
-      title: 'Profile',
+    return Scaffold(
+      backgroundColor:
+          isDark ? AppColors.darkBackground : const Color(0xFFF9FAFB),
       body: SafeArea(
-        child: ResponsiveContainer(
-          child: uid != null
-              ? StreamBuilder<DriverProfile?>(
-                  stream: _profileRepo.streamDriverProfile(uid),
-                  builder: (context, snapshot) => _buildScrollBody(
-                    context,
-                    uid: uid,
-                    profile: snapshot.data,
-                    isDark: isDark,
-                  ),
-                )
-              : _buildScrollBody(
+        child: uid != null
+            ? StreamBuilder<DriverProfile?>(
+                stream: _profileRepo.streamDriverProfile(uid),
+                builder: (context, snapshot) => _buildScrollBody(
                   context,
-                  uid: null,
-                  profile: null,
+                  uid: uid,
+                  profile: snapshot.data,
                   isDark: isDark,
+                  primaryTextColor: primaryTextColor,
                 ),
-        ),
+              )
+            : _buildScrollBody(
+                context,
+                uid: null,
+                profile: null,
+                isDark: isDark,
+                primaryTextColor: primaryTextColor,
+              ),
       ),
     );
   }
@@ -707,180 +373,483 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     required String? uid,
     required DriverProfile? profile,
     required bool isDark,
+    required Color primaryTextColor,
   }) {
-    final name = profile?.fullName.isNotEmpty == true
-        ? profile!.fullName
+    final name = profile?.fullName.trim().isNotEmpty == true
+        ? profile!.fullName.trim()
         : 'Driver';
-    final subtitle = profile?.email ??
-        driverAuthController.currentEmail ??
-        'CaRide Driver';
-    final photoUrl = profile?.profilePhotoUrl;
+    final phone = profile?.phone.isNotEmpty == true
+        ? profile!.phone
+        : (profile?.email.isNotEmpty == true
+            ? profile!.email
+            : (driverAuthController.currentEmail ?? ''));
+    final photoUrl = profile?.profilePhotoUrl ?? '';
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor =
+        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.pagePadding,
-        vertical: AppSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildProfileHero(
-            context,
-            name: name,
-            subtitle: subtitle,
-            photoUrl: photoUrl,
-            uid: uid,
-            profile: profile,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _buildSectionHeader(
-            context,
-            title: 'Earnings & Account',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _buildWalletCard(context),
-          const SizedBox(height: AppSpacing.sm),
-          _buildMenuSection(
-            context,
-            children: [
-              _buildVehicleMenuItem(context, uid: uid),
-              _buildDocumentsMenuItem(context, uid: uid),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          _buildSectionHeader(
-            context,
-            title: 'Programs',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _buildMenuSection(
-            context,
-            children: [
-              _buildMenuItem(
-                context,
-                icon: Icons.people_outline_rounded,
-                title: 'Refer & Earn',
-                onTap: () => context.push(DriverRoutePaths.referral),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          _buildSectionHeader(
-            context,
-            title: 'Performance',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _buildMenuSection(
-            context,
-            children: [
-              _buildRatingsMenuItem(context, uid: uid),
-              _buildTierMenuItem(context, uid: uid),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          _buildSectionHeader(
-            context,
-            title: 'Preferences & Support',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _buildMenuSection(
-            context,
-            children: [
-              _buildMenuItem(
-                context,
-                icon: Icons.shield_outlined,
-                title: 'Account & Security',
-                onTap: () => context.push(DriverRoutePaths.accountSecurity),
-              ),
-              _buildMenuItem(
-                context,
-                icon: Icons.brightness_6_outlined,
-                title: 'App Appearance',
-                onTap: () => _showAppearanceBottomSheet(context),
-              ),
-              _buildMenuItem(
-                context,
-                icon: Icons.help_outline_rounded,
-                title: 'Help & FAQs',
-                onTap: () => context.push(DriverRoutePaths.helpFaq),
-              ),
-              _buildMenuItem(
-                context,
-                icon: Icons.privacy_tip_outlined,
-                title: 'Privacy Policy',
-                onTap: () => context.push(DriverRoutePaths.privacyPolicy),
-              ),
-              _buildMenuItem(
-                context,
-                icon: Icons.info_outline_rounded,
-                title: 'About CaRide',
-                onTap: () => context.push(DriverRoutePaths.aboutApp),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          _buildSectionHeader(
-            context,
-            title: 'Account Mode',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          ListenableBuilder(
-            listenable: customerAuthController,
-            builder: (context, _) {
-              return _buildMenuSection(
-                context,
-                children: [
-                  _buildMenuItem(
-                    context,
-                    icon: customerAuthController.customerExists
-                        ? Icons.directions_car_rounded
-                        : Icons.assignment_ind_outlined,
-                    title: customerAuthController.customerExists
-                        ? 'Switch to Passenger Mode'
-                        : 'Become a Passenger',
-                    onTap: () => context.push(DriverRoutePaths.becomeCustomer),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          _buildSectionHeader(
-            context,
-            title: 'Account Session',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _buildMenuSection(
-            context,
-            children: [
-              _buildMenuItem(
-                context,
-                icon: Icons.logout_rounded,
-                title: 'Sign Out',
-                textColor: AppColors.error,
-                iconColor: AppColors.error,
-                showChevron: false,
-                onTap: () => _showLogoutBottomSheet(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          Center(
-            child: Text(
-              'Version 1.0.4 (Build 45)',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Header UI: Clean Bold Account Title ──
+        Padding(
+          padding:
+              const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+          child: Text(
+            'Account',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: primaryTextColor,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
-        ],
+        ),
+
+        // ── Scrollable Body ──
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 6,
+              bottom: 40,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Emerald Hero Card (Avatar, Name, Phone & Edit Pencil) ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.brand,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(
+                    children: [
+                      // Circular White Avatar with Emerald Icon or Photo
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                        child: ClipOval(
+                          child: photoUrl.isNotEmpty
+                              ? Image.network(
+                                  photoUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                    Icons.person_rounded,
+                                    color: AppColors.brand,
+                                    size: 34,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.person_rounded,
+                                  color: AppColors.brand,
+                                  size: 34,
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+
+                      // Name & Phone
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name.toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              phone.isNotEmpty ? phone : 'CaRide Driver',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.90),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Edit Pencil Action
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(
+                          Icons.edit_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () =>
+                            context.push(DriverRoutePaths.profileDetail),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── SECTION 1: Finances & Activity ──
+                _buildSectionHeader('Finances & Activity', isDark),
+                Container(
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      _ProfileMenuItem(
+                        title: 'My CaRide Wallet',
+                        icon: Icons.account_balance_wallet_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () => context.push(DriverRoutePaths.wallet),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Bank Account Details',
+                        icon: Icons.credit_card_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.walletBankAccount),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Referral Program',
+                        icon: Icons.person_add_alt_1_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () => context.push(DriverRoutePaths.referral),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── SECTION 2: Preferences & Settings ──
+                _buildSectionHeader('Preferences & Settings', isDark),
+                Container(
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      _ProfileMenuItem(
+                        title: 'Vehicle Information',
+                        icon: Icons.directions_car_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.profileVehicle),
+                      ),
+                      _buildDivider(isDark),
+                      if (uid != null)
+                        StreamBuilder<VehicleInfo?>(
+                          stream: _profileRepo.streamVehicleInfo(uid),
+                          builder: (context, vehicleSnapshot) {
+                            final vehicle = vehicleSnapshot.data;
+                            return _ProfileMenuItem(
+                              title: 'Documents',
+                              icon: Icons.folder_copy_outlined,
+                              isDark: isDark,
+                              primaryTextColor: primaryTextColor,
+                              onTap: () {
+                                if (vehicle == null) {
+                                  showVehicleInfoRequiredDialog(context);
+                                  return;
+                                }
+                                context.push(DriverRoutePaths.profileDocuments);
+                              },
+                            );
+                          },
+                        )
+                      else
+                        _ProfileMenuItem(
+                          title: 'Documents',
+                          icon: Icons.folder_copy_outlined,
+                          isDark: isDark,
+                          primaryTextColor: primaryTextColor,
+                          onTap: () => showVehicleInfoRequiredDialog(context),
+                        ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Account & Security',
+                        icon: Icons.shield_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.accountSecurity),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'App Appearance',
+                        icon: Icons.visibility_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () => _showAppearanceBottomSheet(context),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── SECTION 3: Activity & Support ──
+                _buildSectionHeader('Activity & Support', isDark),
+                Container(
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      _ProfileMenuItem(
+                        title: 'Rating & Reviews',
+                        icon: Icons.star_outline_rounded,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.profileRatings),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Assigned Rentals',
+                        icon: Icons.car_rental_rounded,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.rentalBookings),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Driver Tiers',
+                        icon: Icons.workspace_premium_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        badge: (profile?.tier ?? 'bronze').toUpperCase(),
+                        badgeColor: AppColors.brand,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.profileTiers),
+                      ),
+                      if (profile?.linkedFleetIds.isNotEmpty == true) ...[
+                        _buildDivider(isDark),
+                        _ProfileMenuItem(
+                          title: 'My Fleet Managers',
+                          icon: Icons.business_rounded,
+                          isDark: isDark,
+                          primaryTextColor: primaryTextColor,
+                          badge: '${profile!.linkedFleetIds.length}',
+                          badgeColor: AppColors.brand,
+                          onTap: () =>
+                              context.push(DriverRoutePaths.linkedFleets),
+                        ),
+                      ],
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Help & FAQs',
+                        icon: Icons.help_outline_rounded,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () => context.push(DriverRoutePaths.helpFaq),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Privacy Policy & Legal',
+                        icon: Icons.privacy_tip_outlined,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.privacyPolicy),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── SECTION 4: Account Actions ──
+                _buildSectionHeader('Account Actions', isDark),
+                Container(
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      _ProfileMenuItem(
+                        title: 'Switch to Passenger Mode',
+                        icon: Icons.directions_walk_rounded,
+                        isDark: isDark,
+                        primaryTextColor: primaryTextColor,
+                        onTap: () =>
+                            context.push(DriverRoutePaths.becomeCustomer),
+                      ),
+                      _buildDivider(isDark),
+                      _ProfileMenuItem(
+                        title: 'Sign Out',
+                        icon: Icons.logout_rounded,
+                        isDark: isDark,
+                        primaryTextColor: AppColors.error,
+                        iconColor: AppColors.error,
+                        iconBgColor: AppColors.error.withValues(alpha: 0.1),
+                        showChevron: false,
+                        onTap: () => _showLogoutBottomSheet(context),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                Center(
+                  child: Text(
+                    'Version 1.0.4 (Build 45)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? AppColors.textTertiaryDark
+                          : AppColors.textTertiaryLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 22),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563),
+          letterSpacing: -0.1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 68, right: 16),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+      ),
+    );
+  }
+}
+
+class _ProfileMenuItem extends StatelessWidget {
+  const _ProfileMenuItem({
+    required this.title,
+    required this.icon,
+    required this.isDark,
+    required this.primaryTextColor,
+    required this.onTap,
+    this.badge,
+    this.badgeColor,
+    this.iconColor,
+    this.iconBgColor,
+    this.showChevron = true,
+  });
+
+  final String title;
+  final IconData icon;
+  final bool isDark;
+  final Color primaryTextColor;
+  final VoidCallback onTap;
+  final String? badge;
+  final Color? badgeColor;
+  final Color? iconColor;
+  final Color? iconBgColor;
+  final bool showChevron;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveIconBg = iconBgColor ??
+        (isDark
+            ? AppColors.brand.withValues(alpha: 0.18)
+            : const Color(0xFFE8F5E9));
+    final effectiveIconColor = iconColor ?? AppColors.brand;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: effectiveIconBg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: effectiveIconColor, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextColor,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+            if (badge != null) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (badgeColor ?? AppColors.brand).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  badge!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor ?? AppColors.brand,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            if (showChevron)
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF9CA3AF),
+                size: 20,
+              ),
+          ],
+        ),
       ),
     );
   }

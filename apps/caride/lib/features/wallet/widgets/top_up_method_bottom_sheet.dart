@@ -19,6 +19,7 @@ class TopUpMethodBottomSheet extends StatefulWidget {
     return showModalBottomSheet<TopUpMethodOption>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) => TopUpMethodBottomSheet(amountNaira: amountNaira),
     );

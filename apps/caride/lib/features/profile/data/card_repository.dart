@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// A saved Paystack card token stored for a user.
+/// A saved payment card token stored for a user.
 class SavedCard {
   const SavedCard({
     required this.id,
@@ -51,7 +51,7 @@ class CardRepository {
         .map((snap) => snap.docs.map(SavedCard.fromDoc).toList());
   }
 
-  /// Persists a Paystack-returned card authorization to Firestore.
+  /// Persists a card authorization token to Firestore.
   Future<void> saveCard({
     required String authorizationCode,
     required String last4,

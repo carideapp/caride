@@ -3,10 +3,9 @@ import 'package:confetti/confetti.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
-/// Redesigned "Become a Driver" benefits screen matching the Uber-style
-/// layout: full-bleed hero image → scrollable content → sticky CTA.
+/// Redesigned "Become a Driver" benefits screen matching the CaRide design standard:
+/// full-bleed hero image → clean benefit cards → 56px pill sticky CTA.
 class BecomeDriverBenefitsScreen extends StatefulWidget {
   const BecomeDriverBenefitsScreen({super.key});
 
@@ -26,8 +25,7 @@ class _BecomeDriverBenefitsScreenState extends State<BecomeDriverBenefitsScreen>
     try {
       await customerAuthController.becomeDriver();
       if (!mounted) return;
-      // Show the success dialog with confetti
-      await _showSuccessDialog();
+      await _showSuccessBottomSheet();
     } catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = 'Failed to create driver account. Please try again.');
@@ -36,47 +34,52 @@ class _BecomeDriverBenefitsScreenState extends State<BecomeDriverBenefitsScreen>
     }
   }
 
-  Future<void> _showSuccessDialog() async {
-    await showDialog(
+  Future<void> _showSuccessBottomSheet() async {
+    await showModalBottomSheet<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => const _DriverSuccessDialog(),
+      isDismissible: false,
+      enableDrag: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _DriverSuccessBottomSheet(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      // No app bar — we overlay the back button on the image
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: Column(
         children: [
-          // ── Scrollable body ───────────────────────────────────────────
+          // Scrollable content
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── Hero image (full-bleed) ──────────────────────────
+                  // Hero photo with overlay
                   Stack(
                     children: [
-                      // Hero photo
                       SizedBox(
-                        height: 300,
+                        height: 280,
                         width: double.infinity,
                         child: Image.asset(
                           'lib/assets/driver_hero.png',
                           fit: BoxFit.cover,
                         ),
                       ),
-                      // Gradient scrim at bottom of image for readability
+                      // Gradient overlay
                       Positioned(
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        height: 80,
+                        height: 90,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -84,37 +87,37 @@ class _BecomeDriverBenefitsScreenState extends State<BecomeDriverBenefitsScreen>
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                (isDark ? AppColors.darkBackground : AppColors.lightBackground)
-                                    .withValues(alpha: 0.95),
+                                (isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA)),
                               ],
                             ),
                           ),
                         ),
                       ),
-                      // Close / back button
+                      // 44x44 Circular Back Button
                       Positioned(
                         top: MediaQuery.of(context).padding.top + 12,
-                        left: 16,
+                        left: 20,
                         child: GestureDetector(
                           onTap: () => Navigator.of(context).pop(),
                           child: Container(
-                            width: 40,
-                            height: 40,
+                            width: 44,
+                            height: 44,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.90),
+                              color: isDark ? AppColors.darkSurface : Colors.white,
                               shape: BoxShape.circle,
+                              border: Border.all(color: borderColor),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
+                                  color: Colors.black.withValues(alpha: 0.1),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                            child: const Icon(
-                              Icons.close_rounded,
-                              size: 20,
-                              color: Colors.black87,
+                            child: Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 18,
+                              color: primaryTextColor,
                             ),
                           ),
                         ),
@@ -122,65 +125,108 @@ class _BecomeDriverBenefitsScreenState extends State<BecomeDriverBenefitsScreen>
                     ],
                   ),
 
-                  // ── Content section ──────────────────────────────────
+                  // Content Section
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.md,
-                      AppSpacing.pagePadding,
-                      AppSpacing.pagePadding,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Title
                         Text(
                           'Drive & Earn on\nYour Schedule',
-                          style: AppTextStyles.headlineLarge.copyWith(
-                            fontWeight: FontWeight.w900,
-                            height: 1.15,
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: primaryTextColor,
+                            letterSpacing: -0.5,
+                            height: 1.2,
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.sm),
-                        // Subtitle
+                        const SizedBox(height: 8),
                         Text(
-                          'Join the CaRide driver community and unlock premium benefits, flexible hours, and consistent payouts.',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
+                          'Join the CaRide driver network and unlock premium earnings, flexible hours, and direct daily payouts.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: secondaryTextColor,
                             height: 1.5,
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.xl),
+                        const SizedBox(height: 24),
 
-                        // ── Benefit rows ─────────────────────────────
-                        _BenefitRow(
-                          icon: Icons.monetization_on_outlined,
-                          title: 'High earnings & low service fees',
-                          description:
-                              'Keep more of what you earn with our transparent payment model — get paid anytime directly to your wallet.',
-                        ),
-                        const _Divider(),
-                        _BenefitRow(
-                          icon: Icons.alarm_on_outlined,
-                          title: 'Flexible hours',
-                          description:
-                              'Be your own boss. Work whenever it fits your lifestyle — full-time or just a few hours a week.',
-                        ),
-                        const _Divider(),
-                        _BenefitRow(
-                          icon: Icons.security_outlined,
-                          title: 'Real-time safety & support',
-                          description:
-                              'Drive confidently with 24/7 in-app emergency buttons and driver-focused premium support.',
-                        ),
-                        const _Divider(),
-                        _BenefitRow(
-                          icon: Icons.trending_up_rounded,
-                          title: 'Driver rewards program',
-                          description:
-                              'Unlock special fuel discounts, vehicle maintenance bonuses, and higher rating tier perks.',
+                        // In-View Error Banner
+                        if (_errorMessage != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: const TextStyle(
+                                      color: AppColors.error,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // Benefits Grouped Card
+                        Container(
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildBenefitTile(
+                                icon: Icons.monetization_on_outlined,
+                                title: 'High earnings & transparent fees',
+                                description:
+                                    'Keep the majority of every fare with our fair pricing model and withdraw earnings to your wallet anytime.',
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                              ),
+                              Divider(height: 1, indent: 68, endIndent: 16, color: borderColor),
+                              _buildBenefitTile(
+                                icon: Icons.schedule_rounded,
+                                title: 'Flexible working hours',
+                                description:
+                                    'Be your own boss. Log in and accept trips whenever it fits your lifestyle.',
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                              ),
+                              Divider(height: 1, indent: 68, endIndent: 16, color: borderColor),
+                              _buildBenefitTile(
+                                icon: Icons.shield_outlined,
+                                title: 'Real-time safety & assistance',
+                                description:
+                                    'Drive with confidence using in-app SOS safety sharing and 24/7 dedicated support.',
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                              ),
+                              Divider(height: 1, indent: 68, endIndent: 16, color: borderColor),
+                              _buildBenefitTile(
+                                icon: Icons.military_tech_outlined,
+                                title: 'Driver rewards program',
+                                description:
+                                    'Unlock special fuel discounts, vehicle maintenance bonuses, and higher rating tier incentives.',
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -190,38 +236,58 @@ class _BecomeDriverBenefitsScreenState extends State<BecomeDriverBenefitsScreen>
             ),
           ),
 
-          // ── Sticky CTA footer ─────────────────────────────────────────
+          // Sticky CTA footer
           Container(
-            color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
             padding: EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.md,
-              AppSpacing.pagePadding,
-              MediaQuery.of(context).padding.bottom + AppSpacing.md,
+              20,
+              12,
+              20,
+              MediaQuery.of(context).padding.bottom + 16,
+            ),
+            decoration: BoxDecoration(
+              color: cardBg,
+              border: Border(top: BorderSide(color: borderColor)),
             ),
             child: ListenableBuilder(
               listenable: customerAuthController,
               builder: (context, _) {
                 final alreadyDriver = customerAuthController.driverExists;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_errorMessage != null) ...[
-                      InlineError(message: _errorMessage!),
-                      const SizedBox(height: AppSpacing.sm),
-                    ],
-                    PrimaryButton(
-                      label: alreadyDriver ? 'Switch to Driver App' : 'Register as a Driver',
-                      isLoading: _isRegistering,
-                      onPressed: alreadyDriver
-                          ? () async {
-                              await customerAuthController.switchRole('driver');
-                              if (!context.mounted) return;
-                              context.go(DriverRoutePaths.home);
-                            }
-                          : _registerAsDriver,
+                return SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isRegistering
+                        ? null
+                        : alreadyDriver
+                            ? () async {
+                                await customerAuthController.switchRole('driver');
+                                if (!context.mounted) return;
+                                context.go(DriverRoutePaths.home);
+                              }
+                            : _registerAsDriver,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brand,
+                      elevation: 0,
+                      disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
                     ),
-                  ],
+                    child: _isRegistering
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                          )
+                        : Text(
+                            alreadyDriver ? 'Switch to Driver App' : 'Register as a Driver',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
                 );
               },
             ),
@@ -230,24 +296,74 @@ class _BecomeDriverBenefitsScreenState extends State<BecomeDriverBenefitsScreen>
       ),
     );
   }
+
+  Widget _buildBenefitTile({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color primaryTextColor,
+    required Color secondaryTextColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.brand.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: AppColors.brand, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: primaryTextColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: secondaryTextColor,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-// ── Success Dialog with Confetti ─────────────────────────────────────────────
-class _DriverSuccessDialog extends StatefulWidget {
-  const _DriverSuccessDialog();
+// ── Success BottomSheet with Confetti ─────────────────────────────────────────────
+class _DriverSuccessBottomSheet extends StatefulWidget {
+  const _DriverSuccessBottomSheet();
 
   @override
-  State<_DriverSuccessDialog> createState() => _DriverSuccessDialogState();
+  State<_DriverSuccessBottomSheet> createState() => _DriverSuccessBottomSheetState();
 }
 
-class _DriverSuccessDialogState extends State<_DriverSuccessDialog> {
+class _DriverSuccessBottomSheetState extends State<_DriverSuccessBottomSheet> {
   late final ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
-    _confettiController = ConfettiController(duration: const Duration(seconds: 4));
-    // Fire confetti shortly after dialog opens
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _confettiController.play();
     });
@@ -262,11 +378,15 @@ class _DriverSuccessDialogState extends State<_DriverSuccessDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
     return Stack(
       alignment: Alignment.topCenter,
       children: [
-        // ── Confetti emitter ──────────────────────────────────────────
+        // Confetti emitter
         ConfettiWidget(
           confettiController: _confettiController,
           blastDirectionality: BlastDirectionality.explosive,
@@ -276,169 +396,128 @@ class _DriverSuccessDialogState extends State<_DriverSuccessDialog> {
           gravity: 0.2,
           shouldLoop: false,
           colors: const [
-            Color(0xFF6C63FF),
-            Color(0xFF00C896),
+            Color(0xFF16A34A),
+            Color(0xFF22C55E),
             Color(0xFFFFB800),
-            Color(0xFFFF4F4F),
-            Color(0xFF00BFFF),
-            Color(0xFFFF69B4),
+            Color(0xFF3B82F6),
           ],
         ),
 
-        // ── Dialog content ────────────────────────────────────────────
-        Dialog(
-          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.xl),
+        Container(
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(top: BorderSide(color: borderColor)),
           ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Celebration icon
-                Container(
-                  width: 80,
-                  height: 80,
+          padding: EdgeInsets.fromLTRB(
+            24,
+            14,
+            24,
+            MediaQuery.of(context).padding.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.brandGlass,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.celebration_rounded,
-                    size: 42,
-                    color: AppColors.brand,
+                    color: isDark ? Colors.white24 : const Color(0xFFD1D5DB),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+              ),
+              const SizedBox(height: 24),
 
-                // Title
-                Text(
-                  'Welcome to the\nDriver Team! 🎉',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.headlineMedium.copyWith(
-                    fontWeight: FontWeight.w900,
-                    height: 1.2,
-                  ),
+              // Celebration icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: AppSpacing.sm),
-
-                // Description
-                Text(
-                  'Your driver account has been created successfully using your existing profile. Complete onboarding to start earning!',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                    height: 1.5,
-                  ),
+                child: const Icon(
+                  Icons.celebration_rounded,
+                  size: 42,
+                  color: AppColors.brand,
                 ),
-                const SizedBox(height: AppSpacing.xl),
+              ),
+              const SizedBox(height: 18),
 
-                // Switch to Driver button (primary)
-                PrimaryButton(
-                  label: 'Switch to Driver',
+              // Title
+              Text(
+                'Welcome to the Driver Team! 🎉',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: primaryTextColor,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Description
+              Text(
+                'Your driver account has been created successfully. Complete onboarding to start earning with CaRide!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: secondaryTextColor,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+
+              // Switch to Driver button (primary)
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop();
                     context.go(DriverRoutePaths.home);
                   },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: const Text(
+                    'Switch to Driver App',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
+              ),
+              const SizedBox(height: 8),
 
-                // Done button (secondary / text)
-                SecondaryButton(
-                  label: 'Done',
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    // Navigate back to the account screen
-                    context.go(CustomerRoutePaths.profile);
-                  },
+              // Done button
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.go(CustomerRoutePaths.profile);
+                },
+                child: Text(
+                  'Done',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: secondaryTextColor,
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
-    );
-  }
-}
-
-// ── Benefit row ─────────────────────────────────────────────────────────────
-class _BenefitRow extends StatelessWidget {
-  const _BenefitRow({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Branded icon chip
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.brandGlass,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: AppColors.brand, size: 22),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          // Text
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.bodyLarge.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Hairline divider ─────────────────────────────────────────────────────────
-class _Divider extends StatelessWidget {
-  const _Divider();
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Divider(
-      height: 1,
-      thickness: 0.8,
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.08)
-          : Colors.black.withValues(alpha: 0.08),
     );
   }
 }

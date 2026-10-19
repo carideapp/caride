@@ -136,8 +136,12 @@ class _DriverVehicleScreenState extends State<DriverVehicleScreen> {
                               color: AppColors.primaryGreen.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(AppRadius.lg),
                             ),
-                            child: const Icon(
-                              Icons.directions_car_filled_rounded,
+                            child: Icon(
+                              _vehicle?.vehicleType == vehicleTypeTricycle
+                                  ? Icons.electric_rickshaw_rounded
+                                  : _vehicle?.vehicleType == vehicleTypeMotorcycle
+                                      ? Icons.two_wheeler_rounded
+                                      : Icons.directions_car_filled_rounded,
                               color: AppColors.primaryGreen,
                               size: 26,
                             ),

@@ -5,6 +5,7 @@ import 'package:caride/features/profile/data/driver_public_profile_repository.da
 import 'package:caride/features/ride_booking/booking_shell/booking_shell_controller.dart';
 import 'package:caride/features/ride_booking/booking_shell/models/booking_shell_step.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/cancel_ride_bottom_sheet.dart';
+import 'package:caride/features/ride_booking/booking_shell/widgets/passenger_update_offer_bottom_sheet.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/stacked_driver_avatars.dart';
 import 'package:caride/features/ride_booking/data/ride_repository.dart';
 import 'package:design_system/design_system.dart';
@@ -69,6 +70,26 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
 
       setState(() {});
     });
+  }
+
+  void _openUpdateOfferSheet() {
+    final ride = widget.controller.ride;
+    if (ride == null) return;
+    PassengerUpdateOfferBottomSheet.show(
+      context: context,
+      currentOffer: ride.customerOffer,
+      onConfirm: (newOffer) async {
+        await widget.controller.updateRideOffer(newOffer);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Broadcast offer updated to ${NgnFormat.whole(newOffer)}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      },
+    );
   }
 
   void _showNoDriversDialog() {
@@ -310,7 +331,7 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
                                                 ),
                                                 const SizedBox(height: 6),
                                                 Text(
-                                                  '₦${b.offerNaira.toStringAsFixed(0)}',
+                                                  NgnFormat.whole(b.offerNaira),
                                                   style: AppTextStyles.displaySmall.copyWith(
                                                     fontSize: 26,
                                                     color: AppColors.brand,
@@ -337,7 +358,7 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
                                                             const Icon(Icons.stars_rounded, size: 13, color: Color(0xFF10B981)),
                                                             const SizedBox(width: 4),
                                                             Text(
-                                                              '-₦${disc.toStringAsFixed(0)} Credit (Pay ₦${payable.toStringAsFixed(0)})',
+                                                              '-${NgnFormat.whole(disc)} Credit (Pay ${NgnFormat.whole(payable)})',
                                                               style: const TextStyle(
                                                                 fontSize: 11,
                                                                 fontWeight: FontWeight.bold,
@@ -380,6 +401,7 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
                                         child: _AcceptBidButton(
                                           bid: b,
                                           walletBalance: _walletBalance,
+                                          isCash: ride.paymentMethod.trim().toLowerCase() == 'cash',
                                           onAccept: () async {
                                             await widget.controller.acceptBid(b);
                                             HapticFeedback.lightImpact();
@@ -402,6 +424,12 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
           ),
         ),
         if (canCancel) ...[
+          const SizedBox(height: AppSpacing.sm),
+          SecondaryButton(
+            label: 'Increase or decrease fare offer',
+            icon: Icons.tune_rounded,
+            onPressed: _openUpdateOfferSheet,
+          ),
           const SizedBox(height: AppSpacing.sm),
           SecondaryButton(
             label: 'Cancel Ride',
@@ -499,17 +527,17 @@ class _RadarScanAnimationState extends State<_RadarScanAnimation>
   }
 }
 
-/// A smart Accept button that is disabled (with a shortfall note) when the
-/// driver's bid exceeds the customer's wallet balance.
 class _AcceptBidButton extends StatefulWidget {
   const _AcceptBidButton({
     required this.bid,
     required this.walletBalance,
+    required this.isCash,
     required this.onAccept,
   });
 
   final DriverBid bid;
   final double walletBalance;
+  final bool isCash;
   final Future<void> Function() onAccept;
 
   @override
@@ -521,7 +549,8 @@ class _AcceptBidButtonState extends State<_AcceptBidButton> {
 
   @override
   Widget build(BuildContext context) {
-    final canAfford = widget.bid.offerNaira <= widget.walletBalance;
+    // If the customer chose Cash (or another non-wallet method), payment is made directly to the driver
+    final canAfford = widget.isCash || (widget.bid.offerNaira <= widget.walletBalance);
     final shortfall = widget.bid.offerNaira - widget.walletBalance;
 
     return Column(

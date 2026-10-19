@@ -93,6 +93,9 @@ class BookingShellController extends ChangeNotifier {
   String? _lastCalculatedRideType;
   double? _lastCalculatedDistanceKm;
 
+  String? _operatingState;
+  String? get operatingState => _operatingState;
+
   // Ride options cached from a single one-shot Firestore fetch
   List<RideOption> _rideOptions = RideOptionsRepository.fallbackOptions;
   List<RideOption> get rideOptions => _rideOptions;
@@ -100,9 +103,12 @@ class BookingShellController extends ChangeNotifier {
   Future<void> _loadRideOptions() async {
     final repo = _rideOptionsRepository;
     if (repo == null) return;
-    final options = await repo.fetchRideOptions();
+    final options = await repo.fetchRideOptions(operatingState: _operatingState);
     if (options.isNotEmpty) {
       _rideOptions = options;
+      if (!_rideOptions.any((o) => o.type.toLowerCase() == _rideType.toLowerCase())) {
+        _rideType = _rideOptions.first.type;
+      }
       notifyListeners();
     }
   }
@@ -172,6 +178,9 @@ class BookingShellController extends ChangeNotifier {
   RideModel? _ride;
   RideModel? get ride => _ride;
 
+  DriverBid? _acceptedBid;
+  DriverBid? get acceptedBid => _acceptedBid;
+
   Stream<RideModel?>? _rideStream;
   Stream<RideModel?>? get rideStream => _rideStream;
 
@@ -209,6 +218,14 @@ class BookingShellController extends ChangeNotifier {
     if (extra == null) return;
     _receiverName = extra['receiverName'] as String?;
     _receiverPhone = extra['receiverPhone'] as String?;
+    final initialRideType = extra['initialRideType'] as String? ?? extra['rideType'] as String?;
+    if (initialRideType != null && initialRideType.isNotEmpty) {
+      _rideType = RideOptionsRepository.normalizeTypeLabel(initialRideType);
+    }
+    final state = extra['operatingState'] as String? ?? extra['state'] as String?;
+    if (state != null && state.isNotEmpty) {
+      _operatingState = state;
+    }
     final rid = extra['rideId'];
     final stepExtra = extra['step'];
     if (rid is String && rid.trim().isNotEmpty) {
@@ -514,13 +531,35 @@ class BookingShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Updates the passenger's broadcast fare offer on an active ride request in Step 4.
+  Future<void> updateRideOffer(double newOfferNaira) async {
+    final repo = _rideRepository;
+    final id = _rideId;
+    if (repo == null || id == null) return;
+    await repo.updateCustomerOffer(rideId: id, newOfferNaira: newOfferNaira);
+    _offerNaira = newOfferNaira;
+    notifyListeners();
+  }
+
   Future<void> acceptBid(DriverBid bid) async {
     final repo = _rideRepository;
     final id = _rideId;
     if (repo == null || id == null) return;
-    await repo.acceptBid(rideId: id, bid: bid);
+    _acceptedBid = bid;
+    if (_ride != null) {
+      _ride = _ride!.copyWith(
+        driverUid: bid.driverUid,
+        driverName: bid.driverName,
+        status: 'driverEnRoute',
+      );
+    }
     _step = BookingShellStep.tracking;
     notifyListeners();
+    try {
+      await repo.acceptBid(rideId: id, bid: bid);
+    } catch (_) {
+      // Firestore ride stream will reconcile status if failed
+    }
   }
 
   Future<void> declineBid(String bidId) async {

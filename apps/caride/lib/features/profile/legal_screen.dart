@@ -1,7 +1,6 @@
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 /// Customer/Rider Legal menu screen.
 class LegalScreen extends StatelessWidget {
@@ -10,66 +9,111 @@ class LegalScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final iconBg = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F4F6);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: 'Legal & Policies',
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: ResponsiveContainer(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.pagePadding,
-              vertical: AppSpacing.lg,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Terms & Policies',
-                  style: AppTextStyles.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Review CaRide terms of service, user agreements, and privacy policy guidelines.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+        child: Column(
+          children: [
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                GlassContainer(
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      _buildMenuItem(
-                        context,
-                        icon: Icons.gavel_rounded,
-                        title: 'Terms of Use',
-                        subtitle: 'Platform rules, rider terms, and legal agreements',
-                        onTap: () => context.push(CustomerRoutePaths.riderTerms),
-                      ),
-                      Divider(
-                        height: 1,
-                        color: isDark ? AppColors.glassBorderDark : AppColors.glassBorderLight,
-                      ),
-                      _buildMenuItem(
-                        context,
-                        icon: Icons.privacy_tip_outlined,
-                        title: 'Privacy Policy',
-                        subtitle: 'Data collection practices, usage, and privacy rights',
-                        onTap: () => context.push(CustomerRoutePaths.riderPrivacy),
-                      ),
-                    ],
+                  const SizedBox(width: 14),
+                  Text(
+                    'Legal & Policies',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 12),
+                      child: Text(
+                        'TERMS & POLICIES',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: secondaryTextColor,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildMenuItem(
+                            context,
+                            icon: Icons.gavel_rounded,
+                            title: 'Terms of Use',
+                            iconBg: iconBg,
+                            primaryTextColor: primaryTextColor,
+                            secondaryTextColor: secondaryTextColor,
+                            onTap: () => context.push(CustomerRoutePaths.riderTerms),
+                          ),
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            indent: 68,
+                            color: borderColor,
+                          ),
+                          _buildMenuItem(
+                            context,
+                            icon: Icons.privacy_tip_outlined,
+                            title: 'Privacy Policy',
+                            iconBg: iconBg,
+                            primaryTextColor: primaryTextColor,
+                            secondaryTextColor: secondaryTextColor,
+                            onTap: () => context.push(CustomerRoutePaths.riderPrivacy),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -79,61 +123,48 @@ class LegalScreen extends StatelessWidget {
     BuildContext context, {
     required IconData icon,
     required String title,
-    required String subtitle,
+    required Color iconBg,
+    required Color primaryTextColor,
+    required Color secondaryTextColor,
     required VoidCallback onTap,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.brand.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: AppColors.brand,
-                  size: 22,
-                ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconBg,
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
+              child: Icon(
+                icon,
+                color: primaryTextColor,
                 size: 20,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextColor,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: secondaryTextColor.withValues(alpha: 0.6),
+            ),
+          ],
         ),
       ),
     );

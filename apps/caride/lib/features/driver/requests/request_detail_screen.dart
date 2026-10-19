@@ -10,6 +10,9 @@ import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
 import 'package:caride/features/ride_booking/data/ride_repository.dart' hide RideModel;
 import 'package:flutter/material.dart';
 import 'package:shared_widgets/shared_widgets.dart';
+import 'package:caride/core/config/app_config_repository.dart';
+import 'package:caride/features/driver/widgets/driver_counter_offer_bottom_sheet.dart';
+import 'package:caride/features/driver/widgets/driver_debt_prompt_bottom_sheet.dart';
 import 'package:caride/core/driver/models/driver_presence.dart';
 import 'package:caride/core/driver/utils/distance_helper.dart';
 import 'package:caride/features/driver/location/data/driver_presence_repository.dart';
@@ -26,17 +29,15 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   final _profileRepo = DriverProfileRepository();
   final _presenceRepo = DriverPresenceRepository();
   DriverPresence? _presence;
-  final _counter = TextEditingController();
   bool _submitting = false;
   Timer? _viewerTimer;
+  RideModel? _latestRide;
 
-  RideModel? get _ride => DriverActiveRideState.instance.selectedRide;
+  RideModel? get _ride => _latestRide ?? DriverActiveRideState.instance.selectedRide;
 
   @override
   void initState() {
     super.initState();
-    final offer = _ride?.customerOffer ?? 0;
-    _counter.text = offer.round().toString();
     _fetchPresence();
     _registerViewerPresence();
     _viewerTimer = Timer.periodic(const Duration(seconds: 15), (_) => _registerViewerPresence());
@@ -81,7 +82,6 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   void dispose() {
     _viewerTimer?.cancel();
     _removeViewerPresence();
-    _counter.dispose();
     super.dispose();
   }
 
@@ -147,12 +147,34 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     );
   }
 
+  Future<bool> _checkDebtLimit() async {
+    final uid = driverAuthController.currentUid;
+    if (uid == null) return false;
+    final profile = await _profileRepo.getDriverProfile(uid);
+    final settings = await AppConfigRepository().getDriverSettings();
+    final balance = profile?.walletBalance ?? 0.0;
+    if (balance <= -settings.maxNegativeBalanceNaira) {
+      if (mounted) {
+        await DriverDebtPromptBottomSheet.show(
+          context,
+          currentBalance: balance,
+          maxNegativeBalance: settings.maxNegativeBalanceNaira,
+        );
+      }
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _placeBid(double amount) async {
     final ride = _ride;
     if (ride == null) return;
 
     final uid = driverAuthController.currentUid;
     if (uid == null) return;
+
+    final isRestricted = await _checkDebtLimit();
+    if (isRestricted) return;
 
     setState(() => _submitting = true);
     try {
@@ -175,8 +197,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         driverName: profile?.fullName ?? 'Driver',
         offerNaira: amount,
         etaMinutes: eta,
-        driverRating: 5.0,
-        driverRides: 0,
+        driverRating: profile?.rating ?? 0.0,
+        driverRides: profile?.completedRides ?? 0,
       );
       if (!mounted) return;
       _showSuccessPopup();
@@ -190,6 +212,20 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     }
   }
 
+  Future<void> _showCounterSheet() async {
+    final ride = _ride;
+    if (ride == null) return;
+
+    final isRestricted = await _checkDebtLimit();
+    if (isRestricted || !mounted) return;
+
+    DriverCounterOfferBottomSheet.show(
+      context: context,
+      customerOffer: ride.customerOffer,
+      onSubmit: (amount) => _placeBid(amount),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -199,9 +235,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final borderColor =
         isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE9EAF0);
-    final ride = _ride;
+    final initialRide = DriverActiveRideState.instance.selectedRide;
 
-    if (ride == null) {
+    if (initialRide == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Offer Details')),
         body: const Center(
@@ -214,19 +250,26 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       );
     }
 
-    final double? distanceKm = (_presence?.latitude != null &&
-            _presence?.longitude != null &&
-            ride.pickupLat != null &&
-            ride.pickupLng != null)
-        ? calculateDistance(
-            _presence!.latitude!,
-            _presence!.longitude!,
-            ride.pickupLat!,
-            ride.pickupLng!,
-          )
-        : null;
+    return StreamBuilder<RideModel?>(
+      stream: _rideRepo.streamRide(initialRide.id),
+      initialData: initialRide,
+      builder: (context, snapshot) {
+        final ride = snapshot.data ?? initialRide;
+        _latestRide = ride;
 
-    return Scaffold(
+        final double? distanceKm = (_presence?.latitude != null &&
+                _presence?.longitude != null &&
+                ride.pickupLat != null &&
+                ride.pickupLng != null)
+            ? calculateDistance(
+                _presence!.latitude!,
+                _presence!.longitude!,
+                ride.pickupLat!,
+                ride.pickupLng!,
+              )
+            : null;
+
+        return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
         backgroundColor: backgroundColor,
@@ -264,7 +307,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                       '';
                   final double rating = (custData?['rating'] as num?)?.toDouble() ??
                       (custData?['customerRating'] as num?)?.toDouble() ??
-                      5.0;
+                      0.0;
 
                   return Container(
                     decoration: BoxDecoration(
@@ -331,8 +374,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Row(
-                                children: [
+                              if (rating > 0)
+                                Row(
+                                  children: [
                                   // Rating chip
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -592,76 +636,16 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
 
-              // ── Counter Offer Section Header ──
-              Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.xs),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Interested in a higher fare?',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: isDark ? Colors.white : AppColors.slate900,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Suggest a custom counter fare to the passenger',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Container(
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: borderColor),
-                  boxShadow: isDark
-                      ? null
-                      : [
-                          const BoxShadow(
-                            color: Color(0x0F0F172A),
-                            blurRadius: 18,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                ),
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  children: [
-                    AppTextField(
-                      controller: _counter,
-                      label: 'Your Counter Offer (₦)',
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    SecondaryButton(
-                      label: _submitting ? 'Sending…' : 'Send Counter Offer',
-                      onPressed: _submitting
-                          ? null
-                          : () {
-                              final val = double.tryParse(_counter.text);
-                              if (val != null && val > 0) {
-                                _placeBid(val);
-                              }
-                            },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
               // ── Main Actions ──
               PrimaryButton(
                 label: 'Accept Customer Price',
                 isLoading: _submitting,
                 onPressed: () => _placeBid(ride.customerOffer),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SecondaryButton(
+                label: 'Counter',
+                onPressed: _submitting ? null : _showCounterSheet,
               ),
               const SizedBox(height: AppSpacing.md),
               Center(
@@ -680,6 +664,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
           ),
         ),
       ),
+    );
+      },
     );
   }
 }

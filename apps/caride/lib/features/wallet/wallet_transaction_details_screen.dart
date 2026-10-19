@@ -28,6 +28,9 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
   String _getTransactionTitle() {
     final desc = transaction.description.toLowerCase();
     final rawType = transaction.rawType.toLowerCase();
+    if (rawType == 'cashback' || desc.contains('cashback')) {
+      return 'First Ride Cashback';
+    }
     if (rawType == 'referral' || desc.contains('referral')) {
       return 'Referral Earnings';
     }
@@ -213,6 +216,41 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
                       ),
                     );
                   },
+                )
+              else if (title == 'First Ride Cashback')
+                GlassSurface(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Cashback Reward Details',
+                        style: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _buildDetailRow(
+                        label: 'Reward Type',
+                        value: 'First Ride Bonus',
+                      ),
+                      _buildDetailRow(
+                        label: 'Credited To',
+                        value: 'In-App E-Wallet',
+                      ),
+                      if (transaction.reference.isNotEmpty)
+                        _buildDetailRow(
+                          label: 'Ride Reference',
+                          value: transaction.reference,
+                        ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Congratulations! You received this cashback bonus for completing your first ride booking with CaRide. You can use it towards your next ride or withdraw to your bank account.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
                 )
               else if (title == 'Referral Earnings')
                 GlassSurface(

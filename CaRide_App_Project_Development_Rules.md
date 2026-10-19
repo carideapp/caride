@@ -64,6 +64,7 @@ Use consistent spacing scale:
 - Rounded corners (8–12 radius)
 - Primary = Green background + white text
 - Secondary = Outline or light background
+- Flat & clean: strictly NO glowing or ambient shadows on buttons (showShadow = false)
 
 **Cards:**
 - Soft elevation or very light shadow
@@ -197,16 +198,14 @@ Common UI elements must be reusable:
 **Store in:** `shared/widgets/`
 - No repeated UI logic across screens
 
-## 14. Development Focus (IMPORTANT)
-- **Current phase:** Frontend only
-- No backend integration yet
-- Use mock data where needed
-- Structure code to allow easy backend connection later
+## 14. Development Focus (PRODUCTION-READY — STRICT)
+- **Current phase:** Full Production
+- Always build complete end-to-end production implementations, never test/mock fallbacks.
+- Live backend integration, cloud functions, webhooks, and real ledger crediting are mandatory.
 
 ## 15. Code Reusability & Scalability
-- Write code as if backend will plug in later
-- Avoid hardcoding mock data inside UI
-- Use models/placeholders where necessary
+- Build robust production code with strict type safety and error handling.
+- Real backend API contracts, atomic database transactions, and idempotency.
 
 ## 16. Loading & Error States (MANDATORY UX)
 Every async UI must handle:
@@ -228,3 +227,11 @@ All forms must include:
 19. **Status Bar Integration**:
 - All screens must extend into the status bar area (edge-to-edge).
 - Status bar icons and background colors must dynamically update based on the current theme (e.g., dark icons on light theme, light icons on dark theme).
+
+20. **Production-First Implementation Standard (NON-NEGOTIABLE)**:
+- **Always implement for live production, never for testing or placeholders.**
+- For payment gateways (TransactPay, etc.):
+  - Implement the real Cloud Functions connecting through static IP proxy.
+  - Build live HTTP Webhook handlers (`onRequest`) to asynchronously credit incoming deposits with signature verification.
+  - Execute atomic database transactions (`FieldValue.increment`, transaction receipts, wallet ledgers).
+  - Deployable and production-ready from day one.

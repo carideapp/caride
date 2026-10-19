@@ -2,8 +2,6 @@ import 'package:caride/features/profile/widgets/legal_document_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 /// Rider Privacy Policy Screen with dynamic Firestore configuration.
 class RiderPrivacyPolicyScreen extends StatelessWidget {
@@ -39,38 +37,73 @@ You can request access, corrections, or deletion of your personal account data a
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: 'Privacy Policy',
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: ResponsiveContainer(
-          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('config')
-                .doc('legalSettings')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final customPrivacy = snapshot.data?.data()?['riderPrivacy'] as String?;
-              final textContent = (customPrivacy != null && customPrivacy.trim().isNotEmpty)
-                  ? customPrivacy
-                  : _defaultPrivacy;
+        child: Column(
+          children: [
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    'Privacy Policy',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-              return LegalDocumentView(
-                title: 'Privacy Policy',
-                subtitle: 'Passenger Data Practices & Privacy Rights',
-                icon: Icons.privacy_tip_outlined,
-                rawContent: textContent,
-                badgeLabel: 'Rider Privacy',
-              );
-            },
-          ),
+            Expanded(
+              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('config')
+                    .doc('legalSettings')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  final customPrivacy = snapshot.data?.data()?['riderPrivacy'] as String?;
+                  final textContent = (customPrivacy != null && customPrivacy.trim().isNotEmpty)
+                      ? customPrivacy
+                      : _defaultPrivacy;
+
+                  return LegalDocumentView(
+                    title: 'Privacy Policy',
+                    subtitle: 'Passenger Data Practices & Privacy Rights',
+                    icon: Icons.privacy_tip_outlined,
+                    rawContent: textContent,
+                    badgeLabel: 'Rider Privacy',
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

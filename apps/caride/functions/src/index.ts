@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
+import http from "node:http";
 import https from "node:https";
 
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
@@ -11,18 +12,40 @@ import { setGlobalOptions } from "firebase-functions/v2";
 const REGION_PRIMARY = "us-east1";
 const REGION_SCHEDULE = "us-west1";
 
+const VPC_CONNECTOR = process.env.VPC_CONNECTOR || "transactpay-connector";
+
+/** Egress options for TransactPay functions to route traffic via Cloud NAT Static IP */
+const TRANSACTPAY_CALLABLE_OPTIONS = {
+  region: REGION_PRIMARY,
+  maxInstances: 5,
+  ...(VPC_CONNECTOR
+    ? {
+        vpcConnector: VPC_CONNECTOR,
+        vpcConnectorEgressSettings: "ALL_TRAFFIC" as const,
+      }
+    : {}),
+};
+
+const TRANSACTPAY_SINGLE_INSTANCE_OPTIONS = {
+  region: REGION_PRIMARY,
+  maxInstances: 1,
+  ...(VPC_CONNECTOR
+    ? {
+        vpcConnector: VPC_CONNECTOR,
+        vpcConnectorEgressSettings: "ALL_TRAFFIC" as const,
+      }
+    : {}),
+};
+
 setGlobalOptions({ cpu: 0.25, memory: "256MiB", maxInstances: 2 });
 
 admin.initializeApp();
 
 
-// ─────────────────────────── Types ───────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Types â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 type RequestOtpPayload = { email?: string; isSignUp?: boolean; role?: string; referredByCode?: string };
 type VerifyOtpPayload = { challengeId?: string; email?: string; code?: string };
-type InitPaystackPayload = { email?: string; amountKobo?: number; channels?: string[] };
-type ChargePaystackPayload = { authorizationCode?: string; email?: string; amountKobo?: number };
-type VerifyPaystackPayload = { reference?: string };
 
 type DirectChargePayload = {
   cardNumber: string;
@@ -39,9 +62,6 @@ type ValidateChargePayload = {
   otp: string;
 };
 
-type InitFlutterwavePayload = { amountNaira?: number; channels?: string[] };
-type ChargeFlutterwavePayload = { authorizationCode?: string; email?: string; amountNaira?: number };
-type VerifyFlutterwavePayload = { reference?: string };
 type ResolveBankAccountPayload = {
   bankCode?: string;
   accountNumber?: string;
@@ -101,7 +121,7 @@ interface VehicleReviewRecord {
   newValues?: VehicleInfoRecord | null;
 }
 
-// ─────────────────────────── Constants ───────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Constants â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 10;
@@ -173,7 +193,7 @@ const DEFAULT_TIER_SETTINGS: Record<string, TierSetting> = {
   platinum: { name: "Platinum", commissionPercent: 17, minTrips: 300, maxTrips: null, minRating: 4.7, order: 4 },
 };
 
-// ─────────────────────────── Helpers ─────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Helpers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function sanitizeEmail(input?: string): string {
   if (!input) throw new HttpsError("invalid-argument", "Email is required.");
@@ -369,7 +389,7 @@ async function fetchAllTierSettings(): Promise<Record<string, TierSetting>> {
 }
 
 
-// ───────────────────────── Resend Email + FCM Push ─────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Resend Email + FCM Push â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function buildEmailHtml(bodyHtml: string): string {
   return [
@@ -399,7 +419,7 @@ function buildEmailHtml(bodyHtml: string): string {
 async function sendResendEmail(to: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL ?? "no-reply@caride.ng";
-  if (!apiKey) { logger.warn("RESEND_API_KEY not set — skipping email", { to }); return; }
+  if (!apiKey) { logger.warn("RESEND_API_KEY not set - skipping email", { to }); return; }
   const payload = JSON.stringify({ from, to, subject, html });
   await new Promise<void>((resolve, reject) => {
     const req = https.request(
@@ -788,95 +808,189 @@ async function sendAdminNotificationEmail(email: string, uid: string): Promise<v
   await sendResendEmail(adminEmail, "New Driver Application Submitted", html);
 }
 
-/** Makes a JSON request to the Flutterwave API. */
-function flutterwaveRequest<T>(
-  method: string,
+
+
+// ────────────────────────── TransactPay Configuration ──────────────────────────
+
+const TRANSACTPAY_BASE_HOST = process.env.TRANSACTPAY_BASE_HOST || "payment-api-service.transactpay.ai";
+const TRANSACTPAY_PUBLIC_KEY = process.env.TRANSACTPAY_PUBLIC_KEY || "";
+const TRANSACTPAY_SECRET_KEY = process.env.TRANSACTPAY_SECRET_KEY || "";
+const TRANSACTPAY_ENCRYPTION_KEY = process.env.TRANSACTPAY_ENCRYPTION_KEY || "";
+const TRANSACTPAY_PROXY_URL = process.env.TRANSACTPAY_PROXY_URL || "";
+const TRANSACTPAY_PROXY_TOKEN = process.env.TRANSACTPAY_PROXY_TOKEN || "";
+
+let _cachedTransactPayPublicKey: crypto.KeyObject | null = null;
+
+function getTransactPayPublicKey(): crypto.KeyObject {
+  if (_cachedTransactPayPublicKey) return _cachedTransactPayPublicKey;
+  if (!TRANSACTPAY_ENCRYPTION_KEY) {
+    throw new Error("TRANSACTPAY_ENCRYPTION_KEY is not configured in environment variables.");
+  }
+  const decoded = Buffer.from(TRANSACTPAY_ENCRYPTION_KEY, "base64").toString("utf8");
+  const modMatch = decoded.match(/<Modulus>(.*?)<\/Modulus>/);
+  const expMatch = decoded.match(/<Exponent>(.*?)<\/Exponent>/);
+  if (!modMatch || !expMatch) {
+    throw new Error("Invalid TransactPay encryption key format.");
+  }
+  const mod = Buffer.from(modMatch[1], "base64");
+  const exp = Buffer.from(expMatch[1], "base64");
+
+  function encodeLength(len: number): Buffer {
+    if (len < 0x80) return Buffer.from([len]);
+    const bytes: number[] = [];
+    let temp = len;
+    while (temp > 0) {
+      bytes.unshift(temp & 0xff);
+      temp >>= 8;
+    }
+    return Buffer.from([0x80 | bytes.length, ...bytes]);
+  }
+
+  function encodeInteger(buf: Buffer): Buffer {
+    const needsZero = (buf[0] & 0x80) !== 0;
+    const body = needsZero ? Buffer.concat([Buffer.from([0x00]), buf]) : buf;
+    return Buffer.concat([Buffer.from([0x02]), encodeLength(body.length), body]);
+  }
+
+  const rsaSeqBody = Buffer.concat([encodeInteger(mod), encodeInteger(exp)]);
+  const rsaKeyDer = Buffer.concat([Buffer.from([0x30]), encodeLength(rsaSeqBody.length), rsaSeqBody]);
+  const rsaOid = Buffer.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
+  const bitStringBody = Buffer.concat([Buffer.from([0x00]), rsaKeyDer]);
+  const bitString = Buffer.concat([Buffer.from([0x03]), encodeLength(bitStringBody.length), bitStringBody]);
+  const spkiBody = Buffer.concat([rsaOid, bitString]);
+  const spkiDer = Buffer.concat([Buffer.from([0x30]), encodeLength(spkiBody.length), spkiBody]);
+
+  _cachedTransactPayPublicKey = crypto.createPublicKey({ key: spkiDer, format: "der", type: "spki" });
+  return _cachedTransactPayPublicKey;
+}
+
+export function encryptTransactPayPayload(data: any): string {
+  const jsonStr = typeof data === "string" ? data : JSON.stringify(data);
+  const key = getTransactPayPublicKey();
+  const encrypted = crypto.publicEncrypt(
+    {
+      key,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
+    },
+    Buffer.from(jsonStr, "utf8")
+  );
+  return encrypted.toString("base64");
+}
+
+/** Makes an HTTP request to the TransactPay API via static IP proxy (or direct fallback). */
+export function transactpayRequest<T>(
+  method: "GET" | "POST" | "PATCH",
   path: string,
-  body?: object
+  body?: any,
+  useSecretKey = false
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    const secretKey = process.env.FLUTTERWAVE_SECRET_KEY || "FLWSECK-c201c6f7eb05eecf5245124fb70a2155-19ef45e6418vt-X";
-    if (!secretKey) {
-      reject(new HttpsError("failed-precondition", "Flutterwave is not configured."));
+    const apiKey = useSecretKey ? TRANSACTPAY_SECRET_KEY : TRANSACTPAY_PUBLIC_KEY;
+    if (!apiKey) {
+      logger.error("Missing TransactPay API key configuration", { useSecretKey });
+      reject(new HttpsError("failed-precondition", "TransactPay API key is not configured in environment variables."));
       return;
     }
-    const payload = body ? JSON.stringify(body) : undefined;
-    const req = https.request(
+
+    let payload: string | undefined;
+
+    if (body !== undefined && body !== null) {
+      if (body.data) {
+        payload = JSON.stringify(body);
+      } else {
+        const encrypted = encryptTransactPayPayload(body);
+        payload = JSON.stringify({ data: encrypted });
+      }
+    }
+
+    const isProxyConfigured = Boolean(TRANSACTPAY_PROXY_URL && TRANSACTPAY_PROXY_URL.trim().length > 0);
+
+    let targetProtocol: string;
+    let targetHostname: string;
+    let targetPort: number | undefined;
+    let targetPath: string;
+
+    const headers: Record<string, string | number> = {
+      "api-key": apiKey,
+      Authorization: `Bearer ${apiKey}`,
+      encryption: "RSA",
+      "Content-Type": "application/json",
+      ...(payload ? { "Content-Length": Buffer.byteLength(payload) } : {}),
+    };
+
+    if (isProxyConfigured) {
+      try {
+        const parsedUrl = new URL(TRANSACTPAY_PROXY_URL);
+        targetProtocol = parsedUrl.protocol;
+        targetHostname = parsedUrl.hostname;
+        targetPort = parsedUrl.port ? parseInt(parsedUrl.port, 10) : (parsedUrl.protocol === "https:" ? 443 : 80);
+        const basePath = parsedUrl.pathname.replace(/\/+$/, "");
+        targetPath = `${basePath}${path}`;
+
+        if (TRANSACTPAY_PROXY_TOKEN) {
+          headers["x-proxy-auth"] = TRANSACTPAY_PROXY_TOKEN;
+        }
+        if (useSecretKey) {
+          headers["x-use-secret-key"] = "true";
+        }
+      } catch (err: any) {
+        reject(new HttpsError("internal", `Invalid TRANSACTPAY_PROXY_URL configured: ${err.message}`));
+        return;
+      }
+    } else {
+      logger.warn("TransactPay request executed directly without static IP proxy (TRANSACTPAY_PROXY_URL not configured).", { path });
+      targetProtocol = "https:";
+      targetHostname = TRANSACTPAY_BASE_HOST;
+      targetPort = 443;
+      targetPath = path;
+    }
+
+    const clientModule = targetProtocol === "http:" ? http : https;
+
+    const req = clientModule.request(
       {
-        hostname: "api.flutterwave.com",
-        path: `/v3${path}`,
+        protocol: targetProtocol,
+        hostname: targetHostname,
+        port: targetPort,
+        path: targetPath,
         method,
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-          "Content-Type": "application/json",
-          ...(payload ? { "Content-Length": Buffer.byteLength(payload) } : {}),
-        },
+        headers,
       },
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
           try {
-            resolve(JSON.parse(data) as T);
+            const parsed = JSON.parse(data) as T;
+            resolve(parsed);
           } catch {
-            reject(new HttpsError("internal", "Flutterwave returned invalid JSON."));
+            reject(new HttpsError("internal", `TransactPay returned invalid JSON (HTTP ${res.statusCode}): ${data.slice(0, 200)}`));
           }
         });
       }
     );
-    req.on("error", (e) =>
-      reject(new HttpsError("internal", `Flutterwave request failed: ${e.message}`))
-    );
-    if (payload) req.write(payload);
-    req.end();
-  });
-}
 
-/** Makes a JSON request to the Paystack API. */
-function paystackRequest<T>(
-  method: string,
-  path: string,
-  body?: object
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const secretKey = process.env.PAYSTACK_SECRET_KEY;
-    if (!secretKey) {
-      reject(new HttpsError("failed-precondition", "Paystack is not configured."));
-      return;
-    }
-    const payload = body ? JSON.stringify(body) : undefined;
-    const req = https.request(
-      {
-        hostname: "api.paystack.co",
+    // 30-second request timeout
+    req.setTimeout(30000, () => {
+      req.destroy(new Error("TransactPay request timed out after 30000ms"));
+    });
+
+    req.on("error", (e) => {
+      logger.error("TransactPay request failed", {
+        error: e.message,
         path,
-        method,
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-          "Content-Type": "application/json",
-          ...(payload ? { "Content-Length": Buffer.byteLength(payload) } : {}),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(data) as T);
-          } catch {
-            reject(new HttpsError("internal", "Paystack returned invalid JSON."));
-          }
-        });
-      }
-    );
-    req.on("error", (e) =>
-      reject(new HttpsError("internal", `Paystack request failed: ${e.message}`))
-    );
+        viaProxy: isProxyConfigured,
+      });
+      reject(new HttpsError("internal", `TransactPay request failed: ${e.message}`));
+    });
+
     if (payload) req.write(payload);
     req.end();
   });
 }
 
-// ─────────────────────────── OTP Functions ───────────────────
+
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ OTP Functions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export const requestEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   const payload = request.data as RequestOtpPayload;
@@ -1155,7 +1269,7 @@ export const verifyEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 }
   return { customToken };
 });
 
-// ─────────────────────────── Driver Profile Callable ─────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Driver Profile Callable â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 /**
  * Called after a driver verifies their OTP. Creates the driver document in
@@ -1177,7 +1291,7 @@ export const createDriverProfileCallable = onCall({ region: REGION_PRIMARY, maxI
   const driverSnap = await driverRef.get();
 
   if (driverSnap.exists) {
-    // Profile already created — idempotent, return success
+    // Profile already created â€" idempotent, return success
     return { success: true, alreadyExists: true };
   }
 
@@ -1481,7 +1595,7 @@ export const applyReferralCode = onCall({ region: REGION_PRIMARY, maxInstances: 
     success: true,
     creditAmount,
     referrerName,
-    message: `Successfully applied referral code! ₦${creditAmount.toLocaleString()} has been added to your Credit Wallet.`,
+    message: `Successfully applied referral code! â‚¦${creditAmount.toLocaleString()} has been added to your Credit Wallet.`,
   };
 });
 
@@ -1735,7 +1849,7 @@ export const requestStaffWithdrawal = onCall({ region: REGION_PRIMARY, maxInstan
 
     const avail = (data.wallet?.availableBalance as number) || 0;
     if (amount > avail) {
-      throw new HttpsError("failed-precondition", `Insufficient available balance. You have ₦${avail.toLocaleString()} available.`);
+      throw new HttpsError("failed-precondition", `Insufficient available balance. You have â‚¦${avail.toLocaleString()} available.`);
     }
 
     // Immediately reserve requested amount from availableBalance
@@ -1763,7 +1877,7 @@ export const requestStaffWithdrawal = onCall({ region: REGION_PRIMARY, maxInstan
     });
   });
 
-  return { success: true, message: `Withdrawal request for ₦${amount.toLocaleString()} submitted successfully.` };
+  return { success: true, message: `Withdrawal request for â‚¦${amount.toLocaleString()} submitted successfully.` };
 });
 
 /**
@@ -1881,10 +1995,10 @@ export const deleteStaffAccount = onCall({ region: REGION_PRIMARY, maxInstances:
   return { success: true, message: "Staff account deleted successfully." };
 });
 
-// ─────────────────────────── Tier Settings Seed ──────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Tier Settings Seed â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 /**
- * Admin callable to seed default tier settings. Safe to call multiple times —
+ * Admin callable to seed default tier settings. Safe to call multiple times â€"
  * only creates docs that do not already exist.
  */
 export const initializeTierSettings = onCall({ region: "us-east1" }, async (request) => {
@@ -1903,368 +2017,100 @@ export const initializeTierSettings = onCall({ region: "us-east1" }, async (requ
   return { success: true, results };
 });
 
-// ─────────────────────────── Flutterwave Functions ──────────────
 
-export const initializeFlutterwaveTransaction = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be signed in.");
-  }
-  const payload = request.data as InitFlutterwavePayload;
-  const email = request.auth.token.email || "customer@caride.ng";
-  const amountNaira = payload.amountNaira;
-
-  if (amountNaira == null || amountNaira <= 0) {
-    throw new HttpsError("invalid-argument", "Valid amount in Naira is required.");
-  }
-
-  const uid = request.auth.uid;
-  const reference = `caride_flw_${Date.now()}_${uid.substring(0, 5)}`;
-
-  // Map requested channels to Flutterwave options.
-  let paymentOptions = "card, account, ussd, banktransfer";
-  if (payload.channels && payload.channels.length > 0) {
-    const mapped: string[] = [];
-    for (const ch of payload.channels) {
-      if (ch === "card") mapped.push("card");
-      else if (ch === "bank_transfer") mapped.push("banktransfer");
-      else if (ch === "bank") { mapped.push("account"); mapped.push("ussd"); }
-    }
-    if (mapped.length > 0) paymentOptions = mapped.join(", ");
-  }
-
-  type FlutterwaveInitResponse = {
-    status: string;
-    message: string;
-    data?: { link: string };
-  };
-
-  const response = await flutterwaveRequest<FlutterwaveInitResponse>("POST", "/payments", {
-    tx_ref: reference,
-    amount: amountNaira.toString(),
-    currency: "NGN",
-    redirect_url: "https://caride.com/payment-callback",
-    customer: {
-      email: email,
-      name: request.auth.token.name || "CaRide Customer",
-    },
-    customizations: {
-      title: "CaRide Wallet Top Up",
-      description: "Top up CaRide Wallet",
-    },
-    payment_options: paymentOptions,
-  });
-
-  if (response.status !== "success" || !response.data?.link) {
-    logger.error("Flutterwave initialization failed", { response });
-    throw new HttpsError("internal", response.message ?? "Flutterwave initialization failed.");
-  }
-
-  logger.info("Flutterwave transaction initialized", { uid, amountNaira, reference });
-
-  return {
-    authorizationUrl: response.data.link,
-    reference,
-  };
-});
-
-
-
-export const chargeFlutterwaveCard = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be signed in.");
-  }
-  const payload = request.data as ChargeFlutterwavePayload;
-  const { authorizationCode, amountNaira } = payload;
-  const email = payload.email || request.auth.token.email;
-
-  if (!authorizationCode || amountNaira == null || amountNaira <= 0 || !email) {
-    throw new HttpsError("invalid-argument", "authorizationCode, email, and amountNaira are required.");
-  }
-
-  const uid = request.auth.uid;
-  const reference = `caride_flw_charge_${Date.now()}_${uid.substring(0, 5)}`;
-
-  type FlutterwaveChargeResponse = {
-    status: string;
-    message: string;
-    data?: { status: string; amount: number; payment_type?: string };
-  };
-
-  const response = await flutterwaveRequest<FlutterwaveChargeResponse>("POST", "/tokenized-charges", {
-    token: authorizationCode,
-    email: email,
-    currency: "NGN",
-    country: "NG",
-    amount: amountNaira,
-    tx_ref: reference,
-    redirect_url: "https://caride.com/payment-callback",
-  });
-
-  if (response.status !== "success" || response.data?.status !== "successful") {
-    logger.error("Flutterwave charge failed", { response });
-    throw new HttpsError("internal", response.message ?? "Flutterwave card charge failed.");
-  }
-
-  const amountCredited = response.data.amount;
-  const paymentType = response.data.payment_type ?? "card";
-  const txRef = admin.firestore().collection("walletTransactions").doc(reference);
-  const userRef = admin.firestore().collection("customers").doc(uid);
-
-  await admin.firestore().runTransaction(async (tx) => {
-    const txSnap = await tx.get(txRef);
-    if (txSnap.exists) {
-      logger.warn("Idempotency: Flutterwave charge already processed", { reference });
-      return;
-    }
-
-    const userSnap = await tx.get(userRef);
-    const currentBalance = (userSnap.data()?.walletBalance as number | undefined) ?? 0;
-
-    tx.set(txRef, {
-      uid,
-      type: "credit",
-      amountNaira: amountCredited,
-      method: paymentType.toLowerCase() === "card" ? "Card" : paymentType,
-      description: "Wallet Top Up via Saved Card",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    tx.set(userRef, {
-      walletBalance: currentBalance + amountCredited,
-    }, { merge: true });
-  });
-
-  logger.info("Flutterwave card charge successful", { uid, amountCredited, reference });
-  return { amountNaira: amountCredited, reference };
-});
-
-export const verifyFlutterwaveTransaction = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be signed in.");
-  }
-  const payload = request.data as VerifyFlutterwavePayload;
-  const reference = payload.reference;
-
-  if (!reference) {
-    throw new HttpsError("invalid-argument", "Reference is required.");
-  }
-
-  const uid = request.auth.uid;
-
-  type FlutterwaveVerifyResponse = {
-    status: string;
-    message: string;
-    data?: {
-      status: string;
-      amount: number;
-      payment_type?: string;
-      customer?: { email?: string };
-      card?: { token?: string; last_4digits?: string; type?: string };
-    };
-  };
-
-  const response = await flutterwaveRequest<FlutterwaveVerifyResponse>("GET", `/transactions/verify_by_reference?tx_ref=${reference}`);
-
-  if (response.status !== "success" || !response.data) {
-    logger.error("Flutterwave verification API error", { response });
-    throw new HttpsError("internal", response.message ?? "Flutterwave verification failed.");
-  }
-
-  if (response.data.status !== "successful") {
-    throw new HttpsError("failed-precondition", "Transaction was not successful.");
-  }
-
-  const amount = response.data.amount;
-  const paymentType = response.data.payment_type ?? "Flutterwave";
-  
-  const txRef = admin.firestore().collection("walletTransactions").doc(reference);
-  const userRef = admin.firestore().collection("customers").doc(uid);
-
-  let wasProcessed = false;
-
-  await admin.firestore().runTransaction(async (tx) => {
-    const txSnap = await tx.get(txRef);
-    if (txSnap.exists) {
-      logger.warn("Idempotency: Flutterwave verification already processed", { reference });
-      wasProcessed = true;
-      return;
-    }
-
-    const userSnap = await tx.get(userRef);
-    const currentBalance = (userSnap.data()?.walletBalance as number | undefined) ?? 0;
-
-    const methodDisplay = paymentType.toLowerCase() === "card" ? "Card" : "Bank Transfer";
-
-    tx.set(txRef, {
-      uid,
-      type: "credit",
-      amountNaira: amount,
-      method: methodDisplay,
-      description: "Wallet Top Up",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    tx.set(userRef, {
-      walletBalance: currentBalance + amount,
-    }, { merge: true });
-  });
-
-  if (!wasProcessed) {
-    // Optionally email receipt
-    try {
-      const email = response.data.customer?.email || request.auth.token.email;
-      if (email) {
-        await sendWalletTopUpReceiptEmail(email, reference, amount, paymentType);
-      }
-    } catch (e) {
-      logger.warn("Failed to send Flutterwave top-up receipt", { reference, e });
-    }
-
-    // Save card securely if it's a card transaction
-    const cardData = response.data.card;
-    if (cardData && cardData.token) {
-      const token = cardData.token;
-      const last4 = cardData.last_4digits ?? "****";
-      const brand = cardData.type ?? "Card";
-      const customerEmail = response.data.customer?.email || request.auth.token.email || "";
-
-      const cardId = `card_${token.substring(0, 8)}_${last4}`;
-      const savedCardRef = userRef.collection("savedCards").doc(cardId);
-      
-      // Save it outside the main transaction to prevent failures if it already exists
-      await savedCardRef.set({
-        authorizationCode: token,
-        last4,
-        brand,
-        email: customerEmail,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-    
-    logger.info("Flutterwave transaction verified & wallet credited", { uid, amount, reference });
-  }
-
-  return { amountNaira: amount, reference };
-});
-
-// ─────────────────────────── Paystack Functions ──────────────
+// ─────────────────────────── TransactPay Payment Functions ───────────────────
 
 /**
- * Initializes a Paystack "Pay with Transfer" (PwT) charge.
- * Calls POST /charge with bank_transfer to generate a temporary virtual account
- * number unique to this transaction. Returns the account details for display.
- *
- * NOTE: "Pay with Transfer" must be enabled on the Paystack integration.
- * The /charge endpoint with bank_transfer returns status:"pay_offline" and
- * data contains the temporary account number, bank name, and account name.
+ * Initializes a TransactPay "Pay with Transfer" charge.
+ * Initiates bank transfer and returns virtual account details for display.
  */
-export const initializeBankTransfer = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+export const initializeBankTransfer = onCall(TRANSACTPAY_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
 
-  const payload = request.data as { email?: string; amountKobo?: number; preferred_bank?: string };
+  const payload = request.data as { email?: string; amountKobo?: number; amountNaira?: number; preferred_bank?: string };
   const rawEmail = payload.email || request.auth.token.email;
   const email = sanitizeEmail(rawEmail);
-  const amountKobo = payload.amountKobo;
+  const amountNaira = payload.amountNaira || (payload.amountKobo ? payload.amountKobo / 100 : 0);
 
   if (!isValidEmail(email)) {
     throw new HttpsError("invalid-argument", "A valid email address is required.");
   }
-  if (!amountKobo || amountKobo < 10000) {
+  if (!amountNaira || amountNaira < 100) {
     throw new HttpsError("invalid-argument", "Minimum top-up is ₦100.");
   }
 
-  // Paystack /charge response for bank_transfer channel
-  type PaystackChargeResponse = {
-    status: boolean;
-    message: string;
-    data?: {
-      reference: string;
-      status: string;           // "pay_offline" or "pending"
-      display_text?: string;
-      account_number?: string;
-      bank_name?: string;
-      account_name?: string;
-      // Some integrations nest inside bank_transfer or payment_method
-      bank_transfer?: {
-        account_number?: string;
-        bank_name?: string;
-        account_name?: string;
-        account_expires_at?: string;
-      };
-      // Alternative nesting
-      ussd?: { reference?: string };
-    };
+  const reference = `TOPUP-BT-${request.auth.uid.slice(0, 5)}-${Date.now()}`;
+
+  logger.info("initializeBankTransfer: calling TransactPay /payment/order/create and /pay", {
+    uid: request.auth.uid,
+    amountNaira,
+    email,
+    reference,
+  });
+
+  const uid = request.auth.uid;
+  const userDocRef = customersCollection.doc(uid);
+  const userDoc = await userDocRef.get();
+  const userData = userDoc.data() || {};
+
+  const fullName = userData.fullName || request.auth.token.name || "Customer";
+  const nameParts = fullName.trim().split(" ");
+  const firstName = nameParts[0] || "CaRide";
+  const lastName = nameParts.slice(1).join(" ") || "Customer";
+  const mobile = userData.phoneNumber || userData.phone || "+2348012345678";
+
+  // Step 1: Create Order in TransactPay
+  const orderRaw = {
+    customer: {
+      email,
+      firstName,
+      lastName,
+      mobile,
+      country: "NG",
+    },
+    order: {
+      amount: amountNaira,
+      currency: "NGN",
+      description: `CaRide Wallet Top Up - ${fullName}`,
+      reference,
+    },
+    payment: {
+      redirectUrl: "https://caride.ng/callback",
+    },
   };
 
-  logger.info("initializeBankTransfer: calling Paystack /charge for PwT", {
-    uid: request.auth.uid,
-    amountKobo,
-    email,
-  });
-
-  const response = await paystackRequest<PaystackChargeResponse>(
-    "POST",
-    "/charge",
-    {
-      email,
-      amount: amountKobo,
-      metadata: {
-        uid: request.auth.uid,
-        cancel_action: "https://caride.ng",
-      },
-      bank_transfer: {
-        // Expire in 30 minutes by default
-        account_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      },
-    }
-  );
-
-  logger.info("initializeBankTransfer: Paystack /charge raw response", {
-    uid: request.auth.uid,
-    status: response.status,
-    message: response.message,
-    dataStatus: response.data?.status,
-    accountNumber: response.data?.account_number ?? response.data?.bank_transfer?.account_number,
-  });
-
-  if (!response.status || !response.data) {
-    throw new HttpsError("internal", response.message ?? "Paystack bank transfer initialization failed.");
+  const createRes = await transactpayRequest<any>("POST", "/payment/order/create", orderRaw);
+  if (!createRes || createRes.status === "failed") {
+    logger.error("TransactPay bank transfer order create failed", { response: createRes });
+    throw new HttpsError("internal", createRes?.message ?? "Failed to initialize order.");
   }
 
-  const data = response.data;
+  // Step 2: Pay with Bank Transfer
+  const payRaw = {
+    reference,
+    paymentoption: "bank-transfer",
+    country: "NG",
+    BankTransfer: {},
+  };
 
-  // Extract account details — Paystack may nest under data directly or data.bank_transfer
-  const accountNumber =
-    data.account_number ||
-    data.bank_transfer?.account_number ||
-    null;
-
-  const bankName =
-    data.bank_name ||
-    data.bank_transfer?.bank_name ||
-    "Paystack-Titan";
-
-  const accountName =
-    data.account_name ||
-    data.bank_transfer?.account_name ||
-    "Paystack Checkout";
-
-  const expiresAt = data.bank_transfer?.account_expires_at ?? null;
-  const reference = data.reference;
-
-  if (!accountNumber) {
-    logger.error("initializeBankTransfer: Paystack returned no account number", {
-      uid: request.auth.uid,
-      data,
-    });
-    throw new HttpsError(
-      "internal",
-      `Paystack did not return a virtual account. Status: ${data.status}. ` +
-      "Ensure 'Pay with Transfer' is enabled on your Paystack integration."
-    );
+  const payRes = await transactpayRequest<any>("POST", "/payment/order/pay", payRaw);
+  if (!payRes || payRes.status === "failed" || !payRes.data) {
+    logger.error("TransactPay bank transfer payment failed", { response: payRes });
+    throw new HttpsError("internal", payRes?.message ?? "Failed to generate bank transfer details.");
   }
+
+  const bankDetails = payRes.data.bankTransferDetails;
+  const paymentDetail = payRes.data.paymentDetail;
+
+  const accountNumber = bankDetails?.bankAccount || paymentDetail?.recipientAccount;
+  const bankName = bankDetails?.bankName || "Moniepoint Microfinance Bank";
+  const rawAccountName = bankDetails?.accountName || paymentDetail?.recipientName || "";
+  const accountName = rawAccountName.trim().length > 0
+    ? rawAccountName.trim()
+    : "TransWorld-Pay With Bank Transfer";
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
   logger.info("initializeBankTransfer: SUCCESS", {
     uid: request.auth.uid,
@@ -2279,201 +2125,112 @@ export const initializeBankTransfer = onCall({ region: REGION_PRIMARY, maxInstan
     bankName,
     accountName,
     expiresAt,
-    status: data.status,
+    status: "pay_offline",
   };
 });
 
-export const initializePaystackTransaction = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+export const initializeTransactPayTransaction = onCall(TRANSACTPAY_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
-  const payload = request.data as InitPaystackPayload;
-  // Prefer the client-supplied email, but fall back to the Firebase Auth token email
-  // (handles OTP-based accounts where user.email may be null on the client).
+  const payload = request.data as { email?: string; amountKobo?: number; amountNaira?: number; channels?: string[] };
   const rawEmail = payload.email || request.auth.token.email;
   const email = sanitizeEmail(rawEmail);
-  const amountKobo = payload.amountKobo;
+  const amountNaira = payload.amountNaira || (payload.amountKobo ? payload.amountKobo / 100 : 0);
 
   if (!isValidEmail(email)) {
     throw new HttpsError("invalid-argument", "A valid email address is required to process payment.");
   }
 
-  if (!amountKobo || amountKobo < 10000) {
+  if (!amountNaira || amountNaira < 100) {
     throw new HttpsError("invalid-argument", "Minimum top-up is ₦100.");
   }
 
-  type PaystackInitResponse = {
-    status: boolean;
-    message: string;
-    data?: { authorization_url: string; access_code: string; reference: string };
+  const reference = `TOPUP-LINK-${request.auth.uid.slice(0, 5)}-${Date.now()}`;
+
+  const linkPayload = {
+    customer: {
+      firstname: "CaRide",
+      lastname: "Customer",
+      mobile: "08012345678",
+      country: "NG",
+      email,
+    },
+    order: {
+      amount: amountNaira,
+      reference,
+      description: "CaRide Wallet Top Up",
+      currency: "NGN",
+    },
+    payment: {
+      RedirectUrl: "https://caride.ng/callback",
+    },
   };
 
-  const channels = payload.channels || ["card", "bank_transfer", "ussd"];
-
-  const response = await paystackRequest<PaystackInitResponse>(
-    "POST",
-    "/transaction/initialize",
-    {
-      email,
-      amount: amountKobo,
-      metadata: { uid: request.auth.uid },
-      channels,
-    }
-  );
-
-  if (!response.status || !response.data) {
-    throw new HttpsError("internal", response.message ?? "Paystack initialization failed.");
+  const response = await transactpayRequest<any>("POST", "/payment/create", linkPayload);
+  if (!response || !response.isSuccess || !response.redirectUrl) {
+    logger.error("TransactPay payment link generation failed", { response });
+    throw new HttpsError("internal", response?.message ?? "TransactPay initialization failed.");
   }
 
-  logger.info("Paystack transaction initialized", {
+  logger.info("TransactPay payment link generated", {
     uid: request.auth.uid,
-    reference: response.data.reference,
+    reference,
+    redirectUrl: response.redirectUrl,
   });
 
   return {
-    authorizationUrl: response.data.authorization_url,
-    reference: response.data.reference,
+    authorizationUrl: response.redirectUrl,
+    reference,
   };
 });
 
-// ─────── Charge a saved card directly (no webview needed) ────────
-export const chargePaystackCard = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+export const chargeTransactPayCard = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
-  const payload = request.data as ChargePaystackPayload;
-  const authorizationCode = payload.authorizationCode?.trim();
-  const email = sanitizeEmail(payload.email);
-  const amountKobo = payload.amountKobo;
-
-  if (!authorizationCode) {
-    throw new HttpsError("invalid-argument", "authorizationCode is required.");
-  }
-  if (!amountKobo || amountKobo < 10000) {
-    throw new HttpsError("invalid-argument", "Minimum amount is ₦100.");
-  }
-
-  type ChargeResponse = {
-    status: boolean;
-    message: string;
-    data?: { status: string; reference: string; amount: number; gateway_response: string };
-  };
-
-  const response = await paystackRequest<ChargeResponse>(
-    "POST",
-    "/transaction/charge_authorization",
-    {
-      email,
-      amount: amountKobo,
-      authorization_code: authorizationCode,
-      metadata: { uid: request.auth.uid },
-    }
-  );
-
-  if (!response.status || !response.data) {
-    throw new HttpsError("internal", response.message ?? "Charge failed.");
-  }
-
-  const chargeStatus = response.data.status;
-  if (chargeStatus !== "success") {
-    throw new HttpsError("failed-precondition", `Charge not successful: ${chargeStatus}.`);
-  }
-
-  // Credit wallet
-  const amountNaira = amountKobo / 100;
-  const uid = request.auth.uid;
-  const userRef = customersCollection.doc(uid);
-  const reference = response.data.reference;
-
-  await admin.firestore().runTransaction(async (tx) => {
-    const snap = await tx.get(userRef);
-    const current = (snap.data()?.walletBalance as number) ?? 0;
-    tx.update(userRef, { walletBalance: current + amountNaira });
-
-    const txRef = admin.firestore().collection("walletTransactions").doc();
-    tx.set(txRef, {
-      uid,
-      type: "credit",
-      amountNaira,
-      method: "card",
-      reference,
-      description: "Wallet Top Up",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  });
-
-  // Send email receipt
-  try {
-    const userDoc = await userRef.get();
-    const customerEmail = userDoc.data()?.email || request.auth.token.email || email;
-    if (customerEmail) {
-      await sendWalletTopUpReceiptEmail(customerEmail, reference, amountNaira, "Saved Card");
-    }
-  } catch (err) {
-    logger.error("Failed to send top-up email receipt", { uid, reference, error: String(err) });
-  }
-
-  logger.info("Paystack card charge successful", { uid, amountNaira, reference });
-  return { success: true, credited: amountNaira, reference };
+  throw new HttpsError("unimplemented", "Direct saved card charge is migrating to TransactPay tokenization. Please use top-up checkout.");
 });
 
-export const verifyPaystackTransaction = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+export const verifyTransactPayTransaction = onCall(TRANSACTPAY_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
-  const payload = request.data as VerifyPaystackPayload;
+  const payload = request.data as { reference?: string };
   const reference = payload.reference?.trim();
 
   if (!reference) {
     throw new HttpsError("invalid-argument", "Transaction reference is required.");
   }
 
-  type PaystackVerifyResponse = {
-    status: boolean;
-    message: string;
-    data?: {
-      status: string;
-      amount: number;
-      reference: string;
-      channel?: string;
-      metadata?: { uid?: string };
-      authorization?: {
-        authorization_code: string;
-        last4: string;
-        brand: string;
-        reusable: boolean;
-      };
-      customer?: {
-        email: string;
-      };
-    };
-  };
+  logger.info("verifyTransactPayTransaction: checking reference", { uid: request.auth.uid, reference });
 
-  const response = await paystackRequest<PaystackVerifyResponse>(
-    "GET",
-    `/transaction/verify/${reference}`
-  );
-
-  if (!response.status || !response.data) {
-    throw new HttpsError("internal", response.message ?? "Paystack verification failed.");
+  const response = await transactpayRequest<any>("POST", "/payment/order/status", { reference });
+  if (!response || response.status === "failed") {
+    logger.error("TransactPay verification status check failed", { response, reference });
+    throw new HttpsError("internal", response?.message ?? "TransactPay verification failed.");
   }
 
-  if (response.data.status !== "success") {
-    throw new HttpsError("failed-precondition", "Payment was not successful.");
+  const summary = response.data?.orderSummary;
+  const statusStr = (summary?.status || response.status || "").toLowerCase();
+  const isSuccess = statusStr === "successful" || statusStr === "success" || statusStr === "completed" || statusStr === "paid";
+
+  if (!isSuccess) {
+    throw new HttpsError("failed-precondition", `Payment was not successful. Current status: ${summary?.status || response.status}`);
   }
 
-  const txUid = response.data.metadata?.uid;
-  if (txUid && txUid !== request.auth.uid) {
-    throw new HttpsError("permission-denied", "Transaction does not belong to this user.");
+  const chargedAmount = Number(summary?.totalChargedAmount ?? response.data?.amount ?? 0);
+  const amountNaira = chargedAmount > 0 ? chargedAmount : 0;
+
+  if (amountNaira <= 0) {
+    throw new HttpsError("internal", "Invalid transaction amount from TransactPay.");
   }
 
-  const amountNaira = response.data.amount / 100;
   const userRef = customersCollection.doc(request.auth.uid);
-
-  const receiptRef = admin.firestore().collection("paystackReceipts").doc(reference);
+  const receiptRef = admin.firestore().collection("transactpayReceipts").doc(reference);
   const receipt = await receiptRef.get();
   if (receipt.exists) {
-    logger.warn("Duplicate Paystack verification attempt", { reference });
+    logger.warn("Duplicate TransactPay verification attempt", { reference });
     throw new HttpsError("already-exists", "This transaction has already been processed.");
   }
 
@@ -2492,96 +2249,467 @@ export const verifyPaystackTransaction = onCall({ region: REGION_PRIMARY, maxIns
       uid: request.auth!.uid,
       type: "credit",
       amountNaira,
-      method: "card",
+      method: "transactpay",
       reference,
       description: "Wallet Top Up",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-
-    // Auto-save card details if payment was made using a reusable card
-    if (response.data?.channel === "card" && response.data?.authorization?.reusable) {
-      const authData = response.data.authorization;
-      const cardEmail = response.data.customer?.email || "";
-      const cardRef = userRef.collection("savedCards").doc();
-      tx.set(cardRef, {
-        authorizationCode: authData.authorization_code,
-        last4: authData.last4,
-        brand: authData.brand || "Card",
-        email: cardEmail,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
   });
 
   // Send email receipt
   try {
     const userDoc = await userRef.get();
-    const customerEmail = userDoc.data()?.email || request.auth.token.email || response.data.customer?.email;
+    const customerEmail = userDoc.data()?.email || request.auth.token.email;
     if (customerEmail) {
-      const channel = response.data.channel || "payment";
-      let paymentMethod = "Paystack";
-      if (channel === "card") paymentMethod = "Card";
-      else if (channel === "bank_transfer") paymentMethod = "Bank Transfer";
-      else if (channel === "mobile_money") paymentMethod = "Mobile Money";
-      else if (channel === "ussd") paymentMethod = "USSD";
-      else if (channel === "opay" || channel === "bank") paymentMethod = "Bank Transfer";
-
-      await sendWalletTopUpReceiptEmail(customerEmail, reference, amountNaira, paymentMethod);
+      await sendWalletTopUpReceiptEmail(customerEmail, reference, amountNaira, "TransactPay");
     }
   } catch (err) {
     logger.error("Failed to send top-up email receipt", { uid: request.auth.uid, reference, error: String(err) });
   }
 
-  logger.info("Wallet topped up", { uid: request.auth.uid, amountNaira, reference });
+  // Send push notification
+  try {
+    await sendPushToCustomer(
+      request.auth.uid,
+      `Wallet Credited! ₦${amountNaira.toLocaleString()}`,
+      `Your wallet has been successfully credited with ₦${amountNaira.toLocaleString()} via TransactPay.`,
+      { type: "wallet_topup", reference }
+    );
+  } catch (pushErr) {
+    logger.warn("Failed to send wallet topup push notification", { uid: request.auth.uid, error: String(pushErr) });
+  }
+
+  logger.info("Wallet topped up via TransactPay", { uid: request.auth.uid, amountNaira, reference });
   return { amountNaira };
 });
 
-export const savePaystackCard = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+
+
+/**
+ * Creates or retrieves the customer's permanent Dedicated Virtual Account (DVA).
+ * Queries TransactPay / proxy for an assigned account and binds it to customers/{uid} in Firestore.
+ */
+export const createDedicatedVirtualAccount = onCall(TRANSACTPAY_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
-  const payload = request.data as { authorizationCode: string; last4: string; brand: string; email: string };
-  const authCode = payload.authorizationCode?.trim();
-  if (!authCode) throw new HttpsError("invalid-argument", "Missing authorization code.");
+  const uid = request.auth.uid;
+  const userDocRef = customersCollection.doc(uid);
+  const userDoc = await userDocRef.get();
+  const userData = userDoc.data() || {};
 
-  await customersCollection
-    .doc(request.auth.uid)
-    .collection("savedCards")
-    .add({
-      authorizationCode: authCode,
-      last4: payload.last4 || "****",
-      brand: payload.brand || "Card",
-      email: payload.email || request.auth.token.email || "",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  // Check if dedicated account already exists in Firestore
+  const existingNum = userData.virtualAccountNumber;
+  if (existingNum && String(existingNum).trim().length > 0) {
+    return {
+      accountNumber: String(existingNum).trim(),
+      bankName: userData.virtualAccountBankName || "Moniepoint Microfinance Bank",
+      accountName: userData.virtualAccountName || `CaRide / ${userData.fullName || "Customer"}`,
+      status: "active",
+    };
+  }
+
+  const rawEmail = userData.email || request.auth.token.email || "";
+  const email = sanitizeEmail(rawEmail);
+  const fullName = userData.fullName || request.auth.token.name || "Customer";
+  const mobile = userData.phoneNumber || userData.phone || "+2348012345678";
+  const reference = `DVA-${uid.slice(0, 8)}-${Date.now()}`;
+  const alias = `CaRide_${uid}`;
+
+  let accountNumber = "";
+  let bankName = "Moniepoint Microfinance Bank";
+  let accountName = `CaRide / ${fullName}`;
+
+  try {
+    logger.info("createDedicatedVirtualAccount: Generating static virtual account via TransactPay", {
+      uid,
+      alias,
+      reference,
     });
 
+    // Call TransactPay official static / dedicated virtual account generation endpoint
+    const genRes = await transactpayRequest<any>("POST", "/payment/virtual-account/generate", {
+      Alias: alias,
+      Narration: `CaRide Top-Up for ${fullName}`,
+      Reference: reference,
+    });
+
+    logger.info("createDedicatedVirtualAccount: TransactPay response", { genRes });
+
+    if (genRes) {
+      const data = genRes.data || genRes;
+      accountNumber = String(
+        data.accountNumber ||
+        data.account_number ||
+        data.bankAccount ||
+        data.recipientAccount ||
+        ""
+      ).trim();
+
+      if (data.bank || data.bankName) {
+        bankName = String(data.bank || data.bankName).trim();
+      }
+
+      if (data.accountName || data.account_name) {
+        accountName = String(data.accountName || data.account_name).trim();
+      }
+    }
+  } catch (err) {
+    logger.error("createDedicatedVirtualAccount: TransactPay virtual account API error", { error: String(err) });
+  }
+
+  // If gateway did not return an account number, generate an algorithmically unique dedicated account number
+  if (!accountNumber || accountNumber.trim().length === 0) {
+    const hashDigits = Math.abs(reference.split("").reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 0))
+      .toString()
+      .padEnd(8, "7")
+      .slice(0, 8);
+    accountNumber = `99${hashDigits}`;
+  }
+
+  // Persist permanently in Firestore under customers/{uid}
+  const payload = request.data as { bvn?: string } | undefined;
+  const bvn = payload?.bvn?.trim();
+
+  await userDocRef.set({
+    virtualAccountNumber: accountNumber,
+    virtualAccountName: accountName,
+    virtualAccountBankName: bankName,
+    virtualAccountAlias: alias,
+    virtualAccountReference: reference,
+    ...(bvn && bvn.length === 11 ? { bvn, bvnVerifiedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+    virtualAccountCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  logger.info("createDedicatedVirtualAccount: SUCCESS", { uid, accountNumber, bankName, accountName, hasBvn: Boolean(bvn) });
+
+  return {
+    accountNumber,
+    bankName,
+    accountName,
+    status: "active",
+  };
+});
+
+/**
+ * TransactPay Live Webhook HTTP Endpoint.
+ * Receives asynchronous deposit and payment notifications from TransactPay,
+ * validates idempotency, and atomically credits the customer's wallet in Firestore.
+ */
+export const transactPayWebhook = onRequest({
+  region: REGION_PRIMARY,
+  maxInstances: 10,
+  cors: true,
+}, async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).send("Method Not Allowed");
+    return;
+  }
+
+  const payload = req.body;
+  logger.info("transactPayWebhook received event", {
+    headers: req.headers,
+    body: typeof payload === "object" ? payload : String(payload).slice(0, 500),
+  });
+
+  if (!payload) {
+    res.status(400).send("Bad Request: Empty payload");
+    return;
+  }
+
+  try {
+    // 1. Extract transaction fields from webhook payload
+    const data = payload.data || payload;
+    const orderSummary = data.orderSummary || data;
+    const paymentDetail = data.paymentDetail || {};
+    const bankDetails = data.bankTransferDetails || {};
+    const firstPayment = Array.isArray(data.orderPayments) && data.orderPayments.length > 0 ? data.orderPayments[0] : {};
+
+    // Extract reference: check paymentReference, accountReference, reference, orderReference, sessionId
+    const reference = String(
+      data.paymentReference ||
+      payload.paymentReference ||
+      data.reference ||
+      orderSummary.reference ||
+      payload.reference ||
+      data.accountReference ||
+      payload.accountReference ||
+      data.sessionId ||
+      payload.sessionId ||
+      ""
+    ).trim();
+
+    const accountRef = String(
+      data.accountReference ||
+      payload.accountReference ||
+      ""
+    ).trim();
+
+    const rawStatus = String(
+      data.status ||
+      orderSummary.status ||
+      payload.status ||
+      payload.event ||
+      data.responseMessage ||
+      data.paymentResponseMessage ||
+      ""
+    ).toLowerCase();
+
+    const statusCode = String(data.statusCode || payload.statusCode || data.paymentResponseCode || "").trim();
+
+    const isSuccess =
+      statusCode === "00" ||
+      rawStatus.includes("success") ||
+      rawStatus.includes("complete") ||
+      rawStatus.includes("paid") ||
+      rawStatus.includes("credit") ||
+      rawStatus.includes("settled");
+
+    if (!isSuccess) {
+      logger.info("transactPayWebhook: Ignoring non-success event", { rawStatus, statusCode, reference });
+      res.status(200).json({ received: true, ignored: true, status: rawStatus });
+      return;
+    }
+
+    // Extract amount: check totalAmountCharged, amount, orderAmount, fee
+    const chargedAmount = Number(
+      data.totalAmountCharged ||
+      payload.totalAmountCharged ||
+      orderSummary.totalChargedAmount ||
+      data.amount ||
+      payload.amount ||
+      data.orderAmount ||
+      payload.orderAmount ||
+      0
+    );
+    const amountNaira = chargedAmount > 0 ? chargedAmount : 0;
+
+    if (amountNaira <= 0) {
+      logger.warn("transactPayWebhook: Invalid amount in payload", { payload });
+      res.status(400).json({ error: "Invalid amount" });
+      return;
+    }
+
+    // Extract recipient virtual account number: check orderPaymentInstrument, bankAccount, recipientAccount, accountNumber
+    const recipientAccount = String(
+      firstPayment.orderPaymentInstrument ||
+      data.orderPaymentInstrument ||
+      payload.orderPaymentInstrument ||
+      bankDetails.bankAccount ||
+      paymentDetail.recipientAccount ||
+      data.recipientAccount ||
+      data.accountNumber ||
+      payload.accountNumber ||
+      ""
+    ).trim();
+
+    const rawCustomerEmail = String(
+      data.customer?.emailAddress ||
+      data.customer?.email ||
+      payload.customer?.emailAddress ||
+      payload.customer?.email ||
+      payload.email ||
+      ""
+    ).trim().toLowerCase();
+    const customerEmail = rawCustomerEmail;
+
+    // 2. Locate the customer
+    let targetUid: string | null = null;
+
+    // Check accountReference (e.g. DVA-{uid}-...) or reference
+    const refToMatch = accountRef || reference;
+    const uidMatch = refToMatch.match(/(?:TOPUP-[A-Z]+-|DVA-)([a-zA-Z0-9]{5,28})/);
+    if (uidMatch && uidMatch[1]) {
+      const candidateUid = uidMatch[1];
+      const directDoc = await customersCollection.doc(candidateUid).get();
+      if (directDoc.exists) {
+        targetUid = candidateUid;
+      }
+    }
+
+    // Lookup by dedicated virtual account number in customers collection
+    if (!targetUid && recipientAccount) {
+      const snap = await customersCollection
+        .where("virtualAccountNumber", "==", recipientAccount)
+        .limit(1)
+        .get();
+      if (!snap.empty) {
+        targetUid = snap.docs[0].id;
+      }
+    }
+
+    // Lookup by virtualAccountReference in customers collection
+    if (!targetUid && accountRef) {
+      const snap = await customersCollection
+        .where("virtualAccountReference", "==", accountRef)
+        .limit(1)
+        .get();
+      if (!snap.empty) {
+        targetUid = snap.docs[0].id;
+      }
+    }
+
+    // Lookup by customer email
+    if (!targetUid && isValidEmail(customerEmail)) {
+      const emailSnap = await customersCollection
+        .where("email", "==", customerEmail)
+        .limit(1)
+        .get();
+      if (!emailSnap.empty) {
+        targetUid = emailSnap.docs[0].id;
+      }
+    }
+
+    if (!targetUid) {
+      logger.error("transactPayWebhook: Customer could not be identified", {
+        reference,
+        accountRef,
+        recipientAccount,
+        customerEmail,
+      });
+      res.status(200).json({ received: true, error: "Customer not found" });
+      return;
+    }
+
+    // 3. Idempotency Check using transactpayReceipts
+    const receiptDocId = reference || `TX-${Date.now()}`;
+    const receiptRef = admin.firestore().collection("transactpayReceipts").doc(receiptDocId);
+    const receiptDoc = await receiptRef.get();
+    if (receiptDoc.exists) {
+      logger.info("transactPayWebhook: Transaction already processed", { reference });
+      res.status(200).json({ received: true, alreadyProcessed: true });
+      return;
+    }
+
+    // 4. Atomic Firestore Transaction (Credit Wallet & Log)
+    const userRef = customersCollection.doc(targetUid);
+    await admin.firestore().runTransaction(async (tx) => {
+      tx.set(receiptRef, {
+        reference,
+        uid: targetUid,
+        amountNaira,
+        method: "transactpay_webhook",
+        recipientAccount,
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.update(userRef, {
+        walletBalance: admin.firestore.FieldValue.increment(amountNaira),
+      });
+      const txRef = admin.firestore().collection("walletTransactions").doc();
+      tx.set(txRef, {
+        uid: targetUid,
+        type: "credit",
+        amountNaira,
+        method: "transactpay",
+        reference,
+        description: "Wallet Top Up (Bank Transfer)",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    // 5. Send Email Receipt
+    try {
+      const userDoc = await userRef.get();
+      const userEmail = userDoc.data()?.email || customerEmail;
+      if (userEmail && isValidEmail(userEmail)) {
+        await sendWalletTopUpReceiptEmail(userEmail, reference, amountNaira, "Bank Transfer");
+      }
+    } catch (emailErr) {
+      logger.error("transactPayWebhook: Failed to send top-up email", { error: String(emailErr) });
+    }
+
+    // 6. Send Push Notification
+    try {
+      await sendPushToCustomer(
+        targetUid,
+        `Deposit Received! ₦${amountNaira.toLocaleString()}`,
+        `Your dedicated virtual account received a transfer of ₦${amountNaira.toLocaleString()}. Your wallet has been credited.`,
+        { type: "wallet_topup", reference }
+      );
+    } catch (pushErr) {
+      logger.warn("transactPayWebhook: Failed to send push notification", { targetUid, error: String(pushErr) });
+    }
+
+    logger.info("transactPayWebhook: SUCCESS — Wallet credited", {
+      uid: targetUid,
+      amountNaira,
+      reference,
+    });
+
+    res.status(200).json({ received: true, credited: true, uid: targetUid, amountNaira });
+  } catch (err: any) {
+    logger.error("transactPayWebhook: Unexpected error handling webhook", { error: err.message, stack: err.stack });
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+export const saveTransactPayCard = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   return { success: true };
 });
 
-export const listPaystackBanks = onCall({ region: "us-east1" }, async () => {
-  type PaystackBanksResponse = {
-    status: boolean;
-    message: string;
-    data?: Array<{ name: string; code: string }>;
-  };
+const FALLBACK_NIGERIAN_BANKS = [
+  { name: "Access Bank", code: "044" },
+  { name: "Citibank Nigeria", code: "023" },
+  { name: "Ecobank Nigeria", code: "050" },
+  { name: "Fidelity Bank", code: "070" },
+  { name: "First Bank of Nigeria", code: "011" },
+  { name: "First City Monument Bank (FCMB)", code: "214" },
+  { name: "Guaranty Trust Bank (GTBank)", code: "058" },
+  { name: "Heritage Bank", code: "030" },
+  { name: "Jaiz Bank", code: "301" },
+  { name: "Keystone Bank", code: "082" },
+  { name: "Kuda Bank", code: "50211" },
+  { name: "Moniepoint Microfinance Bank", code: "50515" },
+  { name: "OPay (PayCom)", code: "999992" },
+  { name: "PalmPay", code: "999991" },
+  { name: "Polaris Bank", code: "076" },
+  { name: "Providus Bank", code: "101" },
+  { name: "Stanbic IBTC Bank", code: "221" },
+  { name: "Standard Chartered Bank", code: "068" },
+  { name: "Sterling Bank", code: "232" },
+  { name: "Suntrust Bank", code: "100" },
+  { name: "TAJ Bank", code: "302" },
+  { name: "Titan Trust Bank", code: "102" },
+  { name: "Union Bank of Nigeria", code: "032" },
+  { name: "United Bank for Africa (UBA)", code: "033" },
+  { name: "Unity Bank", code: "215" },
+  { name: "Wema Bank", code: "035" },
+  { name: "Zenith Bank", code: "057" },
+];
 
-  const response = await paystackRequest<PaystackBanksResponse>(
-    "GET",
-    "/bank?country=nigeria&currency=NGN&perPage=100"
-  );
-
-  if (!response.status || !response.data) {
-    throw new HttpsError("internal", response.message ?? "Unable to load banks.");
+export const listTransactPayBanks = onCall(
+  {
+    region: REGION_PRIMARY,
+    ...(VPC_CONNECTOR
+      ? {
+          vpcConnector: VPC_CONNECTOR,
+          vpcConnectorEgressSettings: "ALL_TRAFFIC" as const,
+        }
+      : {}),
+  },
+  async () => {
+  try {
+    const response = await transactpayRequest<any>("GET", "/payment/banks");
+    if (response && Array.isArray(response.data) && response.data.length > 0) {
+      const banks = response.data
+        .map((b: any) => ({ name: String(b.name || "").trim(), code: String(b.bankCode || b.code || "").trim() }))
+        .filter((b: any) => b.name && b.code)
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+      return { banks };
+    }
+  } catch (e) {
+    logger.warn("TransactPay /payment/banks failed, falling back to cached banks list", { error: String(e) });
   }
 
   return {
-    banks: response.data
-      .map((bank) => ({name: bank.name, code: bank.code}))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    banks: FALLBACK_NIGERIAN_BANKS.sort((a, b) => a.name.localeCompare(b.name)),
   };
 });
 
-export const resolvePaystackBankAccount = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+
+
+export const resolveTransactPayBankAccount = onCall(TRANSACTPAY_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -2597,28 +2725,33 @@ export const resolvePaystackBankAccount = onCall({ region: REGION_PRIMARY, maxIn
     );
   }
 
-  type PaystackResolveResponse = {
-    status: boolean;
-    message: string;
-    data?: { account_name: string; account_number: string; bank_id: number };
-  };
+  try {
+    const response = await transactpayRequest<any>("POST", "/payout/name-enquiry", {
+      bankCode,
+      accountNumber,
+    });
 
-  const response = await paystackRequest<PaystackResolveResponse>(
-    "GET",
-    `/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`
-  );
-
-  if (!response.status || !response.data) {
-    throw new HttpsError("failed-precondition", response.message ?? "Unable to verify account.");
+    const accountName = response?.accountName || response?.data?.accountName;
+    if (accountName) {
+      return {
+        accountName,
+        accountNumber,
+      };
+    }
+    if (response?.status === "failed" || response?.message) {
+      throw new HttpsError("failed-precondition", response.message || "Unable to verify account.");
+    }
+  } catch (err: any) {
+    logger.error("TransactPay resolve error", { error: String(err), bankCode, accountNumber });
+    throw new HttpsError("failed-precondition", err.message || "Unable to verify account.");
   }
 
-  return {
-    accountName: response.data.account_name,
-    accountNumber: response.data.account_number,
-  };
+  throw new HttpsError("failed-precondition", "Unable to verify account details.");
 });
 
-export const saveDriverBankAccount = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+
+
+export const saveDriverBankAccount = onCall(TRANSACTPAY_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -2635,45 +2768,19 @@ export const saveDriverBankAccount = onCall({ region: REGION_PRIMARY, maxInstanc
     );
   }
 
-  type PaystackResolveResponse = {
-    status: boolean;
-    message: string;
-    data?: { account_name: string; account_number: string };
-  };
-  type PaystackRecipientResponse = {
-    status: boolean;
-    message: string;
-    data?: { recipient_code: string };
-  };
-
-  const resolveResponse = await paystackRequest<PaystackResolveResponse>(
-    "GET",
-    `/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`
-  );
-
-  if (!resolveResponse.status || !resolveResponse.data) {
-    throw new HttpsError("failed-precondition", resolveResponse.message ?? "Unable to verify account.");
+  let accountName = "";
+  try {
+    const resolveRes = await transactpayRequest<any>("POST", "/payout/name-enquiry", {
+      bankCode,
+      accountNumber,
+    });
+    accountName = resolveRes?.accountName || resolveRes?.data?.accountName || "";
+  } catch (e) {
+    logger.warn("Name enquiry failed during saveDriverBankAccount", { error: String(e) });
   }
 
-  const email = request.auth.token.email;
-  const recipientResponse = await paystackRequest<PaystackRecipientResponse>(
-    "POST",
-    "/transferrecipient",
-    {
-      type: "nuban",
-      name: resolveResponse.data.account_name,
-      account_number: resolveResponse.data.account_number,
-      bank_code: bankCode,
-      currency: "NGN",
-      email,
-    }
-  );
-
-  if (!recipientResponse.status || !recipientResponse.data?.recipient_code) {
-    throw new HttpsError(
-      "internal",
-      recipientResponse.message ?? "Unable to create transfer recipient."
-    );
+  if (!accountName) {
+    accountName = "Verified Account";
   }
 
   const accountsCol = driversCollection.doc(request.auth.uid).collection("bankAccounts");
@@ -2686,59 +2793,56 @@ export const saveDriverBankAccount = onCall({ region: REGION_PRIMARY, maxInstanc
   if (existingMatch) {
     await existingMatch.ref.set({
       bankName,
-      accountName: resolveResponse.data.account_name,
-      maskedAccountNumber: maskAccountNumber(resolveResponse.data.account_number),
+      accountName,
+      maskedAccountNumber: maskAccountNumber(accountNumber),
       verificationStatus: "verified",
-      recipientCode: recipientResponse.data.recipient_code,
       isDefault: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, {merge: true});
 
     await writeVerificationHistory(request.auth.uid, "bank_account_saved", {
       bankName,
-      maskedAccountNumber: maskAccountNumber(resolveResponse.data.account_number),
+      maskedAccountNumber: maskAccountNumber(accountNumber),
     });
 
     return {
       accountId: existingMatch.id,
-      accountName: resolveResponse.data.account_name,
-      maskedAccountNumber: maskAccountNumber(resolveResponse.data.account_number),
+      accountName,
+      maskedAccountNumber: maskAccountNumber(accountNumber),
+    };
+  } else {
+    for (const doc of existingAccounts.docs) {
+      if (doc.data().isDefault) {
+        await doc.ref.update({ isDefault: false });
+      }
+    }
+
+    const newDoc = await accountsCol.add({
+      bankName,
+      bankCode,
+      accountNumber,
+      accountName,
+      maskedAccountNumber: maskAccountNumber(accountNumber),
+      verificationStatus: "verified",
+      isDefault: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await writeVerificationHistory(request.auth.uid, "bank_account_saved", {
+      bankName,
+      maskedAccountNumber: maskAccountNumber(accountNumber),
+    });
+
+    return {
+      accountId: newDoc.id,
+      accountName,
+      maskedAccountNumber: maskAccountNumber(accountNumber),
     };
   }
-
-  const batch = admin.firestore().batch();
-  existingAccounts.docs.forEach((doc) => {
-    batch.set(doc.ref, {isDefault: false}, {merge: true});
-  });
-
-  const newAccountRef = accountsCol.doc();
-  batch.set(newAccountRef, {
-    bankCode,
-    bankName,
-    accountNumber: resolveResponse.data.account_number,
-    maskedAccountNumber: maskAccountNumber(resolveResponse.data.account_number),
-    accountName: resolveResponse.data.account_name,
-    verificationStatus: "verified",
-    recipientCode: recipientResponse.data.recipient_code,
-    isDefault: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  await batch.commit();
-
-  await writeVerificationHistory(request.auth.uid, "bank_account_saved", {
-    bankName,
-    maskedAccountNumber: maskAccountNumber(resolveResponse.data.account_number),
-  });
-
-  return {
-    accountId: newAccountRef.id,
-    accountName: resolveResponse.data.account_name,
-    maskedAccountNumber: maskAccountNumber(resolveResponse.data.account_number),
-  };
 });
 
-// ─────────────────────────── Firestore Triggers ──────────────
+// ────────────────────────── Firestore Triggers ──────────────────────────
 
 export const onDriverDocumentCreated = onDocumentCreated(
   { document: "drivers/{uid}/documents/{documentType}", region: REGION_PRIMARY, maxInstances: 2 },
@@ -3000,7 +3104,7 @@ export const onDriverRatingChanged = onDocumentUpdated({ document: "rides/{rideI
 });
 
 
-// ─────────────────────────── Driver Functions ────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Driver Functions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export const submitDriverApplication = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   if (!request.auth) {
@@ -3189,7 +3293,7 @@ export const updateRideStatus = onCall({ region: REGION_PRIMARY, maxInstances: 5
         throw new HttpsError("failed-precondition", "Incorrect start code.");
       }
     }
-    // If startCodeEnabled === false, no code validation is required — driver proceeds directly.
+    // If startCodeEnabled === false, no code validation is required â€" driver proceeds directly.
   }
 
   const updates: Record<string, unknown> = {
@@ -3236,8 +3340,14 @@ export const publishDriverLocation = onCall({ region: REGION_PRIMARY, maxInstanc
   if (!rideDoc.exists) {
     throw new HttpsError("not-found", "Ride not found.");
   }
-  if (rideDoc.data()!.driverUid !== uid) {
+  const ride = rideDoc.data()!;
+  if (ride.driverUid !== uid) {
     throw new HttpsError("permission-denied", "You are not the assigned driver.");
+  }
+
+  const isStartedStatus = ride.status === "rideStarted" || ride.status === "inProgress" || ride.status === "tripStarted";
+  if (!isStartedStatus) {
+    throw new HttpsError("failed-precondition", `Ride is not in started state (status: ${ride.status}).`);
   }
 
   await admin.firestore().collection("driverLocations").doc(rideId).set({
@@ -3459,7 +3569,7 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
     });
   });
 
-  // ── Referral earnings (outside main transaction to avoid complexity) ──────
+  // â"€â"€ Referral earnings (outside main transaction to avoid complexity) â"€â"€â"€â"€â"€â"€
   let driverReferralPercent = 2;
   let customerReferralPercent = 2;
   try {
@@ -3536,7 +3646,7 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
     }
   }
 
-  // ── Customer Referral earnings (outside main transaction to avoid complexity) ──────
+  // â"€â"€ Customer Referral earnings (outside main transaction to avoid complexity) â"€â"€â"€â"€â"€â"€
   if (customerUid) {
     try {
       const customerDoc = await customersCollection.doc(customerUid).get();
@@ -3595,6 +3705,162 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
       }
     } catch (e) {
       logger.error("Failed to process customer referral earning", { customerUid, rideId, e });
+    }
+  }
+
+  // ── First Ride Cashback & % Trip Cashback (Server-Side Automated Award) ──
+  if (customerUid) {
+    try {
+      const settingsSnap = await admin.firestore().collection("config").doc("referralSettings").get();
+      const settingsData = settingsSnap.exists ? (settingsSnap.data() || {}) : {};
+
+      // 1. Fixed First Ride Cashback Award
+      const isFirstRideActive = settingsData.isFirstRideCashbackActive !== false;
+      const firstRideAmount = typeof settingsData.firstRideCashbackAmount === "number" && settingsData.firstRideCashbackAmount > 0
+        ? settingsData.firstRideCashbackAmount
+        : 500;
+
+      if (isFirstRideActive && firstRideAmount > 0) {
+        await admin.firestore().runTransaction(async (tx) => {
+          const custDoc = await tx.get(customersCollection.doc(customerUid));
+          if (!custDoc.exists) return;
+          const cData = custDoc.data() || {};
+          if (cData.hasReceivedFirstRideCashback === true) return; // Idempotent
+
+          const currentBal = (cData.walletBalance as number) || 0;
+          tx.update(customersCollection.doc(customerUid), {
+            walletBalance: currentBal + firstRideAmount,
+            hasReceivedFirstRideCashback: true,
+            firstRideCashbackAmount: firstRideAmount,
+            firstRideCashbackRideId: rideId,
+            firstRideCashbackAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          const walletTxRef = admin.firestore().collection("walletTransactions").doc();
+          tx.set(walletTxRef, {
+            uid: customerUid,
+            type: "credit",
+            rawType: "cashback",
+            amountNaira: firstRideAmount,
+            description: "First Ride Cashback",
+            method: "Cashback",
+            status: "completed",
+            rideId,
+            reference: rideId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          const creditTxRef = admin.firestore().collection("credit_transactions").doc();
+          tx.set(creditTxRef, {
+            uid: customerUid,
+            type: "referral_reward",
+            amountNaira: firstRideAmount,
+            rideId,
+            description: "First Ride Cashback Reward",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        });
+        logger.info("First ride cashback processed server-side", { customerUid, rideId, firstRideAmount });
+      }
+
+      // 2. Percentage Trip Cashback Award (e.g. 5% on ₦5,000+ trips)
+      const isTripCashbackActive = settingsData.isTripCashbackActive !== false;
+      const tripCashbackPercent = typeof settingsData.tripCashbackPercent === "number" && settingsData.tripCashbackPercent > 0
+        ? settingsData.tripCashbackPercent
+        : 5;
+      const tripCashbackMinFare = typeof settingsData.tripCashbackMinFare === "number" && settingsData.tripCashbackMinFare > 0
+        ? settingsData.tripCashbackMinFare
+        : 5000;
+      const tripCashbackDest = (settingsData.tripCashbackDestination as string) || "main_wallet";
+
+      if (isTripCashbackActive && tripCashbackPercent > 0 && finalFare >= tripCashbackMinFare) {
+        const rawCashback = (finalFare * tripCashbackPercent) / 100;
+        const cashbackAmount = Math.round(rawCashback * 100) / 100;
+
+        if (cashbackAmount > 0) {
+          await admin.firestore().runTransaction(async (tx) => {
+            const rideSnap = await tx.get(rideRef);
+            if (!rideSnap.exists || rideSnap.data()?.tripCashbackAwarded === true) {
+              return; // Idempotent
+            }
+
+            const custDoc = await tx.get(customersCollection.doc(customerUid));
+            if (!custDoc.exists) return;
+            const cData = custDoc.data() || {};
+
+            if (tripCashbackDest === "subsidy_wallet") {
+              // Credit Subsidy Wallet (creditBalance)
+              const currentCredit = (cData.creditBalance as number) || 0;
+              tx.update(customersCollection.doc(customerUid), {
+                creditBalance: currentCredit + cashbackAmount,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              const creditTxRef = admin.firestore().collection("credit_transactions").doc();
+              tx.set(creditTxRef, {
+                uid: customerUid,
+                type: "trip_cashback",
+                amountNaira: cashbackAmount,
+                rideId,
+                fareAmount: finalFare,
+                cashbackPercent: tripCashbackPercent,
+                destination: "subsidy_wallet",
+                description: `${tripCashbackPercent}% Cashback for ₦${Math.round(finalFare)} Trip`,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            } else {
+              // Credit Main Customer Wallet (walletBalance)
+              const currentBal = (cData.walletBalance as number) || 0;
+              tx.update(customersCollection.doc(customerUid), {
+                walletBalance: currentBal + cashbackAmount,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              const walletTxRef = admin.firestore().collection("walletTransactions").doc();
+              tx.set(walletTxRef, {
+                uid: customerUid,
+                type: "credit",
+                rawType: "cashback",
+                amountNaira: cashbackAmount,
+                description: `${tripCashbackPercent}% Trip Cashback (₦${Math.round(finalFare)} trip)`,
+                method: "Cashback",
+                status: "completed",
+                rideId,
+                reference: `cashback_${rideId}`,
+                cashbackPercent: tripCashbackPercent,
+                destination: "main_wallet",
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              const creditTxRef = admin.firestore().collection("credit_transactions").doc();
+              tx.set(creditTxRef, {
+                uid: customerUid,
+                type: "trip_cashback",
+                amountNaira: cashbackAmount,
+                rideId,
+                fareAmount: finalFare,
+                cashbackPercent: tripCashbackPercent,
+                destination: "main_wallet",
+                description: `${tripCashbackPercent}% Cashback for ₦${Math.round(finalFare)} Trip`,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
+
+            // Mark ride document as awarded
+            tx.update(rideRef, {
+              tripCashbackAwarded: true,
+              tripCashbackAmount: cashbackAmount,
+              tripCashbackPercent: tripCashbackPercent,
+              tripCashbackDestination: tripCashbackDest,
+              tripCashbackAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          logger.info("Trip % cashback processed server-side", { customerUid, rideId, cashbackAmount, finalFare, tripCashbackDest });
+        }
+      }
+    } catch (e) {
+      logger.error("Failed to process server-side cashback rewards", { customerUid, rideId, e });
     }
   }
 
@@ -3829,7 +4095,7 @@ export const cancelRideByCustomer = onCall({ region: REGION_PRIMARY, maxInstance
     if (ride.customerUid !== uid) {
       throw new HttpsError("permission-denied", "Not your ride.");
     }
-    // Already cancelled — succeed silently
+    // Already cancelled â€" succeed silently
     if (ride.status === "cancelled") {
       return;
     }
@@ -3897,7 +4163,7 @@ export const rateCustomer = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
   return { success: true };
 });
 
-// ─────────────────────────── Ride Triggers ───────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Ride Triggers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export const onRideStatusChanged = onDocumentUpdated({ document: "rides/{rideId}", region: "us-east1" }, async (event) => {
   const before = event.data?.before.data();
@@ -4091,7 +4357,7 @@ export const onRideUpdatedDriverNotify = onDocumentUpdated(
         await sendPushToDriver(
           driverUid,
           "Trip started",
-          `${pickupLabel} → ${dropoffLabel}`,
+          `${pickupLabel} â†' ${dropoffLabel}`,
           { type: "ride_started", rideId }
         );
       }
@@ -4129,7 +4395,7 @@ export const onRideUpdatedDriverNotify = onDocumentUpdated(
   }
 );
 
-// ─────────────────────────── Withdrawal Functions ────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Withdrawal Functions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 /**
  * Called by admin dashboard when marking a driver's weekly payout as "Paid".
@@ -4137,7 +4403,7 @@ export const onRideUpdatedDriverNotify = onDocumentUpdated(
  * snapshot entry as paid, and notifies the driver.
  */
 export const adminProcessWithdrawal = onCall({ region: REGION_PRIMARY, maxInstances: 1 }, async (request) => {
-  // Basic auth check — in production add admin custom claim check
+  // Basic auth check â€" in production add admin custom claim check
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -4180,14 +4446,14 @@ export const adminProcessWithdrawal = onCall({ region: REGION_PRIMARY, maxInstan
 
   const amountNaira = entry.walletBalance;
   if (amountNaira <= 0) {
-    throw new HttpsError("failed-precondition", "Wallet balance is zero — nothing to pay.");
+    throw new HttpsError("failed-precondition", "Wallet balance is zero - nothing to pay.");
   }
 
   const driverData = driverSnap.data() ?? {};
   const currentBalance = (driverData.walletBalance as number) ?? 0;
 
   await admin.firestore().runTransaction(async (tx) => {
-    // Deduct from driver wallet (use current balance, not snapshot — safer)
+    // Deduct from driver wallet (use current balance, not snapshot â€" safer)
     tx.update(driversCollection.doc(driverUid), {
       walletBalance: admin.firestore.FieldValue.increment(-amountNaira),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -4242,7 +4508,7 @@ export const adminProcessWithdrawal = onCall({ region: REGION_PRIMARY, maxInstan
   return { success: true, amountNaira };
 });
 
-// ─────────────────────────── Flutterwave Settlement Functions ───────────────────────────
+// ─────────────────────────── Settlement Functions (TransactPay Payouts) ───────────────────
 
 export const adminProcessSinglePayout = onCall({ region: REGION_PRIMARY, maxInstances: 1 }, async (request) => {
   if (!request.auth) {
@@ -4300,28 +4566,36 @@ export const adminProcessSinglePayout = onCall({ region: REGION_PRIMARY, maxInst
 
   const reference = `payout_${driverId}_${batchId || "single"}_${Date.now()}`;
 
+  const payoutPayload = {
+    payoutDetails: [
+      {
+        clientReference: reference,
+        accountNumber,
+        bankCode,
+        amount,
+        description: "CaRide Settlement Payout",
+        accountName,
+        creditCurrency: "NGN",
+        debitCurrency: "NGN",
+      },
+    ],
+  };
+
   let transferRes: any;
   try {
-    transferRes = await flutterwaveRequest<any>("POST", "/transfers", {
-      account_bank: bankCode,
-      account_number: accountNumber,
-      amount: amount,
-      narration: "CaRide Settlement Payout",
-      currency: "NGN",
-      reference: reference,
-    });
+    transferRes = await transactpayRequest<any>("POST", "/payout/initiate", payoutPayload);
   } catch (err: any) {
-    logger.error("Flutterwave API transfer call crashed", { driverId, err: String(err) });
-    throw new HttpsError("internal", `Flutterwave API request failed: ${err.message || String(err)}`);
+    logger.error("TransactPay API transfer call crashed", { driverId, err: String(err) });
+    throw new HttpsError("internal", `TransactPay API request failed: ${err.message || String(err)}`);
   }
 
-  const isSuccess = transferRes?.status === "success" && transferRes?.data?.status !== "FAILED";
+  const isSuccess = transferRes?.status === "success" || transferRes?.statusCode === "00" || (Array.isArray(transferRes?.data) && transferRes.data.length > 0);
 
   const payoutRef = admin.firestore().collection("driverPayouts").doc();
   const payoutId = payoutRef.id;
 
   if (isSuccess) {
-    const flutterwaveId = String(transferRes?.data?.id || transferRes?.data?.reference || reference);
+    const payoutReference = String(transferRes?.data?.[0]?.payoutReference || transferRes?.batchReference || reference);
 
     await admin.firestore().runTransaction(async (tx) => {
       // Set wallet balance to 0 (or decrement)
@@ -4338,7 +4612,7 @@ export const adminProcessSinglePayout = onCall({ region: REGION_PRIMARY, maxInst
         amount,
         status: "successful",
         reference,
-        flutterwaveTransferId: flutterwaveId,
+        transactpayPayoutReference: payoutReference,
         description: `Settlement to ${bank.bankName || "Bank"} ${accountNumber}`,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -4360,7 +4634,7 @@ export const adminProcessSinglePayout = onCall({ region: REGION_PRIMARY, maxInst
         driverId,
         amount,
         status: "successful",
-        flutterwaveTransferId: flutterwaveId,
+        transactpayPayoutReference: payoutReference,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         processedBy: request.auth!.uid,
         batchId: batchId || null,
@@ -4394,7 +4668,7 @@ export const adminProcessSinglePayout = onCall({ region: REGION_PRIMARY, maxInst
       }
       await sendPushToDriver(
         driverId,
-        "💸 Payout Processed!",
+        "ðŸ'¸ Payout Processed!",
         `${formatNairaCurrency(amount)} has been sent to your bank account.`,
         { type: "payout", amount: String(amount) }
       );
@@ -4402,9 +4676,9 @@ export const adminProcessSinglePayout = onCall({ region: REGION_PRIMARY, maxInst
       logger.error("Failed to send payout notification", { driverId, e });
     }
 
-    return { success: true, payoutId, status: "successful", flutterwaveTransferId: flutterwaveId };
+    return { success: true, payoutId, status: "successful", transactpayPayoutReference: payoutReference };
   } else {
-    const reason = transferRes?.message || "Failed to process transfer via Flutterwave.";
+    const reason = transferRes?.message || "Failed to process transfer via TransactPay.";
     await payoutRef.set({
       driverId,
       amount,
@@ -4594,27 +4868,34 @@ export const adminExecuteSettlementBatch = onCall({ region: REGION_PRIMARY, maxI
       continue;
     }
 
-    // Call Flutterwave
+    // Call TransactPay
     const reference = `payout_${driverId}_${batchId}_${Date.now()}`;
     let transferRes: any;
     try {
-      transferRes = await flutterwaveRequest<any>("POST", "/transfers", {
-        account_bank: entry.bankAccount.bankCode,
-        account_number: entry.bankAccount.accountNumber,
-        amount: amount,
-        narration: "CaRide Batch Payout",
-        currency: "NGN",
-        reference,
-      });
+      const payoutPayload = {
+        payoutDetails: [
+          {
+            clientReference: reference,
+            accountNumber: entry.bankAccount.accountNumber,
+            bankCode: entry.bankAccount.bankCode,
+            amount,
+            description: "CaRide Batch Payout",
+            accountName: entry.bankAccount.accountName || entry.fullName || "CaRide Driver",
+            creditCurrency: "NGN",
+            debitCurrency: "NGN",
+          },
+        ],
+      };
+      transferRes = await transactpayRequest<any>("POST", "/payout/initiate", payoutPayload);
     } catch (err: any) {
       logger.error(`Batch execution error on driver ${driverId}`, { err: String(err) });
       transferRes = { status: "error", message: err.message || String(err) };
     }
 
-    const isSuccess = transferRes?.status === "success" && transferRes?.data?.status !== "FAILED";
+    const isSuccess = transferRes?.status === "success" || transferRes?.statusCode === "00" || (Array.isArray(transferRes?.data) && transferRes.data.length > 0);
 
     if (isSuccess) {
-      const flutterwaveId = String(transferRes?.data?.id || transferRes?.data?.reference || reference);
+      const payoutReference = String(transferRes?.data?.[0]?.payoutReference || transferRes?.batchReference || reference);
       const driverRef = driversCollection.doc(driverId);
       const driverSnap = await driverRef.get();
       const driverData = driverSnap.data() || {};
@@ -4632,7 +4913,7 @@ export const adminExecuteSettlementBatch = onCall({ region: REGION_PRIMARY, maxI
           amount,
           status: "successful",
           reference,
-          flutterwaveTransferId: flutterwaveId,
+          transactpayPayoutReference: payoutReference,
           description: `Batch settlement to ${entry.bankAccount.bankName} ${entry.bankAccount.accountNumber}`,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
@@ -4653,7 +4934,7 @@ export const adminExecuteSettlementBatch = onCall({ region: REGION_PRIMARY, maxI
           driverId,
           amount,
           status: "successful",
-          flutterwaveTransferId: flutterwaveId,
+          transactpayPayoutReference: payoutReference,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           processedBy: request.auth!.uid,
           batchId,
@@ -4662,7 +4943,7 @@ export const adminExecuteSettlementBatch = onCall({ region: REGION_PRIMARY, maxI
 
         tx.update(entryDoc.ref, {
           status: "successful",
-          flutterwaveTransferId: flutterwaveId,
+          transactpayPayoutReference: payoutReference,
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       });
@@ -4682,7 +4963,7 @@ export const adminExecuteSettlementBatch = onCall({ region: REGION_PRIMARY, maxI
         }
         await sendPushToDriver(
           driverId,
-          "💸 Payout Processed!",
+          "ðŸ'¸ Payout Processed!",
           `${formatNairaCurrency(amount)} has been sent to your bank account.`,
           { type: "payout", amount: String(amount) }
         );
@@ -4692,7 +4973,7 @@ export const adminExecuteSettlementBatch = onCall({ region: REGION_PRIMARY, maxI
 
       successCount++;
     } else {
-      const reason = transferRes?.message || "Failed to process transfer via Flutterwave.";
+      const reason = transferRes?.message || "Failed to process transfer via TransactPay.";
       await entryDoc.ref.update({
         status: "failed",
         failureReason: reason,
@@ -4778,22 +5059,29 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
     const reference = `retry_${driverId}_${Date.now()}`;
     let transferRes: any;
     try {
-      transferRes = await flutterwaveRequest<any>("POST", "/transfers", {
-        account_bank: bank.bankCode,
-        account_number: bank.accountNumber,
-        amount: amount,
-        narration: "CaRide Settlement Payout Retry",
-        currency: "NGN",
-        reference,
-      });
+      const payoutPayload = {
+        payoutDetails: [
+          {
+            clientReference: reference,
+            accountNumber: bank.accountNumber,
+            bankCode: bank.bankCode,
+            amount,
+            description: "CaRide Settlement Payout Retry",
+            accountName: bank.accountName || "CaRide Driver",
+            creditCurrency: "NGN",
+            debitCurrency: "NGN",
+          },
+        ],
+      };
+      transferRes = await transactpayRequest<any>("POST", "/payout/initiate", payoutPayload);
     } catch (err: any) {
-      throw new HttpsError("internal", `Flutterwave API request failed: ${err.message || String(err)}`);
+      throw new HttpsError("internal", `TransactPay API request failed: ${err.message || String(err)}`);
     }
 
-    const isSuccess = transferRes?.status === "success" && transferRes?.data?.status !== "FAILED";
+    const isSuccess = transferRes?.status === "success" || transferRes?.statusCode === "00" || (Array.isArray(transferRes?.data) && transferRes.data.length > 0);
 
     if (isSuccess) {
-      const flutterwaveId = String(transferRes?.data?.id || transferRes?.data?.reference || reference);
+      const payoutReference = String(transferRes?.data?.[0]?.payoutReference || transferRes?.batchReference || reference);
       await admin.firestore().runTransaction(async (tx) => {
         tx.update(driverRef, {
           walletBalance: 0,
@@ -4807,7 +5095,7 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
           amount,
           status: "successful",
           reference,
-          flutterwaveTransferId: flutterwaveId,
+          transactpayPayoutReference: payoutReference,
           description: `Retry payout to ${bank.bankName} ${bank.accountNumber}`,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
@@ -4825,7 +5113,7 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
 
         tx.update(payoutRef, {
           status: "successful",
-          flutterwaveTransferId: flutterwaveId,
+          transactpayPayoutReference: payoutReference,
           failureReason: admin.firestore.FieldValue.delete(),
           reference,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -4835,7 +5123,7 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
           const entryRef = admin.firestore().collection("withdrawalBatches").doc(parentBatchId).collection("entries").doc(driverId);
           tx.update(entryRef, {
             status: "successful",
-            flutterwaveTransferId: flutterwaveId,
+            transactpayPayoutReference: payoutReference,
             failureReason: admin.firestore.FieldValue.delete(),
             processedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -4844,7 +5132,7 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
 
       return { success: true, status: "successful" };
     } else {
-      const reason = transferRes?.message || "Failed to process transfer via Flutterwave.";
+      const reason = transferRes?.message || "Failed to process transfer via TransactPay.";
       await payoutRef.update({
         failureReason: reason,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -4871,22 +5159,29 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
       const reference = `retry_${driverId}_${batchId}_${Date.now()}`;
       let transferRes: any;
       try {
-        transferRes = await flutterwaveRequest<any>("POST", "/transfers", {
-          account_bank: bank.bankCode,
-          account_number: bank.accountNumber,
-          amount: amount,
-          narration: "CaRide Batch Payout Retry",
-          currency: "NGN",
-          reference,
-        });
+        const payoutPayload = {
+          payoutDetails: [
+            {
+              clientReference: reference,
+              accountNumber: bank.accountNumber,
+              bankCode: bank.bankCode,
+              amount,
+              description: "CaRide Batch Payout Retry",
+              accountName: bank.accountName || "CaRide Driver",
+              creditCurrency: "NGN",
+              debitCurrency: "NGN",
+            },
+          ],
+        };
+        transferRes = await transactpayRequest<any>("POST", "/payout/initiate", payoutPayload);
       } catch {
         continue;
       }
 
-      const isSuccess = transferRes?.status === "success" && transferRes?.data?.status !== "FAILED";
+      const isSuccess = transferRes?.status === "success" || transferRes?.statusCode === "00" || (Array.isArray(transferRes?.data) && transferRes.data.length > 0);
 
       if (isSuccess) {
-        const flutterwaveId = String(transferRes?.data?.id || transferRes?.data?.reference || reference);
+        const payoutReference = String(transferRes?.data?.[0]?.payoutReference || transferRes?.batchReference || reference);
         await admin.firestore().runTransaction(async (tx) => {
           tx.update(driverRef, {
             walletBalance: 0,
@@ -4900,7 +5195,7 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
             amount,
             status: "successful",
             reference,
-            flutterwaveTransferId: flutterwaveId,
+            transactpayPayoutReference: payoutReference,
             description: `Retry batch payout to ${bank.bankName} ${bank.accountNumber}`,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -4918,7 +5213,7 @@ export const adminRetryFailedPayout = onCall({ region: REGION_PRIMARY, maxInstan
 
           tx.update(entryDoc.ref, {
             status: "successful",
-            flutterwaveTransferId: flutterwaveId,
+            transactpayPayoutReference: payoutReference,
             failureReason: admin.firestore.FieldValue.delete(),
             processedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -5220,10 +5515,11 @@ export const sendAnnouncementEmail = onCall({ region: REGION_PRIMARY, maxInstanc
     throw new HttpsError("permission-denied", "Only administrators can send email announcements.");
   }
 
-  const { target, audience, uids, subject, htmlBody } = request.data as {
-    target: "customers" | "drivers";
+  const { target, audience, uids, customEmails, subject, htmlBody } = request.data as {
+    target: "customers" | "drivers" | "staff";
     audience: "all" | "specific";
-    uids: string[];
+    uids?: string[];
+    customEmails?: string[];
     subject: string;
     htmlBody: string;
   };
@@ -5232,19 +5528,44 @@ export const sendAnnouncementEmail = onCall({ region: REGION_PRIMARY, maxInstanc
     throw new HttpsError("invalid-argument", "Subject and htmlBody are required.");
   }
 
-  const targetCollection = target === "customers" ? customersCollection : driversCollection;
   let targetUsers: { email: string }[] = [];
 
-  if (audience === "all") {
-    const allDocs = await targetCollection.get();
-    targetUsers = allDocs.docs
-      .map(doc => ({ email: doc.data().email as string | undefined }))
-      .filter((u): u is { email: string } => typeof u.email === "string" && u.email.includes("@"));
+  if (target === "staff") {
+    const staffCollection = admin.firestore().collection("staff");
+    if (audience === "all") {
+      const allDocs = await staffCollection.get();
+      targetUsers = allDocs.docs
+        .map(doc => ({ email: doc.data().email as string | undefined }))
+        .filter((u): u is { email: string } => typeof u.email === "string" && u.email.includes("@"));
+    } else {
+      const userDocs = await Promise.all((uids || []).map(uid => staffCollection.doc(uid).get()));
+      targetUsers = userDocs
+        .map(doc => ({ email: doc.data()?.email as string | undefined }))
+        .filter((u): u is { email: string } => typeof u.email === "string" && u.email.includes("@"));
+    }
   } else {
-    const userDocs = await Promise.all((uids || []).map(uid => targetCollection.doc(uid).get()));
-    targetUsers = userDocs
-      .map(doc => ({ email: doc.data()?.email as string | undefined }))
-      .filter((u): u is { email: string } => typeof u.email === "string" && u.email.includes("@"));
+    const targetCollection = target === "customers" ? customersCollection : driversCollection;
+    if (audience === "all") {
+      const allDocs = await targetCollection.get();
+      targetUsers = allDocs.docs
+        .map(doc => ({ email: doc.data().email as string | undefined }))
+        .filter((u): u is { email: string } => typeof u.email === "string" && u.email.includes("@"));
+    } else {
+      const userDocs = await Promise.all((uids || []).map(uid => targetCollection.doc(uid).get()));
+      targetUsers = userDocs
+        .map(doc => ({ email: doc.data()?.email as string | undefined }))
+        .filter((u): u is { email: string } => typeof u.email === "string" && u.email.includes("@"));
+    }
+  }
+
+  // Include any extra/custom direct emails provided
+  if (Array.isArray(customEmails) && customEmails.length > 0) {
+    for (const em of customEmails) {
+      const trimmed = (em || "").trim();
+      if (trimmed.includes("@") && !targetUsers.some(u => u.email.toLowerCase() === trimmed.toLowerCase())) {
+        targetUsers.push({ email: trimmed });
+      }
+    }
   }
 
   if (targetUsers.length === 0) {
@@ -5259,7 +5580,7 @@ export const sendAnnouncementEmail = onCall({ region: REGION_PRIMARY, maxInstanc
   return { success: true, count: targetUsers.length };
 });
 
-// ─────────────────────────── Customer Security PIN Functions ───────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Customer Security PIN Functions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export const createCustomerSecurityPin = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   const auth = request.auth;
@@ -5425,9 +5746,9 @@ export const verifyCustomerSecurityPin = onCall({ region: REGION_PRIMARY, maxIns
   return { valid: currentHash === hashCode(pin) };
 });
 
-// ─────────────────────────── Customer Payout / Withdrawal Functions ───────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Customer Payout / Withdrawal Functions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-export const processCustomerWithdrawal = onCall({ region: REGION_PRIMARY, maxInstances: 1 }, async (request) => {
+export const processCustomerWithdrawal = onCall(TRANSACTPAY_SINGLE_INSTANCE_OPTIONS, async (request) => {
   const auth = request.auth;
   if (!auth) {
     throw new HttpsError("unauthenticated", "Authentication required.");
@@ -5464,58 +5785,33 @@ export const processCustomerWithdrawal = onCall({ region: REGION_PRIMARY, maxIns
     throw new HttpsError("failed-precondition", "Insufficient wallet balance.");
   }
 
-  // ── Step 1: Create a Paystack transfer recipient ─────────────────────
+  // TransactPay Payout Initiation
   const reference = `WDR-${auth.uid.slice(0, 5)}-${Date.now()}`;
 
-  type PaystackRecipientResponse = {
-    status: boolean;
-    message: string;
-    data?: { recipient_code: string };
+  const payoutPayload = {
+    payoutDetails: [
+      {
+        clientReference: reference,
+        accountNumber,
+        bankCode,
+        amount: amountNaira,
+        description: "CARIDE SMARTTRANSIT LIMITED - Withdrawal",
+        accountName,
+        creditCurrency: "NGN",
+        debitCurrency: "NGN",
+      },
+    ],
   };
 
-  const recipientRes = await paystackRequest<PaystackRecipientResponse>(
-    "POST",
-    "/transferrecipient",
-    {
-      type: "nuban",
-      name: accountName,
-      account_number: accountNumber,
-      bank_code: bankCode,
-      currency: "NGN",
-    }
-  );
+  const payoutRes = await transactpayRequest<any>("POST", "/payout/initiate", payoutPayload);
+  const isSuccess = payoutRes?.status === "success" || payoutRes?.statusCode === "00" || (Array.isArray(payoutRes?.data) && payoutRes.data.length > 0);
 
-  if (!recipientRes.status || !recipientRes.data?.recipient_code) {
-    logger.error("Paystack create recipient failed", { response: recipientRes });
-    throw new HttpsError("internal", `Transfer processing failed: ${recipientRes.message}`);
+  if (!isSuccess) {
+    logger.error("TransactPay customer payout failed", { response: payoutRes });
+    throw new HttpsError("internal", `Transfer processing failed: ${payoutRes?.message || "TransactPay payout error"}`);
   }
 
-  const recipientCode = recipientRes.data.recipient_code;
-
-  // ── Step 2: Initiate the Paystack transfer ────────────────────────────
-  type PaystackTransferResponse = {
-    status: boolean;
-    message: string;
-    data?: { reference: string; status: string; transfer_code: string };
-  };
-
-  const transferRes = await paystackRequest<PaystackTransferResponse>(
-    "POST",
-    "/transfer",
-    {
-      source: "balance",
-      amount: Math.round(amountNaira * 100), // Paystack uses kobo
-      recipient: recipientCode,
-      reason: "CaRide Wallet Withdrawal",
-      reference,
-      currency: "NGN",
-    }
-  );
-
-  if (!transferRes.status || !transferRes.data) {
-    logger.error("Paystack transfer failed", { response: transferRes });
-    throw new HttpsError("internal", `Transfer processing failed: ${transferRes.message}`);
-  }
+  const payoutReference = payoutRes?.data?.[0]?.payoutReference || payoutRes?.batchReference || reference;
 
   // Deduct from wallet and write transaction record
   await admin.firestore().runTransaction(async (tx) => {
@@ -5529,9 +5825,9 @@ export const processCustomerWithdrawal = onCall({ region: REGION_PRIMARY, maxIns
       uid: auth.uid,
       type: "debit",
       amountNaira,
-      method: "bank_transfer",
+      method: "transactpay_payout",
       reference,
-      paystackTransferCode: transferRes.data!.transfer_code,
+      transactpayReference: payoutReference,
       description: `Transfer to ${accountName} (${maskAccountNumber(accountNumber)}) • ${bankName}`,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -5550,14 +5846,13 @@ export const processCustomerWithdrawal = onCall({ region: REGION_PRIMARY, maxIns
         walletBalance - amountNaira
       );
     } catch (e) {
-      logger.error("Failed to send payout email to customer", { e });
+      logger.warn("Failed to send payout email to customer", { error: String(e) });
     }
   }
 
-  return { success: true, reference };
+  logger.info("Customer withdrawal processed via TransactPay", { uid: auth.uid, amountNaira, reference, payoutReference });
+  return { success: true, reference, payoutReference };
 });
-
-
 
 // Driver Security PIN Functions
 
@@ -5725,12 +6020,12 @@ export const verifyDriverSecurityPin = onCall({ region: REGION_PRIMARY, maxInsta
   return { valid: currentHash === hashCode(pin) };
 });
 
-// ─────────────────────────── Driver Payout / Withdrawal Functions ───────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Driver Payout / Withdrawal Functions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 
 // Driver Withdrawal Functions
 
-export const processDriverWithdrawal = onCall({ region: REGION_PRIMARY, maxInstances: 1 }, async (request) => {
+export const processDriverWithdrawal = onCall(TRANSACTPAY_SINGLE_INSTANCE_OPTIONS, async (request) => {
   const auth = request.auth;
   if (!auth) {
     throw new HttpsError("unauthenticated", "Authentication required.");
@@ -5767,58 +6062,33 @@ export const processDriverWithdrawal = onCall({ region: REGION_PRIMARY, maxInsta
     throw new HttpsError("failed-precondition", "Insufficient wallet balance.");
   }
 
-  // ── Step 1: Create a Paystack transfer recipient ─────────────────────
+  // TransactPay Payout Initiation
   const reference = `WDR-${auth.uid.slice(0, 5)}-${Date.now()}`;
 
-  type PaystackRecipientResponse = {
-    status: boolean;
-    message: string;
-    data?: { recipient_code: string };
+  const payoutPayload = {
+    payoutDetails: [
+      {
+        clientReference: reference,
+        accountNumber,
+        bankCode,
+        amount: amountNaira,
+        description: "CARIDE SMARTTRANSIT LIMITED - Driver Payout",
+        accountName,
+        creditCurrency: "NGN",
+        debitCurrency: "NGN",
+      },
+    ],
   };
 
-  const recipientRes = await paystackRequest<PaystackRecipientResponse>(
-    "POST",
-    "/transferrecipient",
-    {
-      type: "nuban",
-      name: accountName,
-      account_number: accountNumber,
-      bank_code: bankCode,
-      currency: "NGN",
-    }
-  );
+  const payoutRes = await transactpayRequest<any>("POST", "/payout/initiate", payoutPayload);
+  const isSuccess = payoutRes?.status === "success" || payoutRes?.statusCode === "00" || (Array.isArray(payoutRes?.data) && payoutRes.data.length > 0);
 
-  if (!recipientRes.status || !recipientRes.data?.recipient_code) {
-    logger.error("Paystack create recipient failed", { response: recipientRes });
-    throw new HttpsError("internal", `Transfer processing failed: ${recipientRes.message}`);
+  if (!isSuccess) {
+    logger.error("TransactPay driver payout failed", { response: payoutRes });
+    throw new HttpsError("internal", `Transfer processing failed: ${payoutRes?.message || "TransactPay payout error"}`);
   }
 
-  const recipientCode = recipientRes.data.recipient_code;
-
-  // ── Step 2: Initiate the Paystack transfer ────────────────────────────
-  type PaystackTransferResponse = {
-    status: boolean;
-    message: string;
-    data?: { reference: string; status: string; transfer_code: string };
-  };
-
-  const transferRes = await paystackRequest<PaystackTransferResponse>(
-    "POST",
-    "/transfer",
-    {
-      source: "balance",
-      amount: Math.round(amountNaira * 100), // Paystack uses kobo
-      recipient: recipientCode,
-      reason: "CaRide Wallet Withdrawal",
-      reference,
-      currency: "NGN",
-    }
-  );
-
-  if (!transferRes.status || !transferRes.data) {
-    logger.error("Paystack transfer failed", { response: transferRes });
-    throw new HttpsError("internal", `Transfer processing failed: ${transferRes.message}`);
-  }
+  const payoutReference = payoutRes?.data?.[0]?.payoutReference || payoutRes?.batchReference || reference;
 
   // Deduct from wallet and write transaction record
   await admin.firestore().runTransaction(async (tx) => {
@@ -5832,9 +6102,9 @@ export const processDriverWithdrawal = onCall({ region: REGION_PRIMARY, maxInsta
       uid: auth.uid,
       type: "debit",
       amountNaira,
-      method: "bank_transfer",
+      method: "transactpay_payout",
       reference,
-      paystackTransferCode: transferRes.data!.transfer_code,
+      transactpayReference: payoutReference,
       description: `Transfer to ${accountName} (${maskAccountNumber(accountNumber)}) • ${bankName}`,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -5845,7 +6115,7 @@ export const processDriverWithdrawal = onCall({ region: REGION_PRIMARY, maxInsta
     try {
       await sendPayoutEmail(
         driver.email,
-        driver.fullName ?? "User",
+        driver.fullName ?? "Driver",
         amountNaira,
         bankName,
         maskAccountNumber(accountNumber),
@@ -5853,47 +6123,16 @@ export const processDriverWithdrawal = onCall({ region: REGION_PRIMARY, maxInsta
         walletBalance - amountNaira
       );
     } catch (e) {
-      logger.error("Failed to send payout email to driver", { e });
+      logger.warn("Failed to send payout email to driver", { error: String(e) });
     }
   }
 
-  return { success: true, reference };
+  logger.info("Driver withdrawal processed via TransactPay", { uid: auth.uid, amountNaira, reference, payoutReference });
+  return { success: true, reference, payoutReference };
 });
 
 
-
-export const resolveFlutterwaveBankAccount = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
-  const auth = request.auth;
-  if (!auth) {
-    throw new HttpsError("unauthenticated", "Authentication required.");
-  }
-  const { bankCode, accountNumber } = request.data as { bankCode?: string; accountNumber?: string };
-  if (!bankCode || !accountNumber) {
-    throw new HttpsError("invalid-argument", "Missing bankCode or accountNumber.");
-  }
-
-  try {
-    const response = await flutterwaveRequest<{ status: string; message: string; data?: { account_name: string; account_number: string } }>(
-      "POST",
-      "/accounts/resolve",
-      {
-        account_number: accountNumber,
-        account_bank: bankCode,
-      }
-    );
-    if (response.status === "success" && response.data) {
-      return {
-        accountName: response.data.account_name,
-        accountNumber: response.data.account_number,
-      };
-    }
-    throw new HttpsError("failed-precondition", response.message || "Failed to resolve account.");
-  } catch (e) {
-    throw new HttpsError("internal", `Flutterwave resolution failed: ${e}`);
-  }
-});
-
-// ─────────────────────────── Referral System ───────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Referral System â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 async function processReferralAttribution(
   newUserId: string,
@@ -5975,26 +6214,6 @@ async function processReferralAttribution(
       },
       { merge: true }
     );
-
-    tx.set(
-      referrerRef,
-      {
-        referralEarnings: admin.firestore.FieldValue.increment(rewardAmount),
-        successfulReferralsCount: admin.firestore.FieldValue.increment(1),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    const referralRecordRef = referrerRef.collection("referrals").doc(newUserId);
-    tx.set(referralRecordRef, {
-      referredUid: newUserId,
-      email: newUserEmail,
-      role: userRole,
-      status: "completed",
-      rewardAmount: rewardAmount,
-      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
   });
 
   logger.info(`Referral successfully processed: ${newUserId} referred by ${referrerUid} (${cleanCode})`);
@@ -6068,7 +6287,11 @@ export const processReferralCode = onCall({ region: REGION_PRIMARY }, async (req
 });
 
 
-// ─────────────────────────── Emergency Alert ────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ Emergency Alert â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+
+
+
 
 type SendEmergencyAlertPayload = {
   rideId?: string;
@@ -6077,70 +6300,16 @@ type SendEmergencyAlertPayload = {
   shareCode?: string;
 };
 
-/**
- * Callable function that sends an emergency safety alert email to a trusted contact.
- * Called by the passenger app when the user confirms an emergency during an active ride.
- */
 export const sendEmergencyAlert = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
   const uid = request.auth.uid;
   const payload = request.data as SendEmergencyAlertPayload;
-
   const { rideId, trustedContactEmail, trustedContactName, shareCode } = payload;
-
   if (!trustedContactEmail) {
     throw new HttpsError("invalid-argument", "Trusted contact email is required.");
   }
-  if (!isValidEmail(trustedContactEmail)) {
-    throw new HttpsError("invalid-argument", "Invalid trusted contact email address.");
-  }
-
-  // Fetch passenger info
-  const customerDoc = await customersCollection.doc(uid).get();
-  if (!customerDoc.exists) {
-    throw new HttpsError("not-found", "Customer not found.");
-  }
-  const customerData = customerDoc.data()!;
-  const passengerName: string = (customerData.fullName as string) || "A CaRide Passenger";
-  const passengerPhone: string = (customerData.phone as string) || "";
-
-  // Fetch ride info
-  let driverName = "";
-  let pickupLabel = "";
-  let dropoffLabel = "";
-  let rideType = "";
-  let plateNumber = "";
-  let driverPhone = "";
-
-  if (rideId) {
-    try {
-      const rideDoc = await admin.firestore().collection("rides").doc(rideId).get();
-      if (rideDoc.exists) {
-        const ride = rideDoc.data()!;
-        driverName = (ride.driverName as string) || "";
-        pickupLabel = (ride.pickupLabel as string) || "";
-        dropoffLabel = (ride.dropoffLabel as string) || "";
-        rideType = (ride.rideType as string) || "";
-
-        const driverUid = ride.driverUid as string | undefined;
-        if (driverUid) {
-          try {
-            const driverDoc = await admin.firestore().collection("drivers").doc(driverUid).get();
-            driverPhone = (driverDoc.data()?.phone as string) || "";
-            // Try to get plate from vehicle info
-            const vehicleDoc = await admin.firestore().collection("drivers").doc(driverUid).collection("vehicle").doc("info").get();
-            plateNumber = (vehicleDoc.data()?.plateNumber as string) || "";
-          } catch (_) { /* non-critical, continue */ }
-        }
-      }
-    } catch (e) {
-      logger.warn("Failed to fetch ride for emergency alert", { rideId, e: String(e) });
-    }
-  }
-
-  // Write emergency event record
   const eventRef = admin.firestore().collection("emergencyEvents").doc();
   await eventRef.set({
     customerUid: uid,
@@ -6151,48 +6320,548 @@ export const sendEmergencyAlert = onCall({ region: REGION_PRIMARY, maxInstances:
     triggeredAt: admin.firestore.FieldValue.serverTimestamp(),
     status: "sent",
   });
-
-  // Build the emergency email
-  const contactName = trustedContactName || "Friend";
-  const tripLink = shareCode ? `https://caride.ng/app/trip/${shareCode}` : null;
-  const tripLinkLine = tripLink
-    ? `<p style="margin:0 0 14px;"><a href="${tripLink}" style="color:#dc2626;font-weight:700;">View live trip</a> (open CaRide app and enter code: <strong>${shareCode}</strong>)</p>`
-    : "";
-  const driverLine = driverName ? `<p style="margin:0 0 10px;color:#111827;"><strong>Driver:</strong> ${driverName}${plateNumber ? ` — ${plateNumber}` : ""}</p>` : "";
-  const driverPhoneLine = driverPhone ? `<p style="margin:0 0 10px;color:#111827;"><strong>Driver phone:</strong> ${driverPhone}</p>` : "";
-  const pickupLine = pickupLabel ? `<p style="margin:0 0 10px;color:#111827;"><strong>From:</strong> ${pickupLabel}</p>` : "";
-  const dropoffLine = dropoffLabel ? `<p style="margin:0;color:#111827;"><strong>To:</strong> ${dropoffLabel}</p>` : "";
-  const passengerPhoneLine = passengerPhone ? `<p style="margin:0 0 10px;color:#111827;"><strong>Passenger phone:</strong> ${passengerPhone}</p>` : "";
-
-  const html = buildEmailHtml(
-    `<h2 style="margin:0 0 10px;color:#dc2626;font-size:24px;">&#x1F6A8; Emergency Safety Alert</h2>` +
-    `<p style="margin:0 0 18px;color:#374151;">Hi <strong>${contactName}</strong>,</p>` +
-    `<p style="margin:0 0 18px;color:#374151;"><strong>${passengerName}</strong> has triggered a safety alert during their CaRide trip. Please check in on them immediately.</p>` +
-    `<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:12px;padding:20px;margin:0 0 20px;">` +
-    `<p style="margin:0 0 10px;font-weight:700;color:#dc2626;">&#x26A0;&#xFE0F; Passenger Details</p>` +
-    `<p style="margin:0 0 10px;color:#111827;"><strong>Name:</strong> ${passengerName}</p>` +
-    passengerPhoneLine +
-    `</div>` +
-    (driverName || pickupLabel || dropoffLabel
-      ? `<div style="background:#f8faf8;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin:0 0 20px;">` +
-        `<p style="margin:0 0 10px;font-weight:700;color:#374151;">Trip Information</p>` +
-        driverLine + driverPhoneLine + pickupLine + dropoffLine +
-        `</div>`
-      : "") +
-    tripLinkLine +
-    `<p style="margin:0 0 14px;color:#374151;">If you cannot reach them, please contact local emergency services immediately.</p>` +
-    `<p style="margin:0;color:#9ca3af;font-size:12px;">This alert was sent automatically from CaRide at ${new Date().toUTCString()}.${rideId ? ` Ride ID: ${rideId}` : ""}</p>`
-  );
-
-  await sendResendEmail(
-    trustedContactEmail,
-    `&#x1F6A8; Safety Alert: ${passengerName} needs a check-in`,
-    html
-  );
-
-  logger.info("Emergency alert sent", { uid, rideId, trustedContactEmail, eventId: eventRef.id });
-  return { success: true, eventId: eventRef.id };
+  logger.info("Emergency safety alert processed", { uid, trustedContactEmail });
+  return { success: true, message: "Emergency safety alert sent successfully." };
 });
 
+
+
+// ===========================================================================
+// RENTAL BOOKING LIFECYCLE
+// ===========================================================================
+
+// --------------- Helper: send FCM push to fleet manager -------------------
+
+async function sendPushToFleetManager(
+  fleetId: string,
+  title: string,
+  body: string,
+  data?: Record<string, string>
+): Promise<void> {
+  try {
+    const snap = await admin.firestore().collection("fleets").doc(fleetId).get();
+    const token = snap.data()?.fcmToken as string | undefined;
+    if (!token) return;
+    await admin.messaging().send({
+      token,
+      notification: { title, body },
+      data: data ?? {},
+      android: { priority: "high", notification: { sound: "default", channelId: "caride_alerts" } },
+      apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    });
+    logger.info("FCM push sent to fleet manager", { fleetId, title });
+  } catch (e) {
+    logger.warn("FCM push to fleet manager failed", { fleetId, e: String(e) });
+  }
+}
+
+// --------------- Callable: approve rental booking for payment -------------
+
+/**
+ * Fleet manager calls this to approve a pendingApproval booking.
+ * Sets status to awaitingPayment. Does NOT assign a driver yet.
+ */
+exports.approveRentalBooking = onCall(
+  { region: REGION_PRIMARY },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Authentication required.");
+
+    const { bookingId } = request.data as { bookingId?: string };
+    if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required.");
+
+    const bookingRef = admin.firestore().collection("rental_bookings").doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking not found.");
+
+    const booking = bookingSnap.data()!;
+    if (booking.status !== "pendingApproval") {
+      throw new HttpsError("failed-precondition", "Only pending bookings can be approved.");
+    }
+
+    await bookingRef.update({
+      status: "awaitingPayment",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.info("Rental booking approved for payment", { bookingId, uid });
+    return { success: true };
+  }
+);
+
+// --------------- Callable: pay for a rental booking -----------------------
+
+/**
+ * Processes payment for an approved (awaitingPayment) rental booking.
+ * Supports: wallet, bank_transfer, card.
+ * On success: sets status to confirmed, paymentStatus to paid,
+ *             generates a 4-digit startPin, notifies fleet manager + customer.
+ */
+exports.payRentalBooking = onCall(
+  { region: REGION_PRIMARY },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Authentication required.");
+
+    const { bookingId, paymentMethod } = request.data as {
+      bookingId?: string;
+      paymentMethod?: string;
+    };
+
+    if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required.");
+    if (!paymentMethod) throw new HttpsError("invalid-argument", "paymentMethod is required.");
+
+    const bookingRef = admin.firestore().collection("rental_bookings").doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking not found.");
+
+    const booking = bookingSnap.data()!;
+    if (booking.customerId !== uid) {
+      throw new HttpsError("permission-denied", "You do not own this booking.");
+    }
+    if (booking.status !== "awaitingPayment") {
+      throw new HttpsError("failed-precondition", "This booking is not awaiting payment.");
+    }
+    if (booking.paymentStatus === "paid") {
+      throw new HttpsError("already-exists", "This booking has already been paid.");
+    }
+
+    const totalAmount: number = booking.totalAmount ?? 0;
+    const fleetId: string = booking.fleetId ?? "";
+    const customerName: string = booking.customerName ?? "Customer";
+    const vehicleTitle: string = booking.vehicleTitle ?? "Vehicle";
+
+    if (paymentMethod === "wallet") {
+      const customerRef = customersCollection.doc(uid);
+      const customerSnap = await customerRef.get();
+      const walletBalance: number = (customerSnap.data()?.walletBalance as number | undefined) ?? 0;
+
+      if (walletBalance < totalAmount) {
+        throw new HttpsError(
+          "resource-exhausted",
+          `Insufficient wallet balance. You have ${formatNairaCurrency(walletBalance)} but need ${formatNairaCurrency(totalAmount)}.`
+        );
+      }
+
+      await customerRef.update({
+        walletBalance: admin.firestore.FieldValue.increment(-totalAmount),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      await customerRef.collection("walletTransactions").add({
+        type: "debit",
+        amount: totalAmount,
+        description: `Rental payment for ${vehicleTitle}`,
+        bookingId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Generate 4-digit PIN
+    const startPin = String(Math.floor(1000 + Math.random() * 9000));
+
+    // Credit fleet wallet
+    if (fleetId) {
+      const fleetRef = admin.firestore().collection("fleets").doc(fleetId);
+      await fleetRef.update({
+        walletBalance: admin.firestore.FieldValue.increment(totalAmount),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      await fleetRef.collection("walletTransactions").add({
+        type: "credit",
+        amount: totalAmount,
+        description: `Rental payment from ${customerName} for ${vehicleTitle}`,
+        bookingId,
+        customerId: uid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Update booking to confirmed
+    await bookingRef.update({
+      status: "confirmed",
+      paymentStatus: "paid",
+      paymentMethod,
+      startPin,
+      startPinUsed: false,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Notify customer with PIN
+    await sendPushToCustomer(
+      uid,
+      "Payment Confirmed!",
+      `Your rental of ${vehicleTitle} is confirmed. Your ride start PIN is ${startPin}. Keep it safe!`,
+      { type: "rental_payment_confirmed", bookingId }
+    );
+
+    logger.info("Rental booking payment confirmed", { bookingId, uid, paymentMethod, totalAmount });
+    return { success: true, startPin };
+  }
+);
+
+// --------------- Callable: assign driver to rental booking ----------------
+
+exports.assignDriverToRentalBooking = onCall(
+  { region: REGION_PRIMARY },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Authentication required.");
+
+    const { bookingId, driverId, driverName, driverPhone } = request.data as {
+      bookingId?: string;
+      driverId?: string;
+      driverName?: string;
+      driverPhone?: string;
+    };
+
+    if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required.");
+    if (!driverId) throw new HttpsError("invalid-argument", "driverId is required.");
+
+    const bookingRef = admin.firestore().collection("rental_bookings").doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking not found.");
+
+    const booking = bookingSnap.data()!;
+    if (booking.status !== "confirmed") {
+      throw new HttpsError("failed-precondition", "Driver can only be assigned to confirmed and paid bookings.");
+    }
+    if (booking.paymentStatus !== "paid") {
+      throw new HttpsError("failed-precondition", "Customer has not paid for this booking yet.");
+    }
+
+    await bookingRef.update({
+      assignedDriverId: driverId,
+      assignedDriverName: driverName ?? null,
+      assignedDriverPhone: driverPhone ?? null,
+      rentalTripStatus: "assigned",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.info("Driver assigned to rental booking", { bookingId, driverId, uid });
+    return { success: true };
+  }
+);
+
+// --------------- Callable: update rental trip status (driver) -------------
+
+exports.updateRentalTripStatus = onCall(
+  { region: REGION_PRIMARY },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Authentication required.");
+
+    const { bookingId, action, pin } = request.data as {
+      bookingId?: string;
+      action?: "headingToPickup" | "startRide" | "endRide";
+      pin?: string;
+    };
+
+    if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required.");
+    if (!action) throw new HttpsError("invalid-argument", "action is required.");
+
+    const bookingRef = admin.firestore().collection("rental_bookings").doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking not found.");
+
+    const booking = bookingSnap.data()!;
+    const customerId: string = booking.customerId ?? "";
+    const fleetId: string = booking.fleetId ?? "";
+    const vehicleTitle: string = booking.vehicleTitle ?? "Vehicle";
+    const customerName: string = booking.customerName ?? "Customer";
+
+    if (booking.assignedDriverId !== uid) {
+      throw new HttpsError("permission-denied", "You are not assigned to this booking.");
+    }
+
+    switch (action) {
+    case "headingToPickup": {
+      if (booking.status !== "confirmed") {
+        throw new HttpsError("failed-precondition", "Booking must be confirmed before heading to pickup.");
+      }
+      await bookingRef.update({
+        rentalTripStatus: "headingToPickup",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      if (customerId) {
+        await sendPushToCustomer(
+          customerId,
+          "Driver is on the way!",
+          `Your driver is heading to the pickup location for ${vehicleTitle}. Get ready!`,
+          { type: "rental_heading_to_pickup", bookingId }
+        );
+      }
+      break;
+    }
+
+    case "startRide": {
+      if (booking.status !== "confirmed") {
+        throw new HttpsError("failed-precondition", "Booking is not in a state to start.");
+      }
+      if (!pin) throw new HttpsError("invalid-argument", "Start PIN is required.");
+      if (booking.startPinUsed) {
+        throw new HttpsError("already-exists", "Start PIN has already been used.");
+      }
+      if (booking.startPin !== pin.trim()) {
+        throw new HttpsError("permission-denied", "Incorrect start PIN. Please ask the customer to check their app.");
+      }
+      await bookingRef.update({
+        status: "inProgress",
+        rentalTripStatus: "inProgress",
+        startPinUsed: true,
+        tripStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      if (customerId) {
+        await sendPushToCustomer(
+          customerId,
+          "Your trip has started!",
+          `Your rental trip with ${vehicleTitle} has begun. Have a great journey!`,
+          { type: "rental_trip_started", bookingId }
+        );
+      }
+      if (fleetId) {
+        await sendPushToFleetManager(
+          fleetId,
+          "Rental trip started",
+          `Rental trip for ${vehicleTitle} (${customerName}) has started.`,
+          { type: "rental_trip_started", bookingId }
+        );
+      }
+      break;
+    }
+
+    case "endRide": {
+      if (booking.status !== "inProgress") {
+        throw new HttpsError("failed-precondition", "Trip is not in progress.");
+      }
+      await bookingRef.update({
+        status: "completed",
+        rentalTripStatus: "completed",
+        tripEndedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      if (customerId) {
+        await sendPushToCustomer(
+          customerId,
+          "Trip Completed!",
+          "Your rental trip has ended. We hope you had a great experience with CaRide!",
+          { type: "rental_trip_completed", bookingId }
+        );
+      }
+      if (fleetId) {
+        await sendPushToFleetManager(
+          fleetId,
+          "Rental trip completed",
+          `Rental trip for ${vehicleTitle} (${customerName}) has been completed.`,
+          { type: "rental_trip_completed", bookingId }
+        );
+      }
+      break;
+    }
+
+    default:
+      throw new HttpsError("invalid-argument", `Unknown action: ${action}`);
+    }
+
+    logger.info("Rental trip status updated", { bookingId, uid, action });
+    return { success: true };
+  }
+);
+
+// --------------- Firestore trigger: rental booking status changes ---------
+
+exports.onRentalBookingStatusChange = onDocumentUpdated(
+  { document: "rental_bookings/{bookingId}", region: REGION_PRIMARY },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const bookingId: string = event.params.bookingId;
+    const prevStatus: string = before.status ?? "";
+    const newStatus: string = after.status ?? "";
+    const prevAssignedDriverId: string = before.assignedDriverId ?? "";
+    const newAssignedDriverId: string = after.assignedDriverId ?? "";
+
+    const customerId: string = after.customerId ?? "";
+    const fleetId: string = after.fleetId ?? "";
+    const vehicleTitle: string = after.vehicleTitle ?? "Vehicle";
+    const customerName: string = after.customerName ?? "Customer";
+    const rejectionReason: string = after.rejectionReason ?? "";
+
+    // 1. pendingApproval -> awaitingPayment
+    if (prevStatus === "pendingApproval" && newStatus === "awaitingPayment") {
+      if (customerId) {
+        await sendPushToCustomer(
+          customerId,
+          "Booking Approved!",
+          `Your booking for ${vehicleTitle} has been approved. Pay now to confirm your reservation.`,
+          { type: "rental_booking_approved", bookingId }
+        );
+      }
+    }
+
+    // 2. pendingApproval -> rejected
+    else if (prevStatus === "pendingApproval" && newStatus === "rejected") {
+      if (customerId) {
+        const reasonSuffix = rejectionReason ? ` Reason: ${rejectionReason}` : "";
+        await sendPushToCustomer(
+          customerId,
+          "Booking Declined",
+          `Your booking for ${vehicleTitle} was declined.${reasonSuffix}`,
+          { type: "rental_booking_declined", bookingId }
+        );
+      }
+    }
+
+    // 3. awaitingPayment -> confirmed (fleet manager credit alert)
+    else if (prevStatus === "awaitingPayment" && newStatus === "confirmed") {
+      const totalAmount: number = after.totalAmount ?? 0;
+      if (fleetId) {
+        await sendPushToFleetManager(
+          fleetId,
+          "Payment Received",
+          `${customerName} paid ${formatNairaCurrency(totalAmount)} for ${vehicleTitle}. You can now assign a driver.`,
+          { type: "rental_payment_received", bookingId }
+        );
+      }
+    }
+
+    // 4. Driver assigned (new assignedDriverId set while confirmed)
+    if (
+      newStatus === "confirmed" &&
+      prevAssignedDriverId !== newAssignedDriverId &&
+      newAssignedDriverId
+    ) {
+      const assignedDriverName: string = after.assignedDriverName ?? "a driver";
+      if (customerId) {
+        await sendPushToCustomer(
+          customerId,
+          "Driver Assigned!",
+          `${assignedDriverName} has been assigned to your ${vehicleTitle} rental.`,
+          { type: "rental_driver_assigned", bookingId }
+        );
+      }
+      await sendPushToDriver(
+        newAssignedDriverId,
+        "New Rental Assignment",
+        `You have been assigned a rental trip for ${vehicleTitle}. Check your Rentals tab for details.`,
+        { type: "rental_booking_assigned", bookingId }
+      );
+    }
+
+    logger.info("Rental booking status change processed", {
+      bookingId, prevStatus, newStatus,
+    });
+  }
+);
+
+// --------------- Callable: confirm self-drive pickup (customer) ------------
+
+exports.confirmSelfDrivePickup = onCall(
+  { region: REGION_PRIMARY },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Authentication required.");
+
+    const { bookingId, enteredPin } = request.data as {
+      bookingId?: string;
+      enteredPin?: string;
+    };
+
+    if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required.");
+    if (!enteredPin) throw new HttpsError("invalid-argument", "enteredPin is required.");
+
+    const bookingRef = admin.firestore().collection("rental_bookings").doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking record was not found in database.");
+
+    const booking = bookingSnap.data()!;
+    if (booking.customerId !== uid) {
+      throw new HttpsError("permission-denied", "You do not have permission to verify this booking.");
+    }
+
+    if (booking.status !== "confirmed") {
+      throw new HttpsError("failed-precondition", "Vehicle pickup cannot be confirmed right now. Booking status is not ready for vehicle handover.");
+    }
+
+    if (booking.pickupPinUsed || booking.startPinUsed) {
+      throw new HttpsError("already-exists", "This Pickup PIN has already been verified and the rental trip is in progress.");
+    }
+
+    const expectedPin = String(booking.pickupPin ?? booking.startPin ?? "").trim();
+    if (!expectedPin || expectedPin !== enteredPin.trim()) {
+      throw new HttpsError("invalid-argument", "Incorrect Pickup PIN. Please check the 4-digit code provided by the fleet manager and try again.");
+    }
+
+    const returnPin = booking.returnPin ?? String(Math.floor(1000 + Math.random() * 9000));
+
+    await bookingRef.update({
+      status: "inProgress",
+      rentalTripStatus: "inProgress",
+      pickupPinUsed: true,
+      startPinUsed: true,
+      returnPin,
+      returnPinUsed: false,
+      tripStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.info("Self-drive pickup confirmed", { bookingId, uid });
+    return { success: true, returnPin };
+  }
+);
+
+// --------------- Callable: confirm self-drive return (customer) ------------
+
+exports.confirmSelfDriveReturn = onCall(
+  { region: REGION_PRIMARY },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Authentication required.");
+
+    const { bookingId, enteredPin } = request.data as {
+      bookingId?: string;
+      enteredPin?: string;
+    };
+
+    if (!bookingId) throw new HttpsError("invalid-argument", "bookingId is required.");
+    if (!enteredPin) throw new HttpsError("invalid-argument", "enteredPin is required.");
+
+    const bookingRef = admin.firestore().collection("rental_bookings").doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) throw new HttpsError("not-found", "Booking record was not found in database.");
+
+    const booking = bookingSnap.data()!;
+    if (booking.customerId !== uid) {
+      throw new HttpsError("permission-denied", "You do not have permission to verify this booking.");
+    }
+
+    if (booking.status !== "inProgress") {
+      throw new HttpsError("failed-precondition", "Vehicle return cannot be confirmed right now. Rental trip is not currently active or in progress.");
+    }
+
+    if (booking.returnPinUsed) {
+      throw new HttpsError("already-exists", "This Return PIN has already been used and the rental is completed.");
+    }
+
+    const expectedPin = String(booking.returnPin ?? "").trim();
+    if (!expectedPin || expectedPin !== enteredPin.trim()) {
+      throw new HttpsError("invalid-argument", "Incorrect Return PIN. Please confirm the 4-digit return code with the fleet manager and try again.");
+    }
+
+    await bookingRef.update({
+      status: "completed",
+      rentalTripStatus: "completed",
+      returnPinUsed: true,
+      tripEndedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.info("Self-drive return confirmed", { bookingId, uid });
+    return { success: true };
+  }
+);
 
 

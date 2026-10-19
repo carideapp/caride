@@ -2,6 +2,8 @@ import 'package:caride/features/profile/data/account_repository.dart';
 import 'package:caride/features/ride_booking/booking_shell/booking_shell_controller.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/payment_methods_bottom_sheet.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/promos_bottom_sheet.dart';
+import 'package:caride/features/wallet/widgets/dedicated_account_bottom_sheet.dart';
+import 'package:caride/features/wallet/widgets/pending_bank_transfer_widgets.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,7 +97,9 @@ class _FareStepState extends State<FareStep> {
               children: [
                 Text(
                   'Set your offer',
-                  style: AppTextStyles.titleLarge.copyWith(fontWeight: FontWeight.bold),
+                  style: AppTextStyles.titleLarge.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
@@ -137,10 +141,13 @@ class _FareStepState extends State<FareStep> {
   }
 
   Future<void> _requestRide() async {
-    if (_paymentMethod == 'wallet' && _walletBalance < widget.controller.offerNaira) {
+    if (_paymentMethod == 'wallet' &&
+        _walletBalance < widget.controller.offerNaira) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Insufficient wallet balance. Please top up or choose another payment method.'),
+          content: Text(
+            'Insufficient wallet balance. Please top up or choose another payment method.',
+          ),
           backgroundColor: AppColors.error,
         ),
       );
@@ -221,7 +228,9 @@ class _FareStepState extends State<FareStep> {
                               Text(
                                 'Tap to edit',
                                 style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -238,6 +247,11 @@ class _FareStepState extends State<FareStep> {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
+
+              // Pending Bank Transfer Banner (if active)
+              const PendingBankTransferBanner(
+                margin: EdgeInsets.only(bottom: AppSpacing.sm),
+              ),
 
               // Payment method row selector
               InkWell(
@@ -269,7 +283,9 @@ class _FareStepState extends State<FareStep> {
                             Text(
                               'Payment Method',
                               style: AppTextStyles.bodySmall.copyWith(
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -285,7 +301,9 @@ class _FareStepState extends State<FareStep> {
                       ),
                       Icon(
                         Icons.chevron_right_rounded,
-                        color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
+                        color: isDark
+                            ? AppColors.textTertiaryDark
+                            : AppColors.textTertiaryLight,
                       ),
                     ],
                   ),
@@ -321,16 +339,22 @@ class _FareStepState extends State<FareStep> {
                             Text(
                               'Special Offer / Promo',
                               style: AppTextStyles.bodySmall.copyWith(
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              c.selectedPromo != null ? c.selectedPromo!.code : 'Apply Promo Code',
+                              c.selectedPromo != null
+                                  ? c.selectedPromo!.code
+                                  : 'Apply Promo Code',
                               style: AppTextStyles.bodyLarge.copyWith(
                                 fontWeight: FontWeight.w800,
-                                color: c.selectedPromo != null ? AppColors.brand : null,
+                                color: c.selectedPromo != null
+                                    ? AppColors.brand
+                                    : null,
                               ),
                             ),
                           ],
@@ -338,7 +362,9 @@ class _FareStepState extends State<FareStep> {
                       ),
                       Icon(
                         Icons.chevron_right_rounded,
-                        color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
+                        color: isDark
+                            ? AppColors.textTertiaryDark
+                            : AppColors.textTertiaryLight,
                       ),
                     ],
                   ),
@@ -352,9 +378,15 @@ class _FareStepState extends State<FareStep> {
                 builder: (context, profileSnap) {
                   final profile = profileSnap.data;
                   final creditBalance = profile?.creditBalance ?? 0.0;
-                  final maxCoverageDiscount = (offer * 0.10); // 10% default max fare coverage
-                  final calculatedDiscount = creditBalance < maxCoverageDiscount ? creditBalance : maxCoverageDiscount;
-                  final estPayable = (offer - calculatedDiscount).clamp(0.0, double.infinity);
+                  final maxCoverageDiscount =
+                      (offer * 0.10); // 10% default max fare coverage
+                  final calculatedDiscount = creditBalance < maxCoverageDiscount
+                      ? creditBalance
+                      : maxCoverageDiscount;
+                  final estPayable = (offer - calculatedDiscount).clamp(
+                    0.0,
+                    double.infinity,
+                  );
 
                   return GlassContainer(
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -363,7 +395,9 @@ class _FareStepState extends State<FareStep> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                            color: const Color(
+                              0xFF10B981,
+                            ).withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -378,9 +412,11 @@ class _FareStepState extends State<FareStep> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Use Credit Wallet (Avail: ₦${creditBalance.toStringAsFixed(0)})',
+                                'Use Subsidy Wallet (Avail: ₦${creditBalance.toStringAsFixed(0)})',
                                 style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -391,7 +427,9 @@ class _FareStepState extends State<FareStep> {
                                     : 'Cover up to 10% of fare',
                                 style: AppTextStyles.bodyMedium.copyWith(
                                   fontWeight: FontWeight.w800,
-                                  color: c.useCreditWallet ? const Color(0xFF10B981) : null,
+                                  color: c.useCreditWallet
+                                      ? const Color(0xFF10B981)
+                                      : null,
                                 ),
                               ),
                             ],
@@ -411,27 +449,71 @@ class _FareStepState extends State<FareStep> {
               ),
               if (isInsufficient) ...[
                 const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 16),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        'Insufficient wallet balance (Available: ₦${_walletBalance.toStringAsFixed(2)})',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.w600,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppColors.error,
+                        size: 18,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          'Insufficient wallet balance (Available: ₦${_walletBalance.toStringAsFixed(2)})',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor: AppColors.brand.withValues(
+                            alpha: 0.12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () =>
+                            DedicatedAccountBottomSheet.show(context),
+                        child: Text(
+                          'Top Up',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.brand,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
 
               const SizedBox(height: AppSpacing.md),
               PrimaryButton(
                 label: _requesting ? 'Requesting...' : 'Request Ride',
-                onPressed: (_requesting || isInsufficient) ? null : _requestRide,
+                onPressed: (_requesting || isInsufficient)
+                    ? null
+                    : _requestRide,
               ),
             ],
           ),

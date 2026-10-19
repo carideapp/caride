@@ -3,7 +3,6 @@ import 'package:caride/features/ride_booking/data/ride_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 class RateDriverScreen extends StatefulWidget {
   const RateDriverScreen({super.key, required this.rideId});
@@ -57,6 +56,7 @@ class _RateDriverScreenState extends State<RateDriverScreen> {
         SnackBar(
           content: Text('Failed to submit rating: ${e.toString()}'),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -65,72 +65,103 @@ class _RateDriverScreenState extends State<RateDriverScreen> {
   }
 
   Future<void> _showRateSuccessPopup() async {
-    final theme = Theme.of(context);
-    await showDialog<void>(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+
+    await showModalBottomSheet<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.xl),
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Container(
+          padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(sheetContext).padding.bottom + 28),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
-          child: AppCard(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.lg,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 130,
-                  height: 130,
-                  child: Lottie.asset(
-                    'lib/assets/lottie/Success.lottie',
-                    fit: BoxFit.contain,
-                    animate: true,
-                    repeat: true,
-                    decoder: (bytes) {
-                      return LottieComposition.decodeZip(
-                        bytes,
-                        filePicker: (files) {
-                          return files.firstWhere(
-                            (f) =>
-                                f.name.startsWith('animations/') &&
-                                f.name.endsWith('.json'),
-                          );
-                        },
-                      );
-                    },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Thanks for your rating',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: AppColors.primaryGreen,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Your feedback helps us improve every ride experience.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                PrimaryButton(
-                  label: 'OK',
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    Navigator.of(context).pop();
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: 120,
+                height: 120,
+                child: Lottie.asset(
+                  'lib/assets/lottie/Success.lottie',
+                  fit: BoxFit.contain,
+                  animate: true,
+                  repeat: true,
+                  decoder: (bytes) {
+                    return LottieComposition.decodeZip(
+                      bytes,
+                      filePicker: (files) {
+                        return files.firstWhere(
+                          (f) => f.name.startsWith('animations/') && f.name.endsWith('.json'),
+                        );
+                      },
+                    );
                   },
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Thanks for your rating!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: primaryTextColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your honest feedback keeps the CaRide community safe and reliable for everyone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: secondaryTextColor,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -139,221 +170,317 @@ class _RateDriverScreenState extends State<RateDriverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final inputBg = isDark ? AppColors.darkSurface : const Color(0xFFF3F4F6);
+
     return Scaffold(
-      appBar: AppBar(),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: StreamBuilder<RideModel?>(
-          stream: _rideRepository.watchRide(widget.rideId),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(
-                child: Text(
-                  'Unable to load ride right now.',
-                  style: theme.textTheme.bodyLarge,
-                ),
-              );
-            }
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final ride = snapshot.data;
-            if (ride == null) {
-              return Center(
-                child: Text(
-                  'Ride not found.',
-                  style: theme.textTheme.bodyLarge,
-                ),
-              );
-            }
-
-            final driverName = (ride.driverName ?? '').trim();
-            final effectiveDriverName = driverName.isEmpty ? 'Driver' : driverName;
-            final avatarInitial =
-                effectiveDriverName.isEmpty ? '?' : effectiveDriverName.substring(0, 1).toUpperCase();
-
-            final alreadyRated = ride.driverRating != null || ride.ratedAt != null;
-            final displayFare = ride.finalFare ?? ride.amountNaira ?? ride.customerOffer;
-
-            final ratingValue = alreadyRated
-                ? ((ride.driverRating ?? _rating).clamp(1, 5))
-                : _rating;
-
-            final driverUid = ride.driverUid ?? '';
-            _updateDriverStream(driverUid);
-
-            return ListView(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              children: [
-                StreamBuilder<DriverPublicProfile?>(
-                  stream: _driverProfStream,
-                  builder: (context, driverSnap) {
-                    final profile = driverSnap.data;
-                    final photoUrl = profile?.profilePhotoUrl ?? '';
-                    return Center(
-                      child: CircleAvatar(
-                        radius: 56,
-                        backgroundImage: photoUrl.isNotEmpty
-                            ? NetworkImage(photoUrl)
-                            : null,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        child: photoUrl.isEmpty
-                            ? Text(
-                                avatarInitial,
-                                style: theme.textTheme.displayLarge?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              )
-                            : null,
+        child: Column(
+          children: [
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'How was your driver?',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  alreadyRated
-                      ? 'You already rated this driver.'
-                      : 'Rate your trip with $effectiveDriverName.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(5, (index) {
-                    final value = index + 1;
-                    final filled = value <= ratingValue;
-                    return GestureDetector(
-                      onTap: alreadyRated ? null : () => setState(() => _rating = value),
                       child: Icon(
-                        Icons.star_rounded,
-                        size: 46,
-                        color: filled ? Colors.orange : const Color(0xFFE7E9EC),
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    'Rate Driver',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: StreamBuilder<RideModel?>(
+                stream: _rideRepository.watchRide(widget.rideId),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Unable to load ride right now.', style: TextStyle(color: secondaryTextColor)),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.brand),
                       ),
                     );
-                  }),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (!alreadyRated) ...[
-                  AppCard(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    child: TextField(
-                      controller: _commentController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        hintText: 'Add a comment (optional)',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
+                  }
+                  final ride = snapshot.data;
+                  if (ride == null) {
+                    return Center(
+                      child: Text('Ride not found.', style: TextStyle(color: secondaryTextColor)),
+                    );
+                  }
+
+                  final driverName = (ride.driverName ?? '').trim();
+                  final effectiveDriverName = driverName.isEmpty ? 'Driver' : driverName;
+                  final avatarInitial =
+                      effectiveDriverName.isEmpty ? '?' : effectiveDriverName.substring(0, 1).toUpperCase();
+
+                  final alreadyRated = ride.driverRating != null || ride.ratedAt != null;
+                  final displayFare = ride.finalFare ?? ride.amountNaira ?? ride.customerOffer;
+
+                  final ratingValue = alreadyRated
+                      ? ((ride.driverRating ?? _rating).clamp(1, 5))
+                      : _rating;
+
+                  final driverUid = ride.driverUid ?? '';
+                  _updateDriverStream(driverUid);
+
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    children: [
+                      const SizedBox(height: 10),
+                      StreamBuilder<DriverPublicProfile?>(
+                        stream: _driverProfStream,
+                        builder: (context, driverSnap) {
+                          final profile = driverSnap.data;
+                          final photoUrl = profile?.profilePhotoUrl ?? '';
+                          return Center(
+                            child: CircleAvatar(
+                              radius: 48,
+                              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                              backgroundColor: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
+                              child: photoUrl.isEmpty
+                                  ? Text(
+                                      avatarInitial,
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.w800,
+                                        color: primaryTextColor,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ] else if (ride.driverRatingComment?.isNotEmpty ?? false) ...[
-                  AppCard(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        ride.driverRatingComment!,
-                        style: theme.textTheme.bodyMedium,
+                      const SizedBox(height: 18),
+                      Text(
+                        'How was your ride?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: primaryTextColor,
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                _SimpleSummaryCard(
-                  lines: [
-                    ('Driver', effectiveDriverName),
-                    ('Payment', _paymentMethodLabel(ride.paymentMethod)),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _SimpleSummaryCard(
-                  lines: [
-                    ('Trip Fare', _formatNaira(displayFare)),
-                    ('Total Paid', _formatNaira(displayFare)),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                PrimaryButton(
-                  label: alreadyRated
-                      ? 'Rated'
-                      : _submitting
-                          ? 'Submitting...'
-                          : 'Submit Rating',
-                  onPressed: (alreadyRated || _submitting) ? null : _submitRating,
-                ),
-              ],
-            );
-          },
+                      const SizedBox(height: 6),
+                      Text(
+                        alreadyRated
+                            ? 'You already rated this trip.'
+                            : 'Rate your journey with $effectiveDriverName',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Stars Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(5, (index) {
+                          final value = index + 1;
+                          final filled = value <= ratingValue;
+                          return GestureDetector(
+                            onTap: alreadyRated ? null : () => setState(() => _rating = value),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Icon(
+                                Icons.star_rounded,
+                                size: 44,
+                                color: filled ? const Color(0xFFF59E0B) : (isDark ? Colors.white12 : const Color(0xFFE5E7EB)),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 24),
+
+                      if (!alreadyRated) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: inputBg,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: TextField(
+                            controller: _commentController,
+                            maxLines: 3,
+                            style: TextStyle(fontSize: 14, color: primaryTextColor),
+                            decoration: InputDecoration(
+                              hintText: 'Leave a note about your experience (optional)',
+                              hintStyle: TextStyle(fontSize: 13, color: secondaryTextColor),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ] else if (ride.driverRatingComment?.isNotEmpty ?? false) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Text(
+                            ride.driverRatingComment!,
+                            style: TextStyle(fontSize: 14, color: primaryTextColor),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      _buildSummaryCard(
+                        cardBg: cardBg,
+                        borderColor: borderColor,
+                        primaryTextColor: primaryTextColor,
+                        secondaryTextColor: secondaryTextColor,
+                        lines: [
+                          ('Driver', effectiveDriverName),
+                          ('Payment Method', _paymentMethodLabel(ride.paymentMethod)),
+                          ('Trip Fare', _formatNaira(displayFare)),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: (alreadyRated || _submitting) ? null : _submitRating,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.brand,
+                            elevation: 0,
+                            disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          child: _submitting
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : Text(
+                                  alreadyRated ? 'Already Rated' : 'Submit Rating',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
-}
 
-class _SimpleSummaryCard extends StatelessWidget {
-  const _SimpleSummaryCard({required this.lines});
-
-  final List<(String, String)> lines;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
+  Widget _buildSummaryCard({
+    required Color cardBg,
+    required Color borderColor,
+    required Color primaryTextColor,
+    required Color secondaryTextColor,
+    required List<(String, String)> lines,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
+      ),
       child: Column(
-        children: lines
-            .map(
-              (line) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        line.$1,
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                    ),
-                    Text(
-                      line.$2,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+        children: lines.map((line) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  line.$1,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: secondaryTextColor,
+                  ),
                 ),
-              ),
-            )
-            .toList(growable: false),
+                Text(
+                  line.$2,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: primaryTextColor,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
-}
 
-String _paymentMethodLabel(String raw) {
-  final cleaned = raw.trim().toLowerCase();
-  return switch (cleaned) {
-    'wallet' => 'Wallet',
-    'cash' => 'Cash',
-    _ => raw.trim().isEmpty ? 'Payment' : raw.trim(),
-  };
-}
+  String _paymentMethodLabel(String raw) {
+    final cleaned = raw.trim().toLowerCase();
+    return switch (cleaned) {
+      'wallet' => 'CaRide Wallet',
+      'cash' => 'Cash',
+      _ => raw.trim().isEmpty ? 'Payment' : raw.trim(),
+    };
+  }
 
-String _formatNaira(double value) {
-  final rounded = value.round().toString();
-  final withCommas = rounded.replaceAllMapped(
-    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-    (m) => '${m[1]},',
-  );
-  return '₦$withCommas';
+  String _formatNaira(double value) {
+    final rounded = value.round().toString();
+    final withCommas = rounded.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return '₦$withCommas';
+  }
 }

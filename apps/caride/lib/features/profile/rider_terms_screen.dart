@@ -2,8 +2,6 @@ import 'package:caride/features/profile/widgets/legal_document_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:navigation/navigation.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 /// Rider Terms of Use Screen with dynamic Firestore configuration.
 class RiderTermsScreen extends StatelessWidget {
@@ -41,38 +39,73 @@ Welcome to CaRide. By accessing or using our passenger application, you agree to
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: 'Terms of Use',
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: ResponsiveContainer(
-          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('config')
-                .doc('legalSettings')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final customTerms = snapshot.data?.data()?['riderTerms'] as String?;
-              final textContent = (customTerms != null && customTerms.trim().isNotEmpty)
-                  ? customTerms
-                  : _defaultTerms;
+        child: Column(
+          children: [
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    'Terms of Use',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-              return LegalDocumentView(
-                title: 'Terms of Use',
-                subtitle: 'Passenger Terms & Service Agreements',
-                icon: Icons.gavel_rounded,
-                rawContent: textContent,
-                badgeLabel: 'Rider Terms',
-              );
-            },
-          ),
+            Expanded(
+              child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('config')
+                    .doc('legalSettings')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  final customTerms = snapshot.data?.data()?['riderTerms'] as String?;
+                  final textContent = (customTerms != null && customTerms.trim().isNotEmpty)
+                      ? customTerms
+                      : _defaultTerms;
+
+                  return LegalDocumentView(
+                    title: 'Terms of Use',
+                    subtitle: 'Passenger Terms & Service Agreements',
+                    icon: Icons.gavel_rounded,
+                    rawContent: textContent,
+                    badgeLabel: 'Rider Terms',
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

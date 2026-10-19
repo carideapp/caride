@@ -100,10 +100,25 @@ class _DriverWithdrawPinScreenState extends State<DriverWithdrawPinScreen> {
         (route) => route.isFirst, // Keep only the wallet screen
       );
     } catch (e) {
+      final readableError = parseDriverWithdrawError(e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              readableError,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
       setState(() {
         _loading = false;
         _pin = '';
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = readableError;
       });
     }
   }

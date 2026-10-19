@@ -70,14 +70,22 @@ class DriverProfileRepository {
     required String uid,
     String? fullName,
     String? phone,
+    String? username,
+    String? country,
+    String? state,
     String? profilePhotoUrl,
+    String? coverPhotoUrl,
   }) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (fullName != null) data['fullName'] = fullName;
     if (phone != null) data['phone'] = phone;
+    if (username != null) data['username'] = username;
+    if (country != null) data['country'] = country;
+    if (state != null) data['state'] = state;
     if (profilePhotoUrl != null) data['profilePhotoUrl'] = profilePhotoUrl;
+    if (coverPhotoUrl != null) data['coverPhotoUrl'] = coverPhotoUrl;
     await _driversCol.doc(uid).update(data);
   }
 

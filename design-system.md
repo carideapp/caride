@@ -292,14 +292,108 @@ SizedBox(
 
 ---
 
-## 5. Screen Implementation Checklist
+## 5. Profile & Account Sub-System Standards
+
+The CaRide Profile Sub-System (Passenger Account, Driver Profile, and Fleet Manager Profile) follows a clean, minimalist iOS-inspired layout designed for high scannability, zero visual clutter, and consistent interaction patterns:
+
+### 5.1 Profile Header Architecture
+- **Centered Circular Avatar**:
+  - Size: `96x96px` container with circular shape (`BoxShape.circle`).
+  - Border: `1.5px` subtle border (`#E5E7EB` in light mode, `AppColors.glassBorderDark` in dark mode).
+  - Background: Soft neutral `#F3F4F6` (light) / `AppColors.darkSurface` (dark).
+  - Tap Behavior: Tapping the avatar directly opens the profile detail / photo editor screen.
+- **Display Name**:
+  - Large bold typography: `20px`, `FontWeight.w700`, letter spacing `-0.3`.
+  - Margin: `16px` vertical gap below the avatar.
+- **Secondary Subtitle**:
+  - Single-line muted text (`13px`, `#6B7280` light / `AppColors.textSecondaryDark` dark) displaying user phone number or email.
+
+### 5.2 Grouped Card Structure
+- **Container Geometry**:
+  - Large rounded corners: `BorderRadius.circular(24)`.
+  - Background: Pure white `#FFFFFF` (light) / `AppColors.darkSurface` (dark).
+  - Border: `1px` subtle outline (`#E5E7EB` light / `AppColors.glassBorderDark` dark).
+  - Vertical spacing between card groups: `20px`.
+  - No decorative glows, drop shadows, or multi-colored gradients.
+- **Clean Grouping (No Verbose Headers)**:
+  - Menu cards are grouped by functional domain (e.g. Finances, Preferences, Activity, Session) without cluttering uppercase section headers.
+
+### 5.3 Menu List Items (`_ProfileMenuItem`)
+- **Single-Line Minimalist Items**:
+  - Do not add subtitle descriptions or multi-line helper text under menu titles in profile cards.
+  - Height / Padding: `EdgeInsets.symmetric(horizontal: 18, vertical: 14)`.
+  - Ripple Shape: `BorderRadius.circular(20)`.
+- **Leading Icon Badge**:
+  - Uniform neutral circle: `40x40px`, `BoxShape.circle`.
+  - Fill: Soft neutral `#F3F4F6` (light) / `Colors.white10` (dark).
+  - Icon: `20px`, neutral color `#374151` (light) / `Colors.white70` (dark).
+  - *Exception*: Destructive items (e.g. Sign Out) use `#EF4444` icon with `AppColors.error.withValues(alpha: 0.1)` background.
+- **Title**:
+  - Clean font: `15px`, `FontWeight.w600`, letter spacing `-0.2`.
+- **Accent Badges & Trailing**:
+  - Badges: Pill chip (`BorderRadius.circular(12)`), padding `horizontal: 10, vertical: 4` (e.g. wallet balance `₦518,050`, tier `GOLD`, verified status).
+  - Trailing Icon: `Icons.chevron_right_rounded`, `22px`, `#9CA3AF`. (Hidden on destructive actions).
+- **Hairline Inset Dividers**:
+  - Inset from the left by `68px` (aligning with menu item text) and `18px` from the right.
+  - Height: `1px`, color `#F3F4F6` (light) / `Colors.white10` (dark).
+
+### 5.4 Sub-Screen Detail & Form Standards
+- **Top App Bar**:
+  - Circular back button: `44x44px`, `BoxShape.circle`, thin border (`#E5E7EB`).
+  - Centered title: `18px - 20px`, `FontWeight.w700`.
+- **Form Inputs**:
+  - Pill shape: `BorderRadius.circular(28)`.
+  - Fill: `#F3F4F6` (light) / `AppColors.darkSurface` (dark).
+  - Content padding: `EdgeInsets.symmetric(horizontal: 22, vertical: 18)`.
+- **Action Buttons**:
+  - Full-width pill: `54px - 56px` height, `BorderRadius.circular(28)`, `AppColors.brand`.
+- **Destructive Actions & Confirmations**:
+  - Outlined button with label (no icon-only trash buttons).
+  - Confirmation modals MUST use `showModalBottomSheet` with `BorderRadius.vertical(top: Radius.circular(28))`, drag handle, tinted alert circle, bold title, body, and full-width pill confirm button. Never use `AlertDialog`.
+
+---
+
+## 6. Admin Dashboard Web Design System (`apps/admin_dashboard`)
+
+The CaRide Admin Dashboard adapts the clean, pill-dominant geometry and emerald brand identity to an enterprise web administrative console inspired by the `admin_UI` reference layouts:
+
+### 6.1 Layout Shell & Dark Floating Sidebar
+- **Sidebar Presentation**: Dark deep forest background (`#0A1610` in light mode, `#0B0F19` in dark mode) with rounded outer geometry (`border-radius: 20px` or floating curved rail) and clean section groupings (`MAIN`, `DRIVERS`, `FLEET PARTNERS`, `CUSTOMERS`, `FINANCE`).
+- **Active Navigation Pill**: Active item is rendered as a crisp, solid white pill (`background: #FFFFFF`, text: `#0F172A`, `border-radius: 9999px`), giving ultra-high visual contrast against the dark sidebar.
+- **Top Greeting & Header**: Contextual greeting ("Good Morning, [Name]" / "[Page Title]"), page subtext, circular icon buttons (search, notification bell with red pill badge count), and store/system status toggle.
+
+### 6.2 Metric & Stat Cards
+- **Solid Dark Metric Cards**: Deep solid brand background (`#064E3B` / `#0B2B1B`), rounded corners (`border-radius: 18px-20px`), white high-contrast numerical metrics, and top-right circular icon badge (`40x40px`) with subtle semi-transparent background (`rgba(255, 255, 255, 0.15)`).
+- **Hero Gradient Wallet Card**: Large promotional/balance card (`background: linear-gradient(135deg, #064E3B 0%, #059669 100%)`, `border-radius: 24px`), visibility eye toggle, and a full-pill white action button (`[Request Payout]`).
+
+### 6.3 Modern Tables & Status Badges
+- **Table Container**: Large rounded card container (`border-radius: 20px-24px`), subtle border (`#E5E7EB`), soft light grey header background (`#F9FAFB`), and generous row padding.
+- **Entity Thumbnails**: Thumbnail preview images with rounded corners (`12px-14px`) alongside bold titles and secondary metadata.
+- **Pill Status Badges**: Soft pastel pill badges (`border-radius: 9999px`, padding `4px 12px`, `font-size: 12px`, `font-weight: 600`):
+  - Paid / Approved / Success: Soft green (`#DCFCE7`, text `#16A34A`)
+  - Pending / Review: Soft amber (`#FEF3C7`, text `#D97706`)
+  - New / Info: Soft blue (`#DBEAFE`, text `#2563EB`)
+  - Cancelled / Danger: Soft red (`#FEE2E2`, text `#DC2626`)
+- **Pagination Footer**: Summary text ("Showing 1 to 8 of 129 items") on the left, circular pagination arrow buttons (`<` and `>`), and active page in a solid dark circle.
+
+### 6.4 Pill Controls & Form Fields
+- **Filter Toolbar**: Date range pill `[📅 This month ⌄]`, sort pill `[⇅ Sort by: Latest ⌄]`, pill search bar with leading icon (`border-radius: 9999px`), and export button.
+- **Forms**: Full pill inputs (`border-radius: 9999px`), soft neutral fill, leading icon, and password visibility toggle.
+- **Tags & Category Chips**: Rounded pill chips with trailing dismiss `x` icon (`border-radius: 9999px`).
+
+---
+
+## 7. Screen Implementation Checklist
 
 When building or updating any screen in CaRide:
 1. [ ] **Color Fidelity**: Use `AppColors.brand` (`#16A34A`) for all primary actions, active tabs, focus borders, and links. Never leave foreign mockup colors (e.g. purple/pink).
-2. [ ] **Pill Shapes**: Ensure all primary buttons and text fields use `borderRadius: BorderRadius.circular(28)`.
+2. [ ] **Pill Shapes**: Ensure all primary buttons and text fields use `borderRadius: BorderRadius.circular(28)` (or `9999px` in web).
 3. [ ] **Input Styling**: Soft grey `#F3F4F6` background, borderless default with `AppColors.brand` focus border.
 4. [ ] **Card Geometry**: Use `20px - 24px` rounded corners with subtle `#E5E7EB` outlines.
-5. [ ] **Dark Mode Support**: Ensure every component supports both light theme and dark theme gracefully.
-6. [ ] **Error Handling & Feedback**: Translate all exception codes to friendly messages, and display dual immediate visual feedback (in-view banner + floating snackbar).
-7. [ ] **Validation & Verification**: Run `flutter analyze` across all workspace apps after any changes.
+5. [ ] **Profile Standards**: Follow the 96×96 avatar, 24px grouped cards, 40×40 neutral icon badges, and single-line menu item standard.
+6. [ ] **Dark Mode Support**: Ensure every component supports both light theme and dark theme gracefully.
+7. [ ] **Error Handling & Feedback**: Translate all exception codes to friendly messages, and display dual immediate visual feedback (in-view banner + floating snackbar).
+8. [ ] **Validation & Verification**: Run `flutter analyze` across all workspace apps and verify web builds with `npm run build`.
+
+
 

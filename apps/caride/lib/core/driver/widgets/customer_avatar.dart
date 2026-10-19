@@ -40,24 +40,29 @@ class CustomerAvatar extends StatelessWidget {
         final data = snapshot.data?.data();
         final photoUrl = data?['photoUrl'] as String? ?? '';
 
+        final fallbackWidget = Text(
+          fallbackLetter.isNotEmpty ? fallbackLetter[0].toUpperCase() : 'C',
+          style: TextStyle(
+            color: AppColors.primaryGreen,
+            fontWeight: FontWeight.bold,
+            fontSize: radius * 0.9,
+          ),
+        );
+
         if (photoUrl.isNotEmpty) {
           return CircleAvatar(
             radius: radius,
+            backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.1),
             backgroundImage: NetworkImage(photoUrl),
+            onBackgroundImageError: (_, __) {},
+            child: fallbackWidget,
           );
         }
 
         return CircleAvatar(
           radius: radius,
           backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.1),
-          child: Text(
-            fallbackLetter.isNotEmpty ? fallbackLetter[0].toUpperCase() : 'C',
-            style: TextStyle(
-              color: AppColors.primaryGreen,
-              fontWeight: FontWeight.bold,
-              fontSize: radius * 0.9,
-            ),
-          ),
+          child: fallbackWidget,
         );
       },
     );

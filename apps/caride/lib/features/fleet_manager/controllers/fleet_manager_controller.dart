@@ -1,15 +1,27 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_models/shared_models.dart';
 import '../data/fleet_repository.dart';
+import '../notifications/fleet_notifications_controller.dart';
 
 /// Central state controller for the Fleet Manager feature.
 class FleetManagerController extends ChangeNotifier {
-  FleetManagerController({FleetRepository? repository})
-      : _repository = repository ?? fleetRepository;
+  FleetManagerController({FleetRepository? repository, FirebaseAuth? auth})
+      : _repository = repository ?? fleetRepository,
+        _auth = auth ?? FirebaseAuth.instance {
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (user == null) {
+        reset();
+      }
+    });
+  }
 
   final FleetRepository _repository;
+  final FirebaseAuth _auth;
 
+  StreamSubscription<User?>? _authSub;
   StreamSubscription<FleetProfile?>? _profileSub;
   StreamSubscription<List<RentalVehicle>>? _vehiclesSub;
   StreamSubscription<List<RentalBooking>>? _bookingsSub;
@@ -40,9 +52,13 @@ class FleetManagerController extends ChangeNotifier {
       _vehicles.where((v) => v.status == RentalVehicleStatus.rented).length;
   int get maintenanceVehiclesCount =>
       _vehicles.where((v) => v.status == RentalVehicleStatus.maintenance).length;
+  int get inactiveVehiclesCount =>
+      _vehicles.where((v) => v.status == RentalVehicleStatus.inactive).length;
 
   int get pendingBookingsCount =>
-      _bookings.where((b) => b.status == RentalBookingStatus.pendingApproval).length;
+      _bookings.where((b) =>
+          b.status == RentalBookingStatus.pendingApproval ||
+          b.status == RentalBookingStatus.awaitingPayment).length;
   int get activeBookingsCount =>
       _bookings.where((b) => b.isActive).length;
   int get completedBookingsCount =>
@@ -57,19 +73,38 @@ class FleetManagerController extends ChangeNotifier {
 
   int get linkedDriversCount => _drivers.length;
 
+  /// Returns all active or pending bookings for a specific vehicle in this fleet.
+  List<RentalBooking> getActiveBookingsForVehicle(String vehicleId) {
+    return _bookings
+        .where((b) =>
+            b.vehicleId == vehicleId &&
+            (b.status == RentalBookingStatus.pendingApproval ||
+             b.status == RentalBookingStatus.confirmed ||
+             b.status == RentalBookingStatus.inProgress))
+        .toList();
+  }
+
   /// Initialize controller subscriptions for the logged-in fleet owner.
   void init([String? uid]) {
+    final targetUid = uid ?? _auth.currentUser?.uid;
+    if (targetUid == null) {
+      reset();
+      return;
+    }
+
     _profileSub?.cancel();
-    _profileSub = _repository.streamFleetProfile(uid).listen((profile) {
+    _profileSub = _repository.streamFleetProfile(targetUid).listen((profile) {
       _currentProfile = profile;
       notifyListeners();
 
       if (profile != null && profile.fleetId.isNotEmpty) {
         _subscribeToFleetData(profile.fleetId);
+        unawaited(FleetNotificationsController().initialize(fleetId: profile.fleetId));
       } else {
         _clearFleetData();
       }
     }, onError: (err) {
+      debugPrint('[FleetManagerController] streamFleetProfile error: $err');
       _errorMessage = err.toString();
       notifyListeners();
     });
@@ -80,18 +115,24 @@ class FleetManagerController extends ChangeNotifier {
     _vehiclesSub = _repository.streamVehicles(fleetId).listen((vehicles) {
       _vehicles = vehicles;
       notifyListeners();
+    }, onError: (err) {
+      debugPrint('[FleetManagerController] streamVehicles error: $err');
     });
 
     _bookingsSub?.cancel();
     _bookingsSub = _repository.streamFleetBookings(fleetId).listen((bookings) {
       _bookings = bookings;
       notifyListeners();
+    }, onError: (err) {
+      debugPrint('[FleetManagerController] streamFleetBookings error: $err');
     });
 
     _driversSub?.cancel();
     _driversSub = _repository.streamDrivers(fleetId).listen((drivers) {
       _drivers = drivers;
       notifyListeners();
+    }, onError: (err) {
+      debugPrint('[FleetManagerController] streamDrivers error: $err');
     });
   }
 
@@ -99,9 +140,23 @@ class FleetManagerController extends ChangeNotifier {
     _vehiclesSub?.cancel();
     _bookingsSub?.cancel();
     _driversSub?.cancel();
+    _vehiclesSub = null;
+    _bookingsSub = null;
+    _driversSub = null;
     _vehicles = [];
     _bookings = [];
     _drivers = [];
+    notifyListeners();
+  }
+
+  /// Cancel all subscriptions and clear cached fleet data on sign out.
+  void reset() {
+    _profileSub?.cancel();
+    _profileSub = null;
+    _clearFleetData();
+    _currentProfile = null;
+    _errorMessage = null;
+    _isLoading = false;
     notifyListeners();
   }
 
@@ -166,7 +221,67 @@ class FleetManagerController extends ChangeNotifier {
     }
   }
 
-  /// Approve a booking and optionally assign driver.
+  /// Upload a vehicle photo to Firebase Storage and return the URL.
+  Future<String> uploadVehiclePhoto({
+    required String vehicleId,
+    required File file,
+    required String photoId,
+  }) async {
+    final fleetId = _currentProfile?.fleetId ?? '';
+    return await _repository.uploadVehiclePhoto(
+      fleetId: fleetId,
+      vehicleId: vehicleId,
+      file: file,
+      photoId: photoId,
+    );
+  }
+
+  /// Approve a pending booking — sets status to `awaitingPayment`.
+  /// The customer will be prompted to pay before the booking is confirmed.
+  Future<void> approveBookingForPayment(String bookingId) async {
+    _setLoading(true);
+    try {
+      await _repository.updateBookingStatus(
+        bookingId,
+        RentalBookingStatus.awaitingPayment,
+      );
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Assign a driver to a confirmed + paid booking.
+  /// Only valid when status == confirmed and paymentStatus == 'paid'.
+  Future<void> assignDriverToBooking(
+    String bookingId, {
+    required String assignedDriverId,
+    required String assignedDriverName,
+    String? assignedDriverPhone,
+  }) async {
+    _setLoading(true);
+    try {
+      await _repository.updateBookingStatus(
+        bookingId,
+        RentalBookingStatus.confirmed,
+        assignedDriverId: assignedDriverId,
+        assignedDriverName: assignedDriverName,
+        assignedDriverPhone: assignedDriverPhone,
+      );
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// @deprecated Use [approveBookingForPayment] + [assignDriverToBooking] instead.
+  /// Kept for backward compatibility.
   Future<void> approveBooking(
     String bookingId, {
     String? assignedDriverId,
@@ -241,6 +356,49 @@ class FleetManagerController extends ChangeNotifier {
     }
   }
 
+  /// Search drivers from the platform drivers collection
+  Future<List<Map<String, dynamic>>> searchDriversFromPlatform([String query = '']) async {
+    return await _repository.searchDriversFromPlatform(query);
+  }
+
+  /// Link an existing driver to the fleet
+  Future<void> linkDriverToFleet({
+    required String driverUid,
+    required String fullName,
+    required String phone,
+    required String email,
+    String? username,
+    String? photoUrl,
+    String? assignedVehicleId,
+    String? assignedVehicleTitle,
+  }) async {
+    final fleetId = _currentProfile?.fleetId;
+    final fleetName = _currentProfile?.businessName ?? 'CaRide Fleet';
+    if (fleetId == null || fleetId.isEmpty) return;
+
+    _setLoading(true);
+    try {
+      await _repository.linkDriverToFleet(
+        fleetId: fleetId,
+        fleetName: fleetName,
+        driverUid: driverUid,
+        fullName: fullName,
+        phone: phone,
+        email: email,
+        username: username,
+        photoUrl: photoUrl,
+        assignedVehicleId: assignedVehicleId,
+        assignedVehicleTitle: assignedVehicleTitle,
+      );
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   /// Remove a driver from the fleet.
   Future<void> removeDriver(String driverDocId) async {
     final fleetId = _currentProfile?.fleetId ?? '';
@@ -264,10 +422,9 @@ class FleetManagerController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _profileSub?.cancel();
-    _vehiclesSub?.cancel();
-    _bookingsSub?.cancel();
-    _driversSub?.cancel();
+    _authSub?.cancel();
+    _authSub = null;
+    reset();
     super.dispose();
   }
 }

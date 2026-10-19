@@ -63,8 +63,12 @@ service cloud.firestore {
       allow read, write: if false; // Cloud Functions only
     }
 
-    // ─── Config (any signed-in user can read) ───────────────────
+    // ─── Config & System Settings (any signed-in user can read) ───────────────────
     match /config/{configId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    match /system_settings/{settingId} {
       allow read: if true;
       allow write: if isSignedIn();
     }
@@ -98,7 +102,7 @@ service cloud.firestore {
 
     // ─── Users Metadata (Session & Role Flags) ──────────────────
     match /users/{uid} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create: if isOwner(uid) &&
         (!('activeRole' in request.resource.data) || request.resource.data.activeRole in ['customer', 'driver', 'fleet']);
       allow update: if isOwner(uid) &&
@@ -106,13 +110,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /notifications/{notifId} {
-        allow read, write, delete: if isOwner(uid) || isAdmin();
+        allow read, delete: if isOwner(uid) || isAdmin();
+        allow create, write: if isSignedIn();
       }
     }
 
     // ─── Customers (rider app profiles; replaces legacy `users`) ──
     match /customers/{uid} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create: if isOwner(uid) &&
         (!('walletBalance' in request.resource.data) || request.resource.data.walletBalance == 0) &&
         (!('role' in request.resource.data) || request.resource.data.role == 'customer');
@@ -148,12 +153,16 @@ service cloud.firestore {
 
     // ─── Driver Profiles ───────────────────────────────────────
     match /drivers/{uid} {
-      allow read: if isSignedIn();
+      allow read: if true;
 
       // Drivers can update own profile fields (approvalStatus allowed for testing upload flow queue)
       allow update: if isOwner(uid) &&
         // !('approvalStatus' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('role' in request.resource.data.diff(resource.data).affectedKeys());
+
+      // Allow fleet managers to link/unlink driver
+      allow update: if isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['linkedFleetIds', 'updatedAt']);
 
       allow update: if isAdmin() || isStaff();
 
@@ -161,6 +170,12 @@ service cloud.firestore {
       allow create: if isOwner(uid) &&
         request.resource.data.role == 'driver' &&
         request.resource.data.approvalStatus == 'draft';
+
+      // Notifications subcollection
+      match /notifications/{notifId} {
+        allow read, delete: if isOwner(uid) || isAdmin();
+        allow create, write: if isSignedIn();
+      }
 
       // Documents subcollection
       match /documents/{docId} {
@@ -209,30 +224,58 @@ service cloud.firestore {
 
     // ─── Fleet Managers (Onboarding Drafts & Applications) ──────
     match /fleet_managers/{uid} {
-      allow read: if isOwner(uid) || isAdmin() || isStaff();
+      allow read: if true;
       allow create, update: if isOwner(uid) || isAdmin() || isStaff();
       allow delete: if isAdmin();
     }
 
     // ─── Fleets (Fleet Partner Profiles & Operational Data) ────
     match /fleets/{fleetId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && (request.resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+      allow read: if true;
+      allow create: if isSignedIn();
       allow update: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
       allow delete: if isAdmin();
+
+      match /{allPaths=**} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
     }
 
     // ─── Rental Vehicles (Fleet Inventory) ─────────────────────
     match /rental_vehicles/{vehicleId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && (request.resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
-      allow update: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
-      allow delete: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin() || isStaff());
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+
+      match /{allPaths=**} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
+    }
+
+    // ─── Vehicles (General & Driver Vehicle Inventory Fallback) ──
+    match /vehicles/{vehicleId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+
+      match /{allPaths=**} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
+    }
+
+    // ─── Vehicle Photos ─────────────────────────────────────────
+    match /vehicle_photos/{photoId} {
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // ─── Rental Bookings / Orders ──────────────────────────────
     match /rental_bookings/{bookingId} {
-      allow read: if isSignedIn();
+      // Any user (including guest browsing vehicle availability calendars) can read bookings
+      allow read: if true;
       allow create: if isSignedIn();
       allow update: if isSignedIn();
       allow delete: if isAdmin();
@@ -241,7 +284,9 @@ service cloud.firestore {
     // ─── Fleet Drivers ─────────────────────────────────────────
     match /fleet_drivers/{driverId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     // ─── Mail Queue (Cloud Functions / Notification Triggers) ──
@@ -277,7 +322,7 @@ service cloud.firestore {
       allow update: if isSignedIn() &&
         resource.data.driverUid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'driverArrivedAt', 'customerRating', 'customerRatingComment', 'customerRatedAt', 'updatedAt']);
+          .hasOnly(['status', 'driverArrivedAt', 'rideStartedAt', 'completedAt', 'finalFare', 'customerRating', 'customerRatingComment', 'customerRatedAt', 'updatedAt']);
 
       allow update: if isAdmin();
 
@@ -299,15 +344,48 @@ service cloud.firestore {
 
     // ─── Chat / Ride Messages ──────────────────────────────────
     match /rideMessages/{rideId} {
-      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participantUids);
-      allow write: if isSignedIn() && request.auth.uid in request.resource.data.participantUids;
+      // Allow read if user is authenticated and either:
+      // 1) doc doesn't exist yet, or
+      // 2) user is in participantUids, or
+      // 3) user is driver or customer on the ride document, or
+      // 4) user is customer on the rental booking document, or
+      // 5) admin
+      allow read: if isSignedIn() && (
+        resource == null ||
+        (resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
+        (exists(/databases/$(database)/documents/rides/$(rideId)) && (
+          get(/databases/$(database)/documents/rides/$(rideId)).data.customerUid == request.auth.uid ||
+          get(/databases/$(database)/documents/rides/$(rideId)).data.driverUid == request.auth.uid
+        )) ||
+        (resource.data.customerUid != null && resource.data.customerUid == request.auth.uid) ||
+        isAdmin()
+      );
+
+      // Allow write if user is authenticated and either:
+      // 1) user is in participantUids (in resource or request.resource), or
+      // 2) user is driver or customer on the ride document, or
+      // 3) admin
+      allow write: if isSignedIn() && (
+        (request.resource.data.participantUids != null && request.auth.uid in request.resource.data.participantUids) ||
+        (resource != null && resource.data.participantUids != null && request.auth.uid in resource.data.participantUids) ||
+        (exists(/databases/$(database)/documents/rides/$(rideId)) && (
+          get(/databases/$(database)/documents/rides/$(rideId)).data.customerUid == request.auth.uid ||
+          get(/databases/$(database)/documents/rides/$(rideId)).data.driverUid == request.auth.uid
+        )) ||
+        (resource != null && resource.data.customerUid != null && resource.data.customerUid == request.auth.uid) ||
+        (request.resource.data.customerUid != null && request.resource.data.customerUid == request.auth.uid) ||
+        isAdmin()
+      );
 
       match /messages/{msgId} {
         allow read, write: if isSignedIn() && (
+          (get(/databases/$(database)/documents/rideMessages/$(rideId)).data.participantUids != null &&
+           request.auth.uid in get(/databases/$(database)/documents/rideMessages/$(rideId)).data.participantUids) ||
           (exists(/databases/$(database)/documents/rides/$(rideId)) && (
             get(/databases/$(database)/documents/rides/$(rideId)).data.customerUid == request.auth.uid ||
             get(/databases/$(database)/documents/rides/$(rideId)).data.driverUid == request.auth.uid
-          ))
+          )) ||
+          isAdmin()
         );
       }
     }
@@ -484,6 +562,105 @@ service cloud.firestore {
     match /staff_commission_transactions/{txId} {
       allow read: if isSignedIn() && (resource == null || resource.data.staffId == request.auth.uid || isAdmin() || isStaff());
       allow write: if isAdmin();
+    }
+
+    // ─── Ride & Fleet Rental Messages / Conversations ───────────
+    match /rideMessages/{threadId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.participantUids ||
+        isAdmin() ||
+        isStaff()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participantUids ||
+        request.auth.uid in request.resource.data.participantUids ||
+        isAdmin() ||
+        isStaff()
+      );
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.senderUid);
+      }
+    }
+
+    // ─── Fleet Management & Rental System ──────────────────────
+    match /fleets/{fleetId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.auth.uid == request.resource.data.managerUid || request.auth.uid == fleetId || isAdmin());
+      allow update: if isSignedIn() && (
+        resource.data.managerUid == request.auth.uid ||
+        request.auth.uid == fleetId ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      match /transactions/{txId} {
+        allow read: if isSignedIn() && (get(/databases/$(database)/documents/fleets/$(fleetId)).data.managerUid == request.auth.uid || request.auth.uid == fleetId || isAdmin());
+        allow write: if isSignedIn() && (get(/databases/$(database)/documents/fleets/$(fleetId)).data.managerUid == request.auth.uid || request.auth.uid == fleetId || isAdmin());
+      }
+
+      match /drivers/{driverId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (get(/databases/$(database)/documents/fleets/$(fleetId)).data.managerUid == request.auth.uid || request.auth.uid == fleetId || isAdmin());
+      }
+
+      match /vehicles/{vehicleId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (get(/databases/$(database)/documents/fleets/$(fleetId)).data.managerUid == request.auth.uid || request.auth.uid == fleetId || isAdmin());
+      }
+    }
+
+    match /fleet_managers/{managerUid} {
+      allow read, write: if isSignedIn() && (request.auth.uid == managerUid || isAdmin());
+    }
+
+    match /rental_vehicles/{vehicleId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && (resource.data.fleetId == request.auth.uid || isAdmin());
+    }
+
+    match /rental_reviews/{reviewId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+    }
+
+    match /rental_bookings/{bookingId} {
+      allow read: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.fleetId == request.auth.uid ||
+        resource.data.assignedDriverId == request.auth.uid ||
+        isAdmin() ||
+        isStaff()
+      );
+      allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.fleetId == request.auth.uid ||
+        resource.data.assignedDriverId == request.auth.uid ||
+        isAdmin() ||
+        isStaff()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /payout_requests/{reqId} {
+      allow read: if isSignedIn() && (resource.data.managerUid == request.auth.uid || resource.data.fleetId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── For You Educational & Safety Articles ──────────────────
+    match /for_you_articles/{articleId} {
+      allow read: if true;
+      allow write: if isSignedIn();
     }
   }
 }

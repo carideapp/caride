@@ -9,6 +9,14 @@ class ChatThread {
     required this.timestamp,
     required this.driverUid,
     this.unread = 0,
+    this.type = 'ride',
+    this.peerPhoto,
+    this.vehicleTitle,
+    this.fleetId,
+    this.bookingId,
+    this.customerUid,
+    this.customerName,
+    this.fleetName,
   });
 
   final String rideId;
@@ -17,6 +25,14 @@ class ChatThread {
   final DateTime timestamp;
   final String driverUid;
   final int unread;
+  final String type; // 'ride' or 'rental'
+  final String? peerPhoto;
+  final String? vehicleTitle;
+  final String? fleetId;
+  final String? bookingId;
+  final String? customerUid;
+  final String? customerName;
+  final String? fleetName;
 }
 
 class ChatMessage {
@@ -41,7 +57,7 @@ class ChatRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  Stream<List<ChatThread>> watchThreads() {
+  Stream<List<ChatThread>> watchThreads({String? filterType}) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
       return Stream.value(const []);
@@ -53,33 +69,148 @@ class ChatRepository {
         .orderBy('lastMessageAt', descending: true)
         .snapshots()
         .map((snap) {
-          return snap.docs
-              .map((doc) {
-                final data = doc.data();
-                final participantUids = List<String>.from(data['participantUids'] ?? []);
-                final driverUid = participantUids.firstWhere((id) => id != uid, orElse: () => '');
-                final unreadMap = data['unreadCounts'] as Map<String, dynamic>?;
-                final unreadCount = (unreadMap?[uid] as num?)?.toInt() ??
-                    (data['unreadCount_$uid'] as num?)?.toInt() ??
-                    (data['unreadCount'] as num?)?.toInt() ??
-                    0;
+          final threads = <ChatThread>[];
 
-                return ChatThread(
-                  rideId: doc.id,
-                  name: (data['driverName'] as String?) ??
-                      (data['peerName'] as String?) ??
-                      'Driver',
-                  preview:
-                      (data['lastMessage'] as String?) ?? 'No messages yet',
-                  timestamp:
-                      (data['lastMessageAt'] as Timestamp?)?.toDate() ??
-                      DateTime.fromMillisecondsSinceEpoch(0),
-                  unread: unreadCount,
-                  driverUid: driverUid,
-                );
-              })
-              .toList(growable: false);
+          for (final doc in snap.docs) {
+            final data = doc.data();
+            final type = (data['type'] as String?) ?? 'ride';
+
+            if (filterType != null) {
+              if (filterType == 'rental' && type != 'rental') continue;
+              if (filterType == 'ride' && type == 'rental') continue;
+            }
+
+            final participantUids = List<String>.from(data['participantUids'] ?? []);
+            final peerUid = participantUids.firstWhere((id) => id != uid, orElse: () => '');
+            final unreadMap = data['unreadCounts'] as Map<String, dynamic>?;
+            final unreadCount = (unreadMap?[uid] as num?)?.toInt() ??
+                (data['unreadCount_$uid'] as num?)?.toInt() ??
+                (data['unreadCount'] as num?)?.toInt() ??
+                0;
+
+            String resolvedName = 'User';
+            String? resolvedPhoto;
+
+            if (type == 'rental') {
+              final customerUid = data['customerUid'] as String?;
+              if (uid == customerUid) {
+                resolvedName = (data['fleetName'] as String?) ?? (data['peerName'] as String?) ?? 'Fleet Partner';
+                resolvedPhoto = (data['fleetLogo'] as String?) ??
+                    (data['fleetLogoUrl'] as String?) ??
+                    (data['logoUrl'] as String?) ??
+                    (data['fleetPhotoUrl'] as String?) ??
+                    (data['profilePictureUrl'] as String?) ??
+                    (data['photoUrl'] as String?) ??
+                    (data['coverPhotoUrl'] as String?);
+              } else {
+                resolvedName = (data['customerName'] as String?) ?? (data['peerName'] as String?) ?? 'Customer';
+                resolvedPhoto = (data['customerPhoto'] as String?) ??
+                    (data['customerPhotoUrl'] as String?) ??
+                    (data['photoUrl'] as String?) ??
+                    (data['profilePictureUrl'] as String?);
+              }
+            } else {
+              final customerUid = data['customerUid'] as String?;
+              if (uid == customerUid) {
+                resolvedName = (data['driverName'] as String?) ?? (data['peerName'] as String?) ?? 'Driver';
+              } else {
+                resolvedName = (data['customerName'] as String?) ?? (data['peerName'] as String?) ?? 'Rider';
+              }
+            }
+
+            threads.add(
+              ChatThread(
+                rideId: doc.id,
+                name: resolvedName,
+                preview: (data['lastMessage'] as String?) ?? 'No messages yet',
+                timestamp: (data['lastMessageAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0),
+                unread: unreadCount,
+                driverUid: peerUid,
+                type: type,
+                peerPhoto: resolvedPhoto,
+                vehicleTitle: data['vehicleTitle'] as String?,
+                fleetId: data['fleetId'] as String?,
+                bookingId: data['bookingId'] as String?,
+                customerUid: data['customerUid'] as String?,
+                customerName: data['customerName'] as String?,
+                fleetName: data['fleetName'] as String?,
+              ),
+            );
+          }
+
+          return threads;
         });
+  }
+
+  /// Creates or retrieves a rental chat thread for a booking.
+  Future<String> startOrGetRentalThread({
+    required String bookingId,
+    required String fleetId,
+    required String fleetName,
+    required String customerUid,
+    required String customerName,
+    required String vehicleTitle,
+    String? customerPhoto,
+    String? vehicleImage,
+    String? fleetOwnerUid,
+    String? fleetLogo,
+  }) async {
+    final currentUid = _auth.currentUser?.uid;
+    if (currentUid == null) return '';
+
+    String resolvedOwnerUid = fleetOwnerUid ?? '';
+    String? resolvedFleetLogo = fleetLogo;
+    if (resolvedOwnerUid.isEmpty || resolvedFleetLogo == null || resolvedFleetLogo.isEmpty) {
+      try {
+        final fleetDoc = await _firestore.collection('fleets').doc(fleetId).get();
+        final fData = fleetDoc.data();
+        if (resolvedOwnerUid.isEmpty) {
+          resolvedOwnerUid = (fData?['ownerUid'] as String?) ?? fleetId;
+        }
+        resolvedFleetLogo ??= (fData?['logoUrl'] as String?) ??
+            (fData?['profilePictureUrl'] as String?) ??
+            (fData?['photoUrl'] as String?) ??
+            (fData?['coverPhotoUrl'] as String?);
+      } catch (_) {
+        if (resolvedOwnerUid.isEmpty) resolvedOwnerUid = fleetId;
+      }
+    }
+
+    final threadId = 'rental_$bookingId';
+    final threadRef = _firestore.collection('rideMessages').doc(threadId);
+    final snap = await threadRef.get();
+
+    final participantUids = [customerUid, resolvedOwnerUid];
+
+    if (!snap.exists) {
+      await threadRef.set({
+        'type': 'rental',
+        'bookingId': bookingId,
+        'fleetId': fleetId,
+        'fleetName': fleetName,
+        'fleetLogo': resolvedFleetLogo,
+        'customerUid': customerUid,
+        'customerName': customerName,
+        'customerPhoto': customerPhoto,
+        'vehicleTitle': vehicleTitle,
+        'vehicleImage': vehicleImage,
+        'participantUids': participantUids,
+        'lastMessage': 'Rental booking created: $vehicleTitle',
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'unreadCounts': {
+          customerUid: 0,
+          resolvedOwnerUid: 0,
+        },
+      });
+    } else if (resolvedFleetLogo != null && resolvedFleetLogo.isNotEmpty) {
+      // Ensure existing thread has fleetLogo if it was missing
+      final existingData = snap.data();
+      if (existingData?['fleetLogo'] == null) {
+        threadRef.update({'fleetLogo': resolvedFleetLogo}).catchError((_) {});
+      }
+    }
+
+    return threadId;
   }
 
   /// Streams the total unread messages count across all active chat threads for the current user.
@@ -134,11 +265,15 @@ class ChatRepository {
     if (uid == null || rideId.isEmpty) return;
 
     try {
-      await _firestore.collection('rideMessages').doc(rideId).set({
-        'unreadCounts': {uid: 0},
+      final docRef = _firestore.collection('rideMessages').doc(rideId);
+      final docSnap = await docRef.get();
+      if (!docSnap.exists) return;
+
+      await docRef.update({
+        'unreadCounts.$uid': 0,
         'unreadCount_$uid': 0,
         'unreadCount': 0,
-      }, SetOptions(merge: true));
+      });
     } catch (_) {}
   }
 

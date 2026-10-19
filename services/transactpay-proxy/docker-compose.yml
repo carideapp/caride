@@ -1,0 +1,46 @@
+services:
+  transactpay-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: caride-transactpay-proxy
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - proxy-net
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: caride-caddy-ssl
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      transactpay-proxy:
+        condition: service_healthy
+    networks:
+      - proxy-net
+
+networks:
+  proxy-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

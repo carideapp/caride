@@ -61,8 +61,18 @@ class _DriverLeaveARateScreenState extends State<DriverLeaveARateScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final raw = e.toString().toLowerCase();
+      String message = 'Unable to submit rating. Please try again.';
+      if (raw.contains('network') || raw.contains('unavailable') || raw.contains('connection')) {
+        message = 'Network connection error. Please check your connection and tap Submit again.';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit rating: $e')),
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);

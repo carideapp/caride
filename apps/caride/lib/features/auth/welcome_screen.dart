@@ -1,53 +1,64 @@
 import 'dart:ui';
 
+import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ─── Data ────────────────────────────────────────────────────────────────────
+// ─── Role Data Model ──────────────────────────────────────────────────────────
 
 class _RoleData {
   const _RoleData({
     required this.id,
+    required this.tabTitle,
     required this.label,
     required this.tagline,
-    required this.perks,
     required this.heroAsset,
     required this.accentColor,
+    required this.loginLabel,
+    required this.signupLabel,
   });
 
   final String id;
+  final String tabTitle;
   final String label;
   final String tagline;
-  final List<String> perks;
   final String heroAsset;
   final Color accentColor;
+  final String loginLabel;
+  final String signupLabel;
 }
 
 const _roles = [
   _RoleData(
     id: 'customer',
+    tabTitle: 'Passenger',
     label: 'Ride as a Passenger',
     tagline: 'Go anywhere, anytime.',
-    perks: ['Book instantly', 'Real-time tracking', 'Safe & comfortable'],
     heroAsset: 'lib/assets/passenger_hero.png',
-    accentColor: Color(0xFF16A34A), // brand green
+    accentColor: AppColors.brand,
+    loginLabel: 'Log In as Passenger',
+    signupLabel: 'Sign Up as Passenger',
   ),
   _RoleData(
     id: 'driver',
+    tabTitle: 'Driver',
     label: 'Drive & Earn',
     tagline: 'Your car. Your schedule. Your income.',
-    perks: ['Flexible hours', 'Get Paid Anytime', 'Top driver rewards'],
     heroAsset: 'lib/assets/driver_hero_portrait.png',
-    accentColor: Color(0xFF2563EB), // blue
+    accentColor: AppColors.brand,
+    loginLabel: 'Log In as Driver',
+    signupLabel: 'Sign Up as Driver',
   ),
   _RoleData(
     id: 'fleet',
+    tabTitle: 'Fleet Manager',
     label: 'Fleet & Car Rentals',
     tagline: 'Manage vehicles, chauffeurs & rental orders.',
-    perks: ['List rental cars', 'Assign chauffeurs', 'Direct settlements'],
     heroAsset: 'lib/assets/driver_hero.png',
-    accentColor: Color(0xFF8B5CF6), // purple
+    accentColor: AppColors.brand,
+    loginLabel: 'Log In as Fleet Manager',
+    signupLabel: 'Sign Up as Fleet Manager',
   ),
 ];
 
@@ -61,61 +72,69 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen>
-    with TickerProviderStateMixin {
-  final PageController _pageController = PageController();
+    with SingleTickerProviderStateMixin {
+  late final PageController _pageController;
   late final AnimationController _entryController;
-  late final AnimationController _panelController;
 
-  int _currentPage = 0;
+  int _selectedRoleIndex = 0;
 
   @override
   void initState() {
     super.initState();
-
+    _pageController = PageController(initialPage: _selectedRoleIndex);
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 800),
     )..forward();
-
-    _panelController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 450),
-    )..forward();
-
-    _pageController.addListener(() {
-      final page = _pageController.page?.round() ?? 0;
-      if (page != _currentPage) {
-        setState(() => _currentPage = page);
-        _panelController
-          ..reset()
-          ..forward();
-      }
-    });
   }
 
   @override
   void dispose() {
     _pageController.dispose();
     _entryController.dispose();
-    _panelController.dispose();
     super.dispose();
   }
 
-  Future<void> _selectRole(String role) async {
+  void _onRoleTabSelected(int index) {
+    if (index == _selectedRoleIndex) return;
+    setState(() => _selectedRoleIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  Future<void> _handleAuthAction(String roleId, bool isLogin) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selected_role', role);
+    await prefs.setString('selected_role', roleId);
     if (!mounted) return;
-    if (role == 'driver') {
-      context.push(DriverRoutePaths.login);
-    } else if (role == 'fleet') {
-      context.push(FleetRoutePaths.login);
+
+    if (roleId == 'driver') {
+      if (isLogin) {
+        context.push(DriverRoutePaths.login);
+      } else {
+        context.push(DriverRoutePaths.signup);
+      }
+    } else if (roleId == 'fleet') {
+      if (isLogin) {
+        context.push(FleetRoutePaths.login);
+      } else {
+        context.push(FleetRoutePaths.signup);
+      }
     } else {
-      context.push(CustomerRoutePaths.login);
+      if (isLogin) {
+        context.push(CustomerRoutePaths.login);
+      } else {
+        context.push(CustomerRoutePaths.signup);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentRole = _roles[_selectedRoleIndex];
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -124,63 +143,57 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           // ── Full-screen hero PageView ──────────────────────────────────
           PageView.builder(
             controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: _roles.length,
             itemBuilder: (context, index) {
               return _HeroPage(
                 role: _roles[index],
-                entryAnimation: _entryController,
               );
             },
           ),
 
           // ── Top logo bar ──────────────────────────────────────────────
           SafeArea(
-            child: FadeTransition(
-              opacity: CurvedAnimation(
-                parent: _entryController,
-                curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Image.asset(
-                      'lib/assets/CaRide_logo.png',
-                      height: 32,
-                      color: Colors.white,
-                    ),
-                    _PageDots(
-                      count: _roles.length,
-                      current: _currentPage,
-                      activeColor: _roles[_currentPage].accentColor,
-                    ),
-                  ],
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: _entryController,
+                  curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
+                  child: Row(
+                    children: [
+                      Image.asset(
+                        'lib/assets/CaRide_logo.png',
+                        height: 32,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
 
-          // ── Bottom frosted panel ───────────────────────────────────────
+          // ── Bottom frosted panel with fixed tabs ───────────────────────
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: _BottomPanel(
-              role: _roles[_currentPage],
-              panelAnimation: _panelController,
+              role: currentRole,
+              selectedIndex: _selectedRoleIndex,
               entryAnimation: _entryController,
-              onContinue: () => _selectRole(_roles[_currentPage].id),
-              onSwitchRole: () {
-                final next = (_currentPage + 1) % _roles.length;
-                _pageController.animateToPage(
-                  next,
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOut,
-                );
-              },
-              otherRoleLabel: _roles[(_currentPage + 1) % _roles.length].label,
+              onTabSelected: _onRoleTabSelected,
+              onLoginPressed: () =>
+                  _handleAuthAction(currentRole.id, true),
+              onSignupPressed: () =>
+                  _handleAuthAction(currentRole.id, false),
             ),
           ),
         ],
@@ -192,20 +205,15 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 // ─── Hero Page ────────────────────────────────────────────────────────────────
 
 class _HeroPage extends StatelessWidget {
-  const _HeroPage({
-    required this.role,
-    required this.entryAnimation,
-  });
+  const _HeroPage({required this.role});
 
   final _RoleData role;
-  final Animation<double> entryAnimation;
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Hero image — bleeds full screen
         Image.asset(
           role.heroAsset,
           fit: BoxFit.cover,
@@ -213,8 +221,6 @@ class _HeroPage extends StatelessWidget {
           width: double.infinity,
           height: double.infinity,
         ),
-
-        // Dark scrim that grows from bottom so text stays readable
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -235,24 +241,24 @@ class _HeroPage extends StatelessWidget {
   }
 }
 
-// ─── Bottom frosted panel ─────────────────────────────────────────────────────
+// ─── Bottom Frosted Panel with Fixed Segmented Role Tabs ──────────────────────
 
 class _BottomPanel extends StatelessWidget {
   const _BottomPanel({
     required this.role,
-    required this.panelAnimation,
+    required this.selectedIndex,
     required this.entryAnimation,
-    required this.onContinue,
-    required this.onSwitchRole,
-    required this.otherRoleLabel,
+    required this.onTabSelected,
+    required this.onLoginPressed,
+    required this.onSignupPressed,
   });
 
   final _RoleData role;
-  final Animation<double> panelAnimation;
+  final int selectedIndex;
   final Animation<double> entryAnimation;
-  final VoidCallback onContinue;
-  final VoidCallback onSwitchRole;
-  final String otherRoleLabel;
+  final ValueChanged<int> onTabSelected;
+  final VoidCallback onLoginPressed;
+  final VoidCallback onSignupPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -262,21 +268,19 @@ class _BottomPanel extends StatelessWidget {
       animation: entryAnimation,
       builder: (context, child) {
         final entrySlide = Tween<Offset>(
-          begin: const Offset(0, 0.25),
+          begin: const Offset(0, 0.2),
           end: Offset.zero,
-        )
-            .animate(CurvedAnimation(
-              parent: entryAnimation,
-              curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
-            ))
-            .value;
+        ).animate(CurvedAnimation(
+          parent: entryAnimation,
+          curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+        )).value;
 
         return FractionalTranslation(
           translation: entrySlide,
           child: Opacity(
             opacity: CurvedAnimation(
               parent: entryAnimation,
-              curve: const Interval(0.3, 0.85, curve: Curves.easeOut),
+              curve: const Interval(0.2, 0.85, curve: Curves.easeOut),
             ).value,
             child: child,
           ),
@@ -287,265 +291,164 @@ class _BottomPanel extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.45),
+              color: Colors.black.withValues(alpha: 0.55),
               border: Border(
                 top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: Colors.white.withValues(alpha: 0.12),
                   width: 0.5,
                 ),
               ),
             ),
-            padding: EdgeInsets.fromLTRB(28, 28, 28, bottomInset + 24),
-            child: AnimatedBuilder(
-              animation: panelAnimation,
-              builder: (context, _) {
-                final t = CurvedAnimation(
-                  parent: panelAnimation,
-                  curve: Curves.easeOutCubic,
-                ).value;
-
-                return Opacity(
-                  opacity: t,
-                  child: Transform.translate(
-                    offset: Offset(0, 16 * (1 - t)),
-                    child: _PanelContent(
-                      role: role,
-                      onContinue: onContinue,
-                      onSwitchRole: onSwitchRole,
-                      otherRoleLabel: otherRoleLabel,
+            padding: EdgeInsets.fromLTRB(20, 24, 20, bottomInset + 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Fixed Segmented Role Tabs ──────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+                  child: Row(
+                    children: List.generate(_roles.length, (index) {
+                      final isSelected = index == selectedIndex;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => onTabSelected(index),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.brand
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Text(
+                              _roles[index].tabTitle,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.70),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
 
-class _PanelContent extends StatelessWidget {
-  const _PanelContent({
-    required this.role,
-    required this.onContinue,
-    required this.onSwitchRole,
-    required this.otherRoleLabel,
-  });
+                const SizedBox(height: 20),
 
-  final _RoleData role;
-  final VoidCallback onContinue;
-  final VoidCallback onSwitchRole;
-  final String otherRoleLabel;
+                // ── Role Title ─────────────────────────────────────────
+                Text(
+                  role.label,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Role label with accent dot
-        Row(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: role.accentColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              role.label,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ],
-        ),
+                const SizedBox(height: 4),
 
-        const SizedBox(height: 6),
+                // ── Tagline ────────────────────────────────────────────
+                Text(
+                  role.tagline,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white.withValues(alpha: 0.65),
+                    letterSpacing: 0.1,
+                  ),
+                ),
 
-        // Tagline
-        Text(
-          role.tagline,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: Colors.white.withValues(alpha: 0.6),
-            letterSpacing: 0.1,
-          ),
-        ),
+                const SizedBox(height: 24),
 
-        const SizedBox(height: 20),
+                // ── Dedicated Auth Pill Buttons (Login & Signup) ──────
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brand,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    onPressed: onLoginPressed,
+                    child: Text(
+                      role.loginLabel,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ),
 
-        // Perks chips
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: role.perks
-              .map(
-                (p) => _PerkChip(label: p, accentColor: role.accentColor),
-              )
-              .toList(),
-        ),
+                const SizedBox(height: 12),
 
-        const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    onPressed: onSignupPressed,
+                    child: Text(
+                      role.signupLabel,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ),
 
-        // Primary CTA
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            decoration: BoxDecoration(
-              color: role.accentColor,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: onContinue,
-                child: Center(
+                const SizedBox(height: 16),
+
+                // ── Terms ──────────────────────────────────────────────
+                Center(
                   child: Text(
-                    'Continue as ${role.id == 'customer' ? 'Passenger' : (role.id == 'driver' ? 'Driver' : 'Fleet Partner')}  →',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
+                    'By continuing you agree to CaRide\'s Terms & Privacy Policy.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.white.withValues(alpha: 0.35),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
-        ),
-
-        const SizedBox(height: 14),
-
-        // Switch role ghost button
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: TextButton(
-            onPressed: onSwitchRole,
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white.withValues(alpha: 0.55),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.15),
-                ),
-              ),
-            ),
-            child: Text(
-              'Switch to: $otherRoleLabel →',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.1,
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 14),
-
-        // Terms
-        Center(
-          child: Text(
-            'By continuing you agree to CaRide\'s Terms & Privacy Policy.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10.5,
-              color: Colors.white.withValues(alpha: 0.3),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Perk chip ────────────────────────────────────────────────────────────────
-
-class _PerkChip extends StatelessWidget {
-  const _PerkChip({required this.label, required this.accentColor});
-
-  final String label;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: accentColor.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: accentColor.withValues(alpha: 0.35),
-          width: 0.8,
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_rounded, size: 13, color: accentColor),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Page indicator dots ──────────────────────────────────────────────────────
-
-class _PageDots extends StatelessWidget {
-  const _PageDots({
-    required this.count,
-    required this.current,
-    required this.activeColor,
-  });
-
-  final int count;
-  final int current;
-  final Color activeColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(count, (i) {
-        final isActive = i == current;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: isActive ? 22 : 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: isActive
-                ? activeColor
-                : Colors.white.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(3),
-          ),
-        );
-      }),
     );
   }
 }

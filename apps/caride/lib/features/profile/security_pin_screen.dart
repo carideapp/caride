@@ -275,18 +275,51 @@ class _SecurityPinScreenState extends State<SecurityPinScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: GlassAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: _screenTitle,
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: _loading
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    _screenTitle,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _loading
             ? const Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -393,6 +426,9 @@ class _SecurityPinScreenState extends State<SecurityPinScreen> {
                   const SizedBox(height: AppSpacing.md),
                 ],
               ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -483,17 +519,11 @@ class _PinKeypad extends StatelessWidget {
             margin: const EdgeInsets.all(6),
             height: 72,
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: isDark
-                  ? null
-                  : [
-                      const BoxShadow(
-                        color: Color(0x0F000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
+              color: isDark ? AppColors.darkSurface : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+              ),
             ),
             child: Center(
               child: child ??

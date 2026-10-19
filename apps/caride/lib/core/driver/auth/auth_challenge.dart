@@ -1,13 +1,2 @@
-class AuthChallenge {
-  const AuthChallenge({
-    required this.challengeId,
-    required this.email,
-    required this.expiresAt,
-    required this.isSignUp,
-  });
-
-  final String challengeId;
-  final String email;
-  final DateTime expiresAt;
-  final bool isSignUp;
-}
+// Re-export shared AuthChallenge to avoid type divergence across customer and driver packages
+export '../../auth/auth_challenge.dart';

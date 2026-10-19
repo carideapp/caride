@@ -1,13 +1,17 @@
 import 'package:caride/features/profile/data/account_repository.dart';
 import 'package:caride/features/profile/data/card_repository.dart';
-import 'package:caride/features/profile/data/wallet_repository.dart';
-import 'package:caride/features/wallet/widgets/bank_transfer_bottom_sheet.dart';
-import 'package:caride/features/wallet/widgets/top_up_amount_bottom_sheet.dart';
-import 'package:caride/features/wallet/widgets/top_up_method_bottom_sheet.dart';
+import 'package:caride/features/wallet/widgets/dedicated_account_bottom_sheet.dart';
+import 'package:caride/features/wallet/widgets/pending_bank_transfer_widgets.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:navigation/navigation.dart';
 import 'package:shared_widgets/shared_widgets.dart';
+
+// Commented imports for unhide/re-enable support:
+// import 'package:caride/features/wallet/widgets/bank_transfer_bottom_sheet.dart';
+// import 'package:caride/features/wallet/widgets/top_up_amount_bottom_sheet.dart';
+// import 'package:caride/features/wallet/widgets/top_up_method_bottom_sheet.dart';
+// import 'package:caride/core/services/pending_bank_transfer_service.dart';
+// import 'package:navigation/navigation.dart';
 
 class PaymentMethodChoice {
   const PaymentMethodChoice({
@@ -65,7 +69,6 @@ class _PaymentMethodsBottomSheetState extends State<PaymentMethodsBottomSheet> {
   String? _currentAuthCode;
   String _currentLabel = 'CaRide Wallet';
   double _lastBalance = 0.0;
-  bool _isLoadingBankTransfer = false;
 
   @override
   void initState() {
@@ -75,6 +78,10 @@ class _PaymentMethodsBottomSheetState extends State<PaymentMethodsBottomSheet> {
   }
 
   Future<void> _handleTopUpFlow(BuildContext context) async {
+    // Directly show the virtual static account bottom sheet with generate button
+    await DedicatedAccountBottomSheet.show(context);
+
+    /*
     final amount = await TopUpAmountBottomSheet.show(context);
     if (amount == null || amount <= 0 || !mounted) return;
 
@@ -94,42 +101,23 @@ class _PaymentMethodsBottomSheetState extends State<PaymentMethodsBottomSheet> {
         context.push(CustomerRoutePaths.typeAmount);
       }
     }
+    */
   }
 
+  /*
   Future<void> _openBankTransfer(BuildContext context, {double? amount}) async {
-    if (_isLoadingBankTransfer) return;
-    setState(() => _isLoadingBankTransfer = true);
-    try {
-      final details = await WalletRepository().initializeBankTransfer(
-        amountNaira: amount ?? 0,
-      );
-      if (!mounted || !context.mounted) return;
-
-      final credited = await BankTransferBottomSheet.show(
-        context,
-        details: details,
-      );
-      if (credited != null && mounted) {
-        setState(() {
-          _lastBalance += credited;
-        });
-      }
-    } catch (e) {
-      debugPrint('[PaymentMethodsBottomSheet BankTransfer ERROR] $e');
-      if (mounted && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Bank transfer failed: ${e.toString().replaceAll("Exception: ", "")}',
-            ),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoadingBankTransfer = false);
+    final credited = await BankTransferBottomSheet.show(
+      context,
+      amountNaira: amount ?? 0,
+      transferType: PendingTransferType.rideBooking,
+    );
+    if (credited != null && mounted) {
+      setState(() {
+        _lastBalance += credited;
+      });
     }
   }
+  */
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +137,11 @@ class _PaymentMethodsBottomSheetState extends State<PaymentMethodsBottomSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Pending Bank Transfer Banner
+                const PendingBankTransferBanner(
+                  margin: EdgeInsets.only(bottom: 12),
+                ),
+
                 // Wallet Option
                 StreamBuilder<double>(
                   stream: _accountRepo.watchWalletBalance(),
@@ -237,50 +230,49 @@ class _PaymentMethodsBottomSheetState extends State<PaymentMethodsBottomSheet> {
                   },
                 ),
 
-                // TODO: Uncomment to re-enable Cash payment option
-                // const SizedBox(height: AppSpacing.md),
-                // // Cash Option
-                // InkWell(
-                //   onTap: () {
-                //     setState(() {
-                //       _currentMethod = 'cash';
-                //       _currentCardId = null;
-                //       _currentAuthCode = null;
-                //       _currentLabel = 'Cash';
-                //     });
-                //   },
-                //   borderRadius: BorderRadius.circular(AppRadius.lg),
-                //   child: GlassContainer(
-                //     padding: const EdgeInsets.all(AppSpacing.md),
-                //     child: Row(
-                //       children: [
-                //         Icon(
-                //           Icons.payments_outlined,
-                //           color: _currentMethod == 'cash'
-                //               ? AppColors.brand
-                //               : (isDark
-                //                     ? AppColors.textPrimaryDark
-                //                     : AppColors.textPrimaryLight),
-                //         ),
-                //         const SizedBox(width: AppSpacing.md),
-                //         Expanded(
-                //           child: Text(
-                //             'Cash',
-                //             style: AppTextStyles.bodyLarge.copyWith(
-                //               fontWeight: FontWeight.bold,
-                //             ),
-                //           ),
-                //         ),
-                //         Icon(
-                //           _currentMethod == 'cash'
-                //               ? Icons.radio_button_checked_rounded
-                //               : Icons.radio_button_off_rounded,
-                //           color: _currentMethod == 'cash' ? AppColors.brand : Colors.grey,
-                //         ),
-                //       ],
-                //     ),
-                //   ),
-                // ),
+                const SizedBox(height: AppSpacing.md),
+                // Cash Option
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _currentMethod = 'cash';
+                      _currentCardId = null;
+                      _currentAuthCode = null;
+                      _currentLabel = 'Cash';
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  child: GlassContainer(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.payments_outlined,
+                          color: _currentMethod == 'cash'
+                              ? AppColors.brand
+                              : (isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Text(
+                            'Cash',
+                            style: AppTextStyles.bodyLarge.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _currentMethod == 'cash'
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          color: _currentMethod == 'cash' ? AppColors.brand : Colors.grey,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
                 const SizedBox(height: AppSpacing.md),
 
@@ -378,6 +370,7 @@ class _PaymentMethodsBottomSheetState extends State<PaymentMethodsBottomSheet> {
                 const SizedBox(height: AppSpacing.lg),
                 PrimaryButton(
                   label: 'Confirm Selection',
+                  showShadow: false,
                   onPressed: () {
                     Navigator.pop(
                       context,

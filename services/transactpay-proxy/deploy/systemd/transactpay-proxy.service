@@ -1,0 +1,24 @@
+[Unit]
+Description=CaRide TransactPay Static IP Proxy Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/caride/transactpay-proxy
+ExecStart=/usr/bin/node /opt/caride/transactpay-proxy/dist/index.js
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/caride/transactpay-proxy/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=transactpay-proxy
+
+# Security Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

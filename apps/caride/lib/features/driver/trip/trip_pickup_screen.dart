@@ -105,13 +105,20 @@ class _TripPickupScreenState extends State<TripPickupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final message = e.toString().toLowerCase().contains('code')
-            ? 'The start code you entered is incorrect. Please verify with the customer.'
-            : 'Failed to start ride: $e';
+        final raw = e.toString().toLowerCase();
+        String message = 'Unable to start ride. Please try again.';
+        if (raw.contains('code') || raw.contains('invalid')) {
+          message = 'The start code you entered is incorrect. Please verify the code with the customer.';
+        } else if (raw.contains('network') || raw.contains('unavailable') || raw.contains('connection')) {
+          message = 'Network connection issue. Please check your internet connection and try again.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
         );
       }
@@ -356,6 +363,14 @@ class _TripPickupScreenState extends State<TripPickupScreen> {
                                             'Customer',
                                             style: AppTextStyles.bodySmall,
                                           ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          NgnFormat.whole(ride.amountNaira ?? ride.customerOffer),
+                                          style: AppTextStyles.titleMedium.copyWith(
+                                            color: AppColors.brand,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -400,23 +415,6 @@ class _TripPickupScreenState extends State<TripPickupScreen> {
                                         },
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        NgnFormat.whole(ride.amountNaira ?? ride.customerOffer),
-                                        style: AppTextStyles.titleMedium.copyWith(
-                                          color: AppColors.brand,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      Text(
-                                        'OFFER',
-                                        style: AppTextStyles.caption.copyWith(fontSize: 9),
-                                      ),
-                                    ],
                                   ),
                                 ],
                               ),
@@ -658,7 +656,6 @@ class _TripPickupScreenState extends State<TripPickupScreen> {
                                 children: [
                                   if (ride.status == 'driverEnRoute') ...[
                                     Expanded(
-                                      flex: 3,
                                       child: PrimaryButton(
                                         label: "I've Arrived",
                                         icon: Icons.pin_drop_rounded,
@@ -680,55 +677,7 @@ class _TripPickupScreenState extends State<TripPickupScreen> {
                                     ),
                                     const SizedBox(width: AppSpacing.xs),
                                   ],
-                                  Container(
-                                    height: 48,
-                                    width: 48,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.brand.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(AppRadius.md),
-                                      border: Border.all(color: AppColors.brand.withValues(alpha: 0.3)),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.phone_rounded, color: AppColors.brand, size: 22),
-                                      tooltip: 'Call Rider',
-                                      onPressed: () async {
-                                        if (phone.isNotEmpty) {
-                                          final phoneUri = Uri(scheme: 'tel', path: phone);
-                                          if (await canLaunchUrl(phoneUri)) {
-                                            await launchUrl(phoneUri);
-                                          }
-                                        } else {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('Customer phone number not available.')),
-                                          );
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Container(
-                                    height: 48,
-                                    width: 48,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.brand.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(AppRadius.md),
-                                      border: Border.all(color: AppColors.brand.withValues(alpha: 0.3)),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.chat_bubble_rounded, color: AppColors.brand, size: 22),
-                                      tooltip: 'Chat with Rider',
-                                      onPressed: () => context.push(
-                                        DriverRoutePaths.conversation,
-                                        extra: {
-                                          'rideId': ride.id,
-                                          'customerName': fullName,
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.xs),
                                   Expanded(
-                                    flex: 3,
                                     child: PrimaryButton(
                                       label: 'Start Ride',
                                       isLoading: _starting,

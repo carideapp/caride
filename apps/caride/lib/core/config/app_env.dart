@@ -32,12 +32,4 @@ class AppEnv {
     'GOOGLE_MAPS_API_KEY',
     defaultValue: 'AIzaSyAQPLeYuNmRW9OuPBK93sX5M01aebbiknI',
   );
-  static const String paystackPublicKey = String.fromEnvironment(
-    'PAYSTACK_PUBLIC_KEY',
-    defaultValue: 'pk_live_9a3133bdb8c6539b8ba228059dde0a4f10df3e1a',
-  );
-  static const String flutterwavePublicKey = String.fromEnvironment(
-    'FLUTTERWAVE_PUBLIC_KEY',
-    defaultValue: 'FLWPUBK-fe77d17f787c0e5c4c68a8d15b81ab72-X',
-  );
 }

@@ -24,7 +24,7 @@ class FleetBottomNav extends StatelessWidget {
         context.go(FleetRoutePaths.bookings);
         break;
       case 2:
-        context.go(CustomerRoutePaths.chat);
+        context.go(FleetRoutePaths.chat);
         break;
       case 3:
         context.go(FleetRoutePaths.vehicles);

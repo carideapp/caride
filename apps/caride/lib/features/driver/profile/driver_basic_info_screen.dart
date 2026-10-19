@@ -13,6 +13,7 @@ class DriverBasicInfoScreen extends StatefulWidget {
 
 class _DriverBasicInfoScreenState extends State<DriverBasicInfoScreen> {
   final _profileRepo = DriverProfileRepository();
+  final _usernameController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _loading = true;
@@ -32,6 +33,7 @@ class _DriverBasicInfoScreenState extends State<DriverBasicInfoScreen> {
     }
     final profile = await _profileRepo.getDriverProfile(uid);
     if (mounted) {
+      _usernameController.text = profile?.username ?? '';
       _nameController.text = profile?.fullName ?? '';
       _phoneController.text = profile?.phone ?? '';
       setState(() => _loading = false);
@@ -40,6 +42,7 @@ class _DriverBasicInfoScreenState extends State<DriverBasicInfoScreen> {
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -53,6 +56,7 @@ class _DriverBasicInfoScreenState extends State<DriverBasicInfoScreen> {
     try {
       await _profileRepo.updateBasicInfo(
         uid: uid,
+        username: _usernameController.text.trim().replaceAll('@', '').toLowerCase(),
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
       );
@@ -205,6 +209,22 @@ class _DriverBasicInfoScreenState extends State<DriverBasicInfoScreen> {
                     ),
                     const SizedBox(height: AppSpacing.xl),
 
+                    _buildInputField(
+                      context,
+                      label: 'Username',
+                      controller: _usernameController,
+                      prefix: const Padding(
+                        padding: EdgeInsets.only(right: 4.0),
+                        child: Text(
+                          '@',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryGreen,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
                     _buildInputField(
                       context,
                       label: 'Full Name',

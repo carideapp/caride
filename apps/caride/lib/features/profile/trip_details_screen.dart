@@ -7,7 +7,6 @@ import 'package:caride/features/profile/data/driver_location_repository.dart';
 import 'package:caride/features/profile/share_receipt_screen.dart';
 import 'package:caride/features/profile/customer_support_screen.dart';
 import 'package:caride/features/profile/rate_driver_screen.dart';
-import 'package:caride/features/profile/data/shared_trip_repository.dart';
 import 'package:caride/features/ride_booking/data/ride_repository.dart';
 import 'package:caride/features/ride_booking/data/arrival_calculator.dart';
 import 'package:caride/features/ride_booking/booking_shell/booking_shell_screen.dart';
@@ -84,104 +83,12 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   Future<void> _shareTrip(BuildContext context, String rideId) async {
-    final repo = SharedTripRepository();
-    BuildContext? loadingCtx;
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) {
-          loadingCtx = c;
-          return const Center(child: CircularProgressIndicator());
-        },
-      );
-      final code = await repo.createShareCode(rideId);
-      if (loadingCtx != null && loadingCtx!.mounted) {
-        Navigator.pop(loadingCtx!);
-      } else if (context.mounted) {
-        Navigator.pop(context);
-      }
-
-      if (!context.mounted) return;
-
-      final formatted = code.length == 6 ? '${code.substring(0, 3)} ${code.substring(3, 6)}' : code;
-
-      showDialog(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.share_location_rounded,
-                  color: AppColors.primaryGreen,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Share Your Trip',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Send this code to a friend so they can monitor your ride live.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
-                ),
-                child: Center(
-                  child: Text(
-                    formatted,
-                    style: Theme.of(dialogContext).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primaryGreen,
-                          letterSpacing: 4,
-                        ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryButton(
-                  label: 'Done',
-                  onPressed: () => Navigator.pop(dialogContext),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // Pop loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to share trip: ${e.toString()}')),
-        );
-      }
-    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ShareTripSheet(rideId: rideId),
+    );
   }
 
   @override
@@ -296,7 +203,28 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                 )
               : null,
           appBar: AppBar(
-            automaticallyImplyLeading: true,
+            automaticallyImplyLeading: false,
+            leading: Center(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 18,
+                    color: isDark ? Colors.white : const Color(0xFF111827),
+                  ),
+                ),
+              ),
+            ),
             backgroundColor: backgroundColor,
             elevation: 0,
             scrolledUnderElevation: 0,
@@ -714,7 +642,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                                             const Icon(Icons.star_rounded, color: AppColors.primaryGreen, size: 14),
                                             const SizedBox(width: 2),
                                             Text(
-                                              '${rating > 0 ? rating.toStringAsFixed(1) : '5.0'} (${profile?.completedRides ?? 0})',
+                                              '${rating > 0 ? rating.toStringAsFixed(1) : 'New'} (${profile?.completedRides ?? 0})',
                                               style: theme.textTheme.bodySmall?.copyWith(
                                                 color: AppColors.primaryGreen,
                                                 fontWeight: FontWeight.bold,

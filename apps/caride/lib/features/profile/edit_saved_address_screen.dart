@@ -315,19 +315,55 @@ class _EditSavedAddressScreenState extends State<EditSavedAddressScreen> {
             ),
           ),
           Positioned(
-            top: MediaQuery.of(context).padding.top + AppSpacing.md,
-            left: AppSpacing.pagePadding,
-            right: AppSpacing.pagePadding,
+            top: MediaQuery.of(context).padding.top + 14,
+            left: 20,
+            right: 20,
             child: Row(
               children: [
-                GlassIconButton(
-                  icon: Icons.arrow_back_ios_new_rounded,
-                  onPressed: () => Navigator.of(context).pop(),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: isDark ? Colors.white : const Color(0xFF111827),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: GlassContainer(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
                     child: TextField(
                       controller: _searchCtrl,
                       onChanged: _search,
@@ -335,11 +371,14 @@ class _EditSavedAddressScreenState extends State<EditSavedAddressScreen> {
                         border: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         enabledBorder: InputBorder.none,
-                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         prefixIcon: Icon(Icons.search_rounded, color: AppColors.brand, size: 20),
                         hintText: 'Search for a location',
                       ),
-                      style: AppTextStyles.bodyLarge,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: isDark ? Colors.white : const Color(0xFF111827),
+                      ),
                     ),
                   ),
                 ),
@@ -403,23 +442,26 @@ class _EditSavedAddressScreenState extends State<EditSavedAddressScreen> {
                 return Container(
                   decoration: BoxDecoration(
                     color: isDark ? AppColors.darkSurface : Colors.white,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32.0)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    border: Border.all(
+                      color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 16,
+                        offset: const Offset(0, -4),
                       ),
                     ],
                   ),
                   child: SingleChildScrollView(
                     controller: scrollController,
                     padding: EdgeInsets.fromLTRB(
-                      AppSpacing.lg,
-                      AppSpacing.sm,
-                      AppSpacing.lg,
+                      20,
+                      12,
+                      20,
                       MediaQuery.of(context).padding.bottom +
-                          AppSpacing.md +
+                          16 +
                           (_labelFocusNode.hasFocus
                               ? MediaQuery.of(context).viewInsets.bottom
                               : 0),
@@ -432,29 +474,38 @@ class _EditSavedAddressScreenState extends State<EditSavedAddressScreen> {
                             width: 40,
                             height: 4,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[800] : Colors.grey[300],
+                              color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.lg),
+                        const SizedBox(height: 18),
                         Text(
                           'Edit Saved Address',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.titleMedium.copyWith(
+                          style: TextStyle(
+                            fontSize: 18,
                             fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : const Color(0xFF111827),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.lg),
-                        GlassContainer(
-                          padding: const EdgeInsets.all(AppSpacing.md),
+                        const SizedBox(height: 18),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                            ),
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
                                   const Icon(Icons.location_on_rounded, color: AppColors.brand, size: 20),
-                                  const SizedBox(width: AppSpacing.xs),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       place == null
@@ -462,51 +513,126 @@ class _EditSavedAddressScreenState extends State<EditSavedAddressScreen> {
                                           : (labelPreview.isEmpty
                                               ? 'Selected location'
                                               : labelPreview),
-                                      style: AppTextStyles.bodyLarge.copyWith(
-                                        fontWeight: FontWeight.bold,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark ? Colors.white : const Color(0xFF111827),
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: AppSpacing.xs),
+                              const SizedBox(height: 6),
                               Text(
                                 place?.placeName ?? 'Search and select a location above.',
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                  height: 1.5,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                                  height: 1.4,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.lg),
+                        const SizedBox(height: 18),
                         Text(
-                          'Name label',
-                          style: AppTextStyles.titleSmall.copyWith(fontWeight: FontWeight.bold),
+                          'Address Label',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : const Color(0xFF111827),
+                          ),
                         ),
-                        const SizedBox(height: AppSpacing.xs),
-                        AppTextField(
-                          controller: _labelCtrl,
-                          focusNode: _labelFocusNode,
-                          hint: 'e.g. Home, Office',
-                          obscureText: false,
-                          onChanged: (_) => setState(() {}),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 54,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkSurface : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          alignment: Alignment.center,
+                          child: TextField(
+                            controller: _labelCtrl,
+                            focusNode: _labelFocusNode,
+                            decoration: InputDecoration(
+                              hintText: 'e.g. Home, Office, Gym',
+                              hintStyle: TextStyle(
+                                color: isDark ? const Color(0xFF6B7280) : const Color(0xFF9CA3AF),
+                                fontSize: 14,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: isDark ? Colors.white : const Color(0xFF111827),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
                         ),
-                        const SizedBox(height: AppSpacing.xl),
+                        const SizedBox(height: 22),
                         Row(
                           children: [
                             Expanded(
-                              child: SecondaryButton(
-                                label: 'Cancel',
-                                onPressed: () => Navigator.of(context).pop(),
+                              child: SizedBox(
+                                height: 54,
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(
+                                      color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(28),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Cancel',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                            const SizedBox(width: AppSpacing.sm),
+                            const SizedBox(width: 12),
                             Expanded(
-                              child: PrimaryButton(
-                                label: 'Save Changes',
-                                onPressed: _saving || _selectedPlace == null ? null : _save,
+                              child: SizedBox(
+                                height: 54,
+                                child: ElevatedButton(
+                                  onPressed: _saving || _selectedPlace == null ? null : _save,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.brand,
+                                    elevation: 0,
+                                    disabledBackgroundColor: AppColors.brand.withValues(alpha: 0.4),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(28),
+                                    ),
+                                  ),
+                                  child: _saving
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Save Changes',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                ),
                               ),
                             ),
                           ],

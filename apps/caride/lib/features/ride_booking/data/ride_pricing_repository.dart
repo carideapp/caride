@@ -34,19 +34,28 @@ class RideTypePricing {
   }
 }
 
-/// Full pricing config for all four ride types.
+/// Full pricing config for ride types.
 class RidePricingConfig {
   const RidePricingConfig({
     required this.regular,
     required this.comfort,
     required this.luxury,
     required this.courier,
+    this.tricycle = defaultTricycle,
+    this.motorcycle = defaultMotorcycle,
   });
 
   final RideTypePricing regular;
   final RideTypePricing comfort;
   final RideTypePricing luxury;
   final RideTypePricing courier;
+  final RideTypePricing tricycle;
+  final RideTypePricing motorcycle;
+
+  static const RideTypePricing defaultTricycle =
+      RideTypePricing(baseFare: 400, perKmRate: 150, perMinuteRate: 30);
+  static const RideTypePricing defaultMotorcycle =
+      RideTypePricing(baseFare: 300, perKmRate: 120, perMinuteRate: 25);
 
   /// Fallback defaults if Firestore is unreachable.
   static const RidePricingConfig defaults = RidePricingConfig(
@@ -54,6 +63,8 @@ class RidePricingConfig {
     comfort: RideTypePricing(baseFare: 1200, perKmRate: 350, perMinuteRate: 70),
     luxury: RideTypePricing(baseFare: 2500, perKmRate: 600, perMinuteRate: 120),
     courier: RideTypePricing(baseFare: 600, perKmRate: 200, perMinuteRate: 40),
+    tricycle: defaultTricycle,
+    motorcycle: defaultMotorcycle,
   );
 
   factory RidePricingConfig.fromMap(Map<String, dynamic> data) {
@@ -75,6 +86,14 @@ class RidePricingConfig {
         (data['courier'] as Map?)?.cast<String, dynamic>() ?? {},
         fallback: fallback.courier,
       ),
+      tricycle: RideTypePricing.fromMap(
+        (data['tricycle'] as Map?)?.cast<String, dynamic>() ?? {},
+        fallback: fallback.tricycle,
+      ),
+      motorcycle: RideTypePricing.fromMap(
+        (data['motorcycle'] as Map?)?.cast<String, dynamic>() ?? {},
+        fallback: fallback.motorcycle,
+      ),
     );
   }
 
@@ -83,6 +102,8 @@ class RidePricingConfig {
       'comfort' => comfort,
       'luxury' => luxury,
       'courier' => courier,
+      'tricycle' || 'keke' => tricycle,
+      'motorcycle' || 'bike' => motorcycle,
       _ => regular,
     };
   }

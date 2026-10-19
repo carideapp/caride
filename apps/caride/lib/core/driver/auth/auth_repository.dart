@@ -83,7 +83,7 @@ class DriverAuthRepository {
       }
 
       await _auth.signInWithCustomToken(customToken);
-      await _provisionDriverProfile(
+      await provisionDriverProfile(
         email: challenge.email,
         referralCode: referralCode,
         fullName: fullName,
@@ -97,12 +97,16 @@ class DriverAuthRepository {
     }
   }
 
-  Future<void> _provisionDriverProfile({
+  Future<void> provisionDriverProfile({
     required String email,
     String? referralCode,
     String? fullName,
     String? phone,
+    String? username,
+    String? country,
+    String? state,
     String? profilePhotoUrl,
+    String? coverPhotoUrl,
   }) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -116,7 +120,11 @@ class DriverAuthRepository {
         'referredByCode': referralCode,
         'fullName': fullName,
         'phone': phone,
+        if (username != null) 'username': username,
+        if (country != null) 'country': country,
+        if (state != null) 'state': state,
         if (profilePhotoUrl != null) 'profilePhotoUrl': profilePhotoUrl,
+        if (coverPhotoUrl != null) 'coverPhotoUrl': coverPhotoUrl,
       });
     } catch (e) {
       debugPrint('Failed to provision driver profile via callable: $e');
@@ -131,9 +139,53 @@ class DriverAuthRepository {
           'updatedAt': now,
           if (fullName != null) 'fullName': fullName,
           if (phone != null) 'phone': phone,
+          if (username != null) 'username': username,
+          if (country != null) 'country': country,
+          if (state != null) 'state': state,
           if (profilePhotoUrl != null) 'profilePhotoUrl': profilePhotoUrl,
+          if (coverPhotoUrl != null) 'coverPhotoUrl': coverPhotoUrl,
         });
+      } else {
+        final updateMap = <String, dynamic>{
+          'updatedAt': now,
+          if (fullName != null) 'fullName': fullName,
+          if (phone != null) 'phone': phone,
+          if (username != null) 'username': username,
+          if (country != null) 'country': country,
+          if (state != null) 'state': state,
+          if (profilePhotoUrl != null) 'profilePhotoUrl': profilePhotoUrl,
+          if (coverPhotoUrl != null) 'coverPhotoUrl': coverPhotoUrl,
+        };
+        await driverRef.update(updateMap);
       }
+    }
+
+    // Set users/{uid} metadata with activeRole: 'driver' and driverExists: true
+    // so router redirect guards route the user to the Driver App.
+    try {
+      final userRef = _firestore.collection('users').doc(user.uid);
+      final userSnap = await userRef.get();
+      if (!userSnap.exists) {
+        await userRef.set({
+          'uid': user.uid,
+          'activeRole': 'driver',
+          'customerExists': false,
+          'driverExists': true,
+          'onboardingComplete': true,
+          'createdAt': now,
+          'updatedAt': now,
+          'lastLogin': now,
+        }, SetOptions(merge: true));
+      } else {
+        await userRef.set({
+          'activeRole': 'driver',
+          'driverExists': true,
+          'updatedAt': now,
+          'lastLogin': now,
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint('Failed to set users metadata for driver: $e');
     }
   }
 
@@ -156,11 +208,10 @@ class DriverAuthRepository {
         if (customerDoc.exists) {
           final customerData = customerDoc.data() ?? {};
           // Automatic onboarding transition: Provision driver profile since they already have a customer account
-          await _provisionDriverProfile(
+          await provisionDriverProfile(
             email: email.trim().toLowerCase(),
             fullName: customerData['fullName'] as String?,
             phone: customerData['phone'] as String?,
-            profilePhotoUrl: customerData['photoUrl'] as String?,
           );
         } else {
           // Sign out immediately — this account is not a driver nor customer
@@ -210,17 +261,25 @@ class DriverAuthRepository {
     String? referralCode,
     String? fullName,
     String? phone,
+    String? username,
+    String? country,
+    String? state,
+    String? coverPhotoUrl,
   }) async {
     final userCredential = await _auth.createUserWithEmailAndPassword(
       email: email.trim().toLowerCase(),
       password: password,
     );
     if (userCredential.user != null) {
-      await _provisionDriverProfile(
+      await provisionDriverProfile(
         email: email.trim().toLowerCase(),
         referralCode: referralCode,
         fullName: fullName,
         phone: phone,
+        username: username,
+        country: country,
+        state: state,
+        coverPhotoUrl: coverPhotoUrl,
       );
     }
   }

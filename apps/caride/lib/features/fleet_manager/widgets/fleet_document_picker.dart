@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:caride/core/utils/safe_image_picker.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -38,7 +39,6 @@ class FleetDocumentPicker extends StatefulWidget {
 
 class _FleetDocumentPickerState extends State<FleetDocumentPicker> {
   File? _file;
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -56,7 +56,7 @@ class _FleetDocumentPickerState extends State<FleetDocumentPicker> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(
+      final picked = await SafeImagePicker.pickImage(
         source: source,
         imageQuality: 85,
         maxWidth: 1920,

@@ -6,7 +6,6 @@ import 'package:caride/features/profile/data/trusted_contacts_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_widgets/shared_widgets.dart';
 
 /// Emergency assistance screen.
 ///
@@ -113,7 +112,6 @@ class _EmergencyScreenState extends State<EmergencyScreen>
     });
 
     try {
-      // Generate a share code for location sharing
       String? shareCode;
       if (widget.rideId != null) {
         try {
@@ -140,16 +138,15 @@ class _EmergencyScreenState extends State<EmergencyScreen>
           _sending = false;
           _sent = true;
         });
-        HapticFeedback.mediumImpact();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _sending = false;
-          _error = 'Failed to send alert: $e';
-          _isHolding = false;
+          _error = 'Failed to send alert. Please call 112 directly if in danger: $e';
         });
         _holdController.reset();
+        setState(() => _isHolding = false);
       }
     }
   }
@@ -157,58 +154,80 @@ class _EmergencyScreenState extends State<EmergencyScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1A0A0A) : const Color(0xFFFFF5F5),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: isDark ? Colors.white : AppColors.slate900,
-            size: 20,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Emergency Assistance',
-          style: AppTextStyles.titleMedium.copyWith(
-            fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : AppColors.slate900,
-          ),
-        ),
-        centerTitle: true,
-      ),
+      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: _sent ? _buildSentState(isDark) : _buildEmergencyState(isDark),
+        child: Column(
+          children: [
+            // Top Bar
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 14, bottom: 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text(
+                    'Emergency Assistance',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: _sent ? _buildSentState(isDark) : _buildEmergencyState(isDark),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildEmergencyState(bool isDark) {
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+
     return Column(
       children: [
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 12),
 
-                // Emergency icon
+                // Emergency Icon
                 Container(
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
                     color: AppColors.error.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.3),
-                      width: 2,
-                    ),
                   ),
                   child: const Icon(
                     Icons.warning_amber_rounded,
@@ -216,49 +235,75 @@ class _EmergencyScreenState extends State<EmergencyScreen>
                     size: 40,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 18),
 
-                Text(
+                const Text(
                   'Request Emergency Help',
-                  style: AppTextStyles.headlineMedium.copyWith(
+                  style: TextStyle(
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     color: AppColors.error,
+                    letterSpacing: -0.5,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: 8),
                 Text(
-                  'An emergency alert email will be sent to your trusted contacts with your ride details and trip sharing code.',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
+                  'An immediate emergency alert will be dispatched to your trusted contacts with your live ride status and tracking location.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: secondaryTextColor,
+                    height: 1.4,
                   ),
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: 24),
+
+                // In-View Error Banner
+                if (_error != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.error),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Trusted contacts list
                 _buildContactsList(isDark),
 
-                if (_error != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  InlineError(message: _error!),
-                ],
-
-                const SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: 28),
 
                 // Hold-to-confirm button
                 _buildHoldButton(isDark),
 
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: 14),
                 Text(
-                  'Press and hold for 1.5 seconds to send the alert',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark
-                        ? AppColors.textTertiaryDark
-                        : AppColors.textTertiaryLight,
+                  'Press and hold for 1.5s to trigger alert',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: secondaryTextColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -267,12 +312,31 @@ class _EmergencyScreenState extends State<EmergencyScreen>
           ),
         ),
 
-        // Close button
+        // Cancel / Safety button
         Padding(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
-          child: SecondaryButton(
-            label: "I'm Safe — Cancel",
-            onPressed: () => Navigator.of(context).pop(),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
+              child: Text(
+                "I'm Safe — Cancel",
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: primaryTextColor,
+                ),
+              ),
+            ),
           ),
         ),
       ],
@@ -280,21 +344,39 @@ class _EmergencyScreenState extends State<EmergencyScreen>
   }
 
   Widget _buildContactsList(bool isDark) {
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+
     if (_loadingContacts) {
-      return const Center(child: AppLoader());
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.brand),
+          ),
+        ),
+      );
     }
 
     if (_contacts.isEmpty) {
-      return GlassContainer(
-        padding: const EdgeInsets.all(AppSpacing.md),
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor),
+        ),
         child: Row(
           children: [
             const Icon(Icons.person_off_rounded, color: Colors.grey, size: 20),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'No trusted contacts. Add them in Account & Security → Trusted Contacts.',
-                style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
+                'No trusted contacts found. Please add one in Trusted Contacts.',
+                style: TextStyle(fontSize: 13, color: secondaryTextColor),
               ),
             ),
           ],
@@ -302,19 +384,25 @@ class _EmergencyScreenState extends State<EmergencyScreen>
       );
     }
 
-    return GlassContainer(
-      padding: const EdgeInsets.all(AppSpacing.md),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Alert will be sent to:',
-            style: AppTextStyles.bodyMedium.copyWith(
+            'Alert will be dispatched to:',
+            style: TextStyle(
+              fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              color: secondaryTextColor,
             ),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: 10),
           ...(_contacts.map((c) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
@@ -326,29 +414,38 @@ class _EmergencyScreenState extends State<EmergencyScreen>
                         color: AppColors.error.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person_rounded,
-                          color: AppColors.error, size: 16),
+                      child: const Icon(
+                        Icons.person_rounded,
+                        color: AppColors.error,
+                        size: 16,
+                      ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(c.name,
-                              style: AppTextStyles.bodyMedium
-                                  .copyWith(fontWeight: FontWeight.w700)),
+                          Text(
+                            c.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: primaryTextColor,
+                            ),
+                          ),
                           if (c.email.isNotEmpty)
-                            Text(c.email,
-                                style: AppTextStyles.bodySmall.copyWith(
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : AppColors.textSecondaryLight),
-                                overflow: TextOverflow.ellipsis),
+                            Text(
+                              c.email,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: secondaryTextColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.email_outlined,
-                        size: 16, color: AppColors.error),
+                    const Icon(Icons.email_outlined, size: 16, color: AppColors.error),
                   ],
                 ),
               ))),
@@ -370,38 +467,26 @@ class _EmergencyScreenState extends State<EmergencyScreen>
             children: [
               // Progress ring
               SizedBox(
-                width: 120,
-                height: 120,
+                width: 124,
+                height: 124,
                 child: CircularProgressIndicator(
                   value: _holdController.value,
                   strokeWidth: 4,
                   backgroundColor: AppColors.error.withValues(alpha: 0.15),
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(AppColors.error),
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.error),
                 ),
               ),
-              // Core button
+              // Core SOS button
               Container(
-                width: 106,
-                height: 106,
+                width: 108,
+                height: 108,
                 decoration: BoxDecoration(
-                  color: _isHolding
-                      ? AppColors.error
-                      : AppColors.error.withValues(alpha: 0.15),
+                  color: _isHolding ? AppColors.error : AppColors.error.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: AppColors.error.withValues(alpha: 0.5),
                     width: 2,
                   ),
-                  boxShadow: _isHolding
-                      ? [
-                          BoxShadow(
-                            color: AppColors.error.withValues(alpha: 0.4),
-                            blurRadius: 24,
-                            spreadRadius: 6,
-                          ),
-                        ]
-                      : null,
                 ),
                 child: _sending
                     ? const Center(
@@ -419,9 +504,7 @@ class _EmergencyScreenState extends State<EmergencyScreen>
                         children: [
                           Icon(
                             Icons.sos_rounded,
-                            color: _isHolding
-                                ? Colors.white
-                                : AppColors.error,
+                            color: _isHolding ? Colors.white : AppColors.error,
                             size: 38,
                           ),
                           Text(
@@ -429,9 +512,7 @@ class _EmergencyScreenState extends State<EmergencyScreen>
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w900,
-                              color: _isHolding
-                                  ? Colors.white
-                                  : AppColors.error,
+                              color: _isHolding ? Colors.white : AppColors.error,
                               letterSpacing: 2,
                             ),
                           ),
@@ -446,9 +527,14 @@ class _EmergencyScreenState extends State<EmergencyScreen>
   }
 
   Widget _buildSentState(bool isDark) {
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -459,62 +545,85 @@ class _EmergencyScreenState extends State<EmergencyScreen>
                 color: AppColors.brand.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle_rounded,
-                  color: AppColors.brand, size: 48),
+              child: const Icon(Icons.check_circle_rounded, color: AppColors.brand, size: 48),
             ),
-            const SizedBox(height: AppSpacing.xl),
-            Text(
-              'Alert Sent',
-              style: AppTextStyles.headlineMedium.copyWith(
+            const SizedBox(height: 20),
+            const Text(
+              'Alert Dispatched',
+              style: TextStyle(
+                fontSize: 24,
                 fontWeight: FontWeight.w900,
                 color: AppColors.brand,
+                letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: 8),
             Text(
-              'An emergency alert email has been sent to ${_contacts.length} trusted contact${_contacts.length == 1 ? '' : 's'}.',
+              'An emergency alert has been sent to ${_contacts.length} trusted contact${_contacts.length == 1 ? '' : 's'}.',
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryTextColor,
+                height: 1.4,
               ),
             ),
             if (_shareCode != null) ...[
-              const SizedBox(height: AppSpacing.lg),
-              GlassContainer(
-                padding: const EdgeInsets.all(AppSpacing.md),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: borderColor),
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.share_location_rounded,
-                        color: AppColors.brand, size: 20),
-                    const SizedBox(width: AppSpacing.sm),
+                    const Icon(Icons.share_location_rounded, color: AppColors.brand, size: 20),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Trip code $_shareCode was included in the alert so your contact can track your location.',
-                        style: AppTextStyles.bodySmall,
+                        'Trip code $_shareCode was included so your contact can track your live route.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: primaryTextColor,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-            const SizedBox(height: AppSpacing.xl),
+            const SizedBox(height: 20),
             Text(
-              'Stay calm. Help is on the way. If you need immediate assistance, call 112.',
+              'Stay calm. Help is being notified. If you need immediate assistance from emergency services, call 112.',
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
+              style: TextStyle(
+                fontSize: 13,
+                color: secondaryTextColor,
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
-              child: PrimaryButton(
-                label: 'Close',
+              height: 56,
+              child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
           ],

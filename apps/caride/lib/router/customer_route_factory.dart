@@ -8,6 +8,8 @@ import 'package:caride/features/auth/onboarding_screen.dart';
 import 'package:caride/features/auth/welcome_screen.dart';
 import 'package:caride/features/chat/chat_screen.dart';
 import 'package:caride/features/home_map/customer_home_screen.dart';
+import 'package:caride/features/home_map/for_you_article_detail_screen.dart';
+import 'package:caride/features/home_map/for_you_posts_screen.dart';
 import 'package:caride/features/profile/account_screen.dart';
 import 'package:caride/features/profile/edit_profile_screen.dart';
 import 'package:caride/features/profile/become_driver_benefits_screen.dart';
@@ -17,7 +19,7 @@ import 'package:caride/features/profile/saved_address_screen.dart';
 import 'package:caride/features/profile/add_an_address_screen.dart';
 import 'package:caride/features/profile/edit_saved_address_screen.dart';
 import 'package:caride/features/profile/ride_history_screen.dart';
-import 'package:caride/features/profile/type_amount_screen.dart';
+import 'package:caride/features/wallet/top_up_wallet_hub_screen.dart';
 import 'package:caride/features/profile/driver_tracking_screen.dart';
 import 'package:caride/features/profile/share_receipt_screen.dart';
 import 'package:caride/features/profile/webview_screen.dart';
@@ -41,6 +43,7 @@ import 'package:caride/features/send_items/send_items_shell_screen.dart';
 import 'package:caride/features/ride_booking/offer_fare_screen.dart';
 import 'package:caride/features/ride_booking/select_driver_screen.dart';
 import 'package:caride/features/ride_booking/ride_track_screen.dart';
+import 'package:caride/features/car_rental/presentation/customer_rental_booking_details_screen.dart';
 import 'package:caride/features/shell/customer_main_shell.dart';
 import 'package:caride/features/wallet/wallet_screen.dart';
 import 'package:caride/features/wallet/top_up_method_screen.dart';
@@ -54,36 +57,22 @@ import 'package:caride/features/wallet/withdraw_amount_screen.dart';
 import 'package:caride/features/wallet/withdraw_pin_screen.dart';
 import 'package:caride/features/wallet/withdraw_success_screen.dart';
 import 'package:caride/features/wallet/data/withdraw_repository.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_onboarding_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_dashboard_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_vehicles_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/add_edit_vehicle_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_bookings_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_booking_detail_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_drivers_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_profile_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_profile_details_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_business_info_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_verification_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_appearance_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_notifications_settings_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_settings_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_wallet_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_transaction_history_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_legal_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_help_faqs_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_support_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/fleet_support_conversation_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/legal/fleet_terms_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/legal/fleet_rental_protocol_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/legal/fleet_insurance_policy_screen.dart';
-import 'package:caride/features/fleet_manager/presentation/screens/legal/fleet_privacy_policy_screen.dart';
+import 'package:caride/features/fleet_manager/presentation/screens/screens.dart';
 import 'package:caride/features/fleet_manager/auth/fleet_manager_login_screen.dart';
 import 'package:caride/features/fleet_manager/auth/fleet_manager_signup_screen.dart';
 import 'package:caride/features/fleet_manager/auth/fleet_manager_otp_screen.dart';
 import 'package:caride/features/fleet_manager/auth/fleet_manager_signup_success_screen.dart';
 import 'package:caride/features/fleet_manager/auth/fleet_manager_review_status_screen.dart';
 import 'package:caride/features/fleet_manager/auth/fleet_manager_forgot_password_screen.dart';
+import 'package:caride/features/car_rental/presentation/rental_browse_screen.dart';
+import 'package:caride/features/car_rental/presentation/rental_vehicle_detail_screen.dart';
+import 'package:caride/features/car_rental/presentation/rental_booking_form_screen.dart';
+import 'package:caride/features/car_rental/presentation/rental_booking_summary_screen.dart';
+import 'package:caride/features/car_rental/presentation/customer_rental_bookings_screen.dart';
+import 'package:caride/features/car_rental/presentation/popular_cars_screen.dart';
+import 'package:caride/features/car_rental/presentation/rental_payment_screen.dart';
+import 'package:caride/features/car_rental/presentation/vehicle_details_rating_screen.dart';
+import 'package:caride/features/fleet_manager/presentation/screens/profile/fleet_reviews_screen.dart';
 import 'package:shared_models/shared_models.dart';
 import 'package:navigation/navigation.dart';
 
@@ -111,10 +100,10 @@ CustomerRouteDelegates buildCustomerRouteDelegates() {
     savedAddresses: (_) => const SavedAddressScreen(),
     addAddress: (_) => const AddAnAddressScreen(),
     editAddress: (_) => const EditSavedAddressScreen(),
-    walletFund: (_) => const TypeAmountScreen(), // Replaced
+    walletFund: (_) => const TopUpWalletHubScreen(),
     rideHistory: (_) => const RideHistoryScreen(),
     ratings: (_) => const RatingsScreen(),
-    typeAmount: (_) => const TypeAmountScreen(),
+    typeAmount: (_) => const TopUpWalletHubScreen(),
     paymentMethod: (context, dynamic extra) {
       final amount = extra is double ? extra : 0.0;
       return TopUpMethodScreen(amountNaira: amount);
@@ -182,7 +171,9 @@ CustomerRouteDelegates buildCustomerRouteDelegates() {
     fleetDrivers: (_) => const FleetDriversScreen(),
     fleetProfile: (_) => const FleetProfileScreen(),
     fleetProfileDetails: (_) => const FleetProfileDetailsScreen(),
+    fleetOperatingStates: (_) => const FleetOperatingStatesScreen(),
     fleetBusinessInfo: (_) => const FleetBusinessInfoScreen(),
+    fleetViewBusinessInfo: (_) => const FleetViewBusinessInfoScreen(),
     fleetVerification: (_) => const FleetVerificationScreen(),
     fleetWallet: (_) => const FleetWalletScreen(),
     fleetTransactionHistory: (_) => const FleetTransactionHistoryScreen(),
@@ -199,5 +190,74 @@ CustomerRouteDelegates buildCustomerRouteDelegates() {
     fleetSupportConversation: (context, dynamic extra) => FleetSupportConversationScreen(
       ticketId: extra is String ? extra : (extra is Map ? extra['ticketId'] ?? '' : ''),
     ),
+    fleetChat: (_) => const FleetChatScreen(),
+    fleetConversation: (context, dynamic extra) {
+      if (extra is Map<String, dynamic>) {
+        return FleetConversationScreen(
+          threadId: extra['threadId'] ?? '',
+          customerName: extra['customerName'] ?? 'Customer',
+          customerUid: extra['customerUid'],
+          customerPhone: extra['customerPhone'],
+          vehicleTitle: extra['vehicleTitle'],
+          bookingId: extra['bookingId'],
+        );
+      }
+      return const FleetChatScreen();
+    },
+    // ── Car Rental Booking Flow ────────────────────────────────────────────
+    rentalBrowse: (_) => const RentalBrowseScreen(),
+    rentalVehicleDetail: (context, dynamic extra) {
+      if (extra is RentalVehicle) {
+        return RentalVehicleDetailScreen(vehicle: extra);
+      }
+      return const RentalBrowseScreen();
+    },
+    vehicleDetailsRating: (context, dynamic extra) {
+      if (extra is RentalVehicle) {
+        return VehicleDetailsRatingScreen(vehicle: extra);
+      }
+      return const RentalBrowseScreen();
+    },
+    rentalBookingForm: (context, dynamic extra) {
+      if (extra is RentalVehicle) {
+        return RentalBookingFormScreen(vehicle: extra);
+      }
+      return const RentalBrowseScreen();
+    },
+    rentalBookingSummary: (context, dynamic extra) {
+      if (extra is Map<String, dynamic>) {
+        final vehicle = extra['vehicle'];
+        final booking = extra['booking'];
+        if (vehicle is RentalVehicle && booking is RentalBooking) {
+          return RentalBookingSummaryScreen(
+            vehicle: vehicle,
+            booking: booking,
+          );
+        }
+      }
+      return const RentalBrowseScreen();
+    },
+    rentalBookings: (_) => const CustomerRentalBookingsScreen(),
+    rentalBookingDetails: (context, dynamic extra) {
+      if (extra is RentalBooking) {
+        return CustomerRentalBookingDetailsScreen(booking: extra);
+      }
+      return const CustomerRentalBookingsScreen();
+    },
+    rentalPayment: (context, dynamic extra) {
+      if (extra is RentalBooking) {
+        return RentalPaymentScreen(booking: extra);
+      }
+      return const CustomerRentalBookingsScreen();
+    },
+    popularCars: (_) => const PopularCarsScreen(),
+    fleetReviews: (_) => const FleetReviewsScreen(),
+    forYouPosts: (_) => const ForYouPostsScreen(),
+    forYouDetail: (context, dynamic extra) {
+      if (extra is ForYouArticle) {
+        return ForYouArticleDetailScreen(article: extra);
+      }
+      return const SizedBox.shrink();
+    },
   );
 }

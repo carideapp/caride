@@ -127,11 +127,15 @@ class DriverChatRepository {
     if (uid == null || rideId.isEmpty) return;
 
     try {
-      await _firestore.collection('rideMessages').doc(rideId).set({
-        'unreadCounts': {uid: 0},
+      final docRef = _firestore.collection('rideMessages').doc(rideId);
+      final docSnap = await docRef.get();
+      if (!docSnap.exists) return;
+
+      await docRef.update({
+        'unreadCounts.$uid': 0,
         'unreadCount_$uid': 0,
         'unreadCount': 0,
-      }, SetOptions(merge: true));
+      });
     } catch (_) {}
   }
 

@@ -5,11 +5,11 @@ void main() {
   group('WalletRepository parsing', () {
     test('parses initialize top up response', () {
       final result = WalletResponseParser.parseInitializeTopUpResult({
-        'authorizationUrl': 'https://checkout.paystack.com/abc',
+        'authorizationUrl': 'https://checkout.transactpay.ai/abc',
         'reference': 'ref_123',
       });
 
-      expect(result.authorizationUrl, contains('paystack.com'));
+      expect(result.authorizationUrl, contains('transactpay.ai'));
       expect(result.reference, 'ref_123');
     });
 
