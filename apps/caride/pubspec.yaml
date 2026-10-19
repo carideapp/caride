@@ -3,7 +3,7 @@ description: "CaRide - Premium ride-hailing and courier service application."
 
 publish_to: 'none' 
 
-version: 1.0.3+23
+version: 1.0.4+24
 
 environment:
   sdk: ^3.9.0
@@ -47,6 +47,7 @@ dependencies:
   image_picker: ^1.1.2
   shared_preferences: ^2.3.2
   in_app_review: ^2.0.9
+  device_info_plus: 11.3.0
   webview_flutter_android: ^4.13.0
   flutter_svg: ^2.3.0
   confetti: ^0.8.0
