@@ -27,10 +27,14 @@ class WalletScreen extends StatelessWidget {
   String _getTransactionTitle(WalletTransaction t) {
     final desc = t.description.toLowerCase();
     final rawType = t.rawType.toLowerCase();
-    if (rawType == 'cashback' || desc.contains('cashback')) {
-      return 'First Ride Cashback';
+    if (rawType == 'cashback' ||
+        rawType == 'trip_cashback' ||
+        desc.contains('cashback')) {
+      return 'Cashback Earnings';
     }
-    if (rawType == 'referral' || desc.contains('referral')) {
+    if (rawType == 'referral' ||
+        rawType.contains('referral') ||
+        desc.contains('referral')) {
       return 'Referral Earnings';
     }
     if (desc.contains('rental payment') || rawType == 'rental_payment') {

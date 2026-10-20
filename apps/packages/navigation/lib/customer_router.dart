@@ -88,11 +88,11 @@ CustomerRouterBundle createCustomerRouter({
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: CustomerRoutePaths.rentalBrowse,
-                builder: (context, state) => d.rentalBrowse != null
-                    ? d.rentalBrowse!(context)
-                    : (d.rentalBookings != null
-                        ? d.rentalBookings!(context)
+                path: CustomerRoutePaths.rentalBookings,
+                builder: (context, state) => d.rentalBookings != null
+                    ? d.rentalBookings!(context)
+                    : (d.rentalBrowse != null
+                        ? d.rentalBrowse!(context)
                         : const SizedBox.shrink()),
               ),
             ],
@@ -795,12 +795,11 @@ CustomerRouterBundle createCustomerRouter({
             builder: (context, state) => d.driverDelegates!.rentalTrip!(context, state.extra),
           ),
       ],
-      // ── Car Rental Booking Flow ────────────────────────────────────────────
-      if (d.rentalBookings != null)
+      if (d.rentalBrowse != null)
         GoRoute(
-          path: CustomerRoutePaths.rentalBookings,
+          path: CustomerRoutePaths.rentalBrowse,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.rentalBookings!(context),
+          builder: (context, state) => d.rentalBrowse!(context),
         ),
       if (d.rentalVehicleDetail != null)
         GoRoute(

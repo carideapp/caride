@@ -15,13 +15,19 @@ import 'package:caride/features/ride_booking/booking_shell/widgets/pickup_code_c
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 
 /// Live Ride Tracking Step (Step 5) styled exactly like the provided mock UI.
 class TrackingStep extends StatefulWidget {
-  const TrackingStep({super.key, required this.controller});
+  const TrackingStep({
+    super.key,
+    required this.controller,
+    this.driverLatLng,
+  });
 
   final BookingShellController controller;
+  final LatLng? driverLatLng;
 
   @override
   State<TrackingStep> createState() => _TrackingStepState();
@@ -67,6 +73,19 @@ class _TrackingStepState extends State<TrackingStep> {
     final dLng = driverLoc?.longitude ?? (isTripInProgress ? (ride.pickupLng ?? destLng) : null);
 
     if (dLat != null && dLng != null) {
+      // 1. Immediately calculate local instant ETA (0ms latency, continuous real-time update)
+      final instantEta = _arrivalCalculator.calculateInstantEta(
+        driverLat: dLat,
+        driverLng: dLng,
+        destinationLat: destLat,
+        destinationLng: destLng,
+        isToPickup: !isTripInProgress,
+      );
+      if (instantEta != _etaText) {
+        setState(() => _etaText = instantEta);
+      }
+
+      // 2. Fetch and calibrate road-network ETA in background
       _arrivalCalculator
           .calculateEta(
             driverLat: dLat,
@@ -77,7 +96,9 @@ class _TrackingStepState extends State<TrackingStep> {
           )
           .then((eta) {
         if (!mounted) return;
-        setState(() => _etaText = eta);
+        if (eta != _etaText) {
+          setState(() => _etaText = eta);
+        }
       });
     }
   }
@@ -211,6 +232,12 @@ class _TrackingStepState extends State<TrackingStep> {
   @override
   void initState() {
     super.initState();
+    if (widget.driverLatLng != null) {
+      _lastDriverGeoPoint = GeoPoint(
+        widget.driverLatLng!.latitude,
+        widget.driverLatLng!.longitude,
+      );
+    }
     final bid = widget.controller.acceptedBid;
     if (bid != null) {
       if (bid.etaMinutes > 0) {
@@ -220,10 +247,30 @@ class _TrackingStepState extends State<TrackingStep> {
         _make = bid.vehicleName;
       }
     }
+    _lastRideStatus = widget.controller.ride?.status;
     widget.controller.addListener(_onControllerChanged);
     final rideId = widget.controller.rideId;
     if (rideId != null && rideId.isNotEmpty) {
       _listenUnreadCount(rideId);
+    }
+    final initialRide = widget.controller.ride;
+    if (initialRide != null) {
+      _recalculateEta(ride: initialRide, driverLoc: _lastDriverGeoPoint, force: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(TrackingStep oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.driverLatLng != null && widget.driverLatLng != oldWidget.driverLatLng) {
+      _lastDriverGeoPoint = GeoPoint(
+        widget.driverLatLng!.latitude,
+        widget.driverLatLng!.longitude,
+      );
+      final ride = widget.controller.ride;
+      if (ride != null) {
+        _recalculateEta(ride: ride, driverLoc: _lastDriverGeoPoint);
+      }
     }
   }
 
@@ -246,7 +293,8 @@ class _TrackingStepState extends State<TrackingStep> {
       if (currentStatus != _lastRideStatus) {
         _lastRideStatus = currentStatus;
         if (isTripInProgress && !wasTripInProgress) {
-          // Instantly calculate ETA/distance to dropoff without waiting for driver movement!
+          // Instantly flush old pickup ETA and calculate dropoff ETA/distance!
+          _arrivalCalculator.resetCache();
           _recalculateEta(ride: ride, driverLoc: _lastDriverGeoPoint, force: true);
         }
       }
@@ -355,12 +403,30 @@ class _TrackingStepState extends State<TrackingStep> {
                 ride.status == 'tripStarted' ||
                 ride.status == 'rideStarted';
 
-            final displayEta = (_etaText == 'Calculating...' &&
-                    !isTripStarted &&
-                    widget.controller.acceptedBid != null &&
-                    widget.controller.acceptedBid!.etaMinutes > 0)
-                ? 'Pickup in ${widget.controller.acceptedBid!.etaMinutes} mins'
-                : _etaText;
+            String displayEta;
+            if (isTripStarted) {
+              if (_etaText.startsWith('Dropoff in')) {
+                displayEta = _etaText;
+              } else {
+                final dLat = _lastDriverGeoPoint?.latitude ?? ride.pickupLat ?? ride.dropoffLat ?? 7.0581922;
+                final dLng = _lastDriverGeoPoint?.longitude ?? ride.pickupLng ?? ride.dropoffLng ?? 6.2855659;
+                final destLat = ride.dropoffLat ?? ride.pickupLat ?? 7.0581922;
+                final destLng = ride.dropoffLng ?? ride.pickupLng ?? 6.2855659;
+                displayEta = _arrivalCalculator.calculateInstantEta(
+                  driverLat: dLat,
+                  driverLng: dLng,
+                  destinationLat: destLat,
+                  destinationLng: destLng,
+                  isToPickup: false,
+                );
+              }
+            } else {
+              displayEta = (_etaText == 'Calculating...' &&
+                      widget.controller.acceptedBid != null &&
+                      widget.controller.acceptedBid!.etaMinutes > 0)
+                  ? 'Pickup in ${widget.controller.acceptedBid!.etaMinutes} mins'
+                  : _etaText;
+            }
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -382,7 +448,7 @@ class _TrackingStepState extends State<TrackingStep> {
                 if (isTripStarted) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Estimated destination: ${displayEta.replaceAll('Pickup in ', 'Dropoff in ')}',
+                    displayEta,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: AppColors.primaryGreen,
                       fontWeight: FontWeight.w700,

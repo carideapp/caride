@@ -155,9 +155,9 @@ service cloud.firestore {
     match /drivers/{uid} {
       allow read: if true;
 
-      // Drivers can update own profile fields (approvalStatus allowed for testing upload flow queue)
+      // Drivers can update own profile fields (walletBalance is managed via backend functions)
       allow update: if isOwner(uid) &&
-        // !('approvalStatus' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('walletBalance' in request.resource.data.diff(resource.data).affectedKeys()) &&
         !('role' in request.resource.data.diff(resource.data).affectedKeys());
 
       // Allow fleet managers to link/unlink driver

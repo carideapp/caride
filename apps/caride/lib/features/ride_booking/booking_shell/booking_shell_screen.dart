@@ -644,7 +644,11 @@ class _BookingShellScreenState extends State<BookingShellScreen> {
       case BookingShellStep.bids:
         return DriverBidsStep(controller: _c, key: const ValueKey('bids'));
       case BookingShellStep.tracking:
-        return TrackingStep(controller: _c, key: const ValueKey('tracking'));
+        return TrackingStep(
+          controller: _c,
+          driverLatLng: _driverLatLng,
+          key: const ValueKey('tracking'),
+        );
     }
   }
 }

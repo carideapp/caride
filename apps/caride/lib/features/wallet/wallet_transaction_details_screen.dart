@@ -28,10 +28,14 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
   String _getTransactionTitle() {
     final desc = transaction.description.toLowerCase();
     final rawType = transaction.rawType.toLowerCase();
-    if (rawType == 'cashback' || desc.contains('cashback')) {
-      return 'First Ride Cashback';
+    if (rawType == 'cashback' ||
+        rawType == 'trip_cashback' ||
+        desc.contains('cashback')) {
+      return 'Cashback Earnings';
     }
-    if (rawType == 'referral' || desc.contains('referral')) {
+    if (rawType == 'referral' ||
+        rawType.contains('referral') ||
+        desc.contains('referral')) {
       return 'Referral Earnings';
     }
     if (desc.contains('top up') ||
@@ -217,7 +221,7 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
                     );
                   },
                 )
-              else if (title == 'First Ride Cashback')
+              else if (title == 'Cashback Earnings' || title == 'First Ride Cashback')
                 GlassSurface(
                   padding: const EdgeInsets.all(AppSpacing.xl),
                   child: Column(
@@ -230,11 +234,16 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
                       const SizedBox(height: AppSpacing.md),
                       _buildDetailRow(
                         label: 'Reward Type',
-                        value: 'First Ride Bonus',
+                        value: transaction.description.isNotEmpty
+                            ? transaction.description
+                            : 'Cashback Bonus',
                       ),
                       _buildDetailRow(
                         label: 'Credited To',
-                        value: 'In-App E-Wallet',
+                        value: (transaction.method.toLowerCase().contains('subsidy') ||
+                                transaction.description.toLowerCase().contains('subsidy'))
+                            ? 'CaRide Subsidy Wallet'
+                            : 'In-App E-Wallet',
                       ),
                       if (transaction.reference.isNotEmpty)
                         _buildDetailRow(
@@ -243,7 +252,7 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
                         ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'Congratulations! You received this cashback bonus for completing your first ride booking with CaRide. You can use it towards your next ride or withdraw to your bank account.',
+                        'Congratulations! You received this cashback bonus into your wallet. You can use it towards your ride bookings or in-app transactions.',
                         style: AppTextStyles.bodySmall.copyWith(
                           color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                           height: 1.4,

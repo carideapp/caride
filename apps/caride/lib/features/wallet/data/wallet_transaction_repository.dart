@@ -27,20 +27,36 @@ class WalletTransaction {
   factory WalletTransaction.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
     final typeStr = (data['type'] as String?)?.trim().toLowerCase() ?? '';
+    final rawTypeField = (data['rawType'] as String?)?.trim().toLowerCase() ?? '';
     final descStr = (data['description'] as String?)?.trim().toLowerCase() ?? '';
-    final isCredit = typeStr == 'credit' || 
-                     typeStr == 'referral' || 
-                     typeStr == 'cashback' ||
-                     descStr.contains('referral') ||
-                     descStr.contains('cashback');
-                     
+
+    final isCashback = rawTypeField == 'cashback' ||
+        typeStr == 'cashback' ||
+        typeStr == 'trip_cashback' ||
+        descStr.contains('cashback');
+
+    final isCredit = isCashback ||
+        typeStr == 'credit' ||
+        typeStr == 'referral' ||
+        typeStr == 'referral_credit' ||
+        typeStr == 'referral_reward' ||
+        descStr.contains('referral') ||
+        descStr.contains('reward') ||
+        descStr.contains('bonus');
+
+    final effectiveRawType = isCashback
+        ? 'cashback'
+        : (rawTypeField.isNotEmpty
+            ? rawTypeField
+            : (typeStr.contains('referral') ? 'referral' : typeStr));
+
     return WalletTransaction(
       id: doc.id,
       type: isCredit ? WalletTxType.credit : WalletTxType.debit,
-      rawType: typeStr,
+      rawType: effectiveRawType,
       reference: (data['reference'] as String?) ?? (data['rideId'] as String?) ?? '',
       amountNaira: (data['amountNaira'] as num?)?.toDouble() ?? 0,
-      method: (data['method'] as String?) ?? '',
+      method: (data['method'] as String?) ?? (data['destination'] == 'subsidy_wallet' ? 'Subsidy Wallet' : 'Wallet'),
       description: (data['description'] as String?) ?? '',
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -94,7 +110,7 @@ class WalletTransactionRepository {
 
   final FirebaseFirestore _firestore;
 
-  /// Streams the latest wallet transactions and rental booking payments for this user.
+  /// Streams the latest wallet transactions, subsidiary/credit wallet transactions, and rental booking payments.
   Stream<List<WalletTransaction>> watchTransactions(String uid) {
     if (uid.isEmpty) return Stream.value(const []);
 
@@ -105,8 +121,28 @@ class WalletTransactionRepository {
     void emitLatest() {
       final list = txMap.values.toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Deduplicate: If multiple records exist for the same cashback ride reference, keep only one
+      final seenCashbackRefs = <String>{};
+      final dedupedList = <WalletTransaction>[];
+      for (final tx in list) {
+        final isCashback = tx.rawType == 'cashback' || tx.description.toLowerCase().contains('cashback');
+        if (isCashback && tx.reference.isNotEmpty) {
+          final cleanRef = tx.reference.startsWith('cashback_')
+              ? tx.reference.substring('cashback_'.length)
+              : tx.reference;
+          if (cleanRef.isNotEmpty) {
+            if (seenCashbackRefs.contains(cleanRef)) {
+              continue;
+            }
+            seenCashbackRefs.add(cleanRef);
+          }
+        }
+        dedupedList.add(tx);
+      }
+
       if (!controller.isClosed) {
-        controller.add(list);
+        controller.add(dedupedList);
       }
     }
 
@@ -125,7 +161,22 @@ class WalletTransactionRepository {
       }, onError: (_) {}),
     );
 
-    // 2. Listen to rental_bookings where customerId == uid
+    // 2. Listen to credit_transactions where uid == uid (subsidiary/credit wallet transactions)
+    subs.add(
+      _firestore
+          .collection('credit_transactions')
+          .where('uid', isEqualTo: uid)
+          .snapshots()
+          .listen((snap) {
+        for (final doc in snap.docs) {
+          final tx = WalletTransaction.fromDoc(doc);
+          txMap['credit_${doc.id}'] = tx;
+        }
+        emitLatest();
+      }, onError: (_) {}),
+    );
+
+    // 3. Listen to rental_bookings where customerId == uid
     subs.add(
       _firestore
           .collection('rental_bookings')

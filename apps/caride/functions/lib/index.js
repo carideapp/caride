@@ -1878,7 +1878,28 @@ exports.verifyTransactPayTransaction = (0, https_1.onCall)(TRANSACTPAY_CALLABLE_
     if (amountNaira <= 0) {
         throw new https_1.HttpsError("internal", "Invalid transaction amount from TransactPay.");
     }
-    const userRef = customersCollection.doc(request.auth.uid);
+    const payloadRole = payload?.role?.toLowerCase();
+    let userRef = payloadRole === "driver" ? driversCollection.doc(request.auth.uid) : customersCollection.doc(request.auth.uid);
+    let userDoc = await userRef.get();
+    let isDriver = payloadRole === "driver";
+    if (!userDoc.exists) {
+        if (isDriver) {
+            const custDoc = await customersCollection.doc(request.auth.uid).get();
+            if (custDoc.exists) {
+                userRef = customersCollection.doc(request.auth.uid);
+                userDoc = custDoc;
+                isDriver = false;
+            }
+        }
+        else {
+            const driverDoc = await driversCollection.doc(request.auth.uid).get();
+            if (driverDoc.exists) {
+                userRef = driversCollection.doc(request.auth.uid);
+                userDoc = driverDoc;
+                isDriver = true;
+            }
+        }
+    }
     const receiptRef = admin.firestore().collection("transactpayReceipts").doc(reference);
     const receipt = await receiptRef.get();
     if (receipt.exists) {
@@ -1889,6 +1910,7 @@ exports.verifyTransactPayTransaction = (0, https_1.onCall)(TRANSACTPAY_CALLABLE_
         tx.set(receiptRef, {
             reference,
             uid: request.auth.uid,
+            userType: isDriver ? "driver" : "customer",
             amountNaira,
             processedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
@@ -1898,18 +1920,19 @@ exports.verifyTransactPayTransaction = (0, https_1.onCall)(TRANSACTPAY_CALLABLE_
         const txRef = admin.firestore().collection("walletTransactions").doc();
         tx.set(txRef, {
             uid: request.auth.uid,
+            userType: isDriver ? "driver" : "customer",
             type: "credit",
             amountNaira,
             method: "transactpay",
             reference,
-            description: "Wallet Top Up",
+            description: isDriver ? "Driver Wallet Top Up" : "Wallet Top Up",
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
     });
     // Send email receipt
     try {
-        const userDoc = await userRef.get();
-        const customerEmail = userDoc.data()?.email || request.auth.token.email;
+        const freshUserDoc = await userRef.get();
+        const customerEmail = freshUserDoc.data()?.email || request.auth.token.email;
         if (customerEmail) {
             await sendWalletTopUpReceiptEmail(customerEmail, reference, amountNaira, "TransactPay");
         }
@@ -1919,12 +1942,17 @@ exports.verifyTransactPayTransaction = (0, https_1.onCall)(TRANSACTPAY_CALLABLE_
     }
     // Send push notification
     try {
-        await sendPushToCustomer(request.auth.uid, `Wallet Credited! ₦${amountNaira.toLocaleString()}`, `Your wallet has been successfully credited with ₦${amountNaira.toLocaleString()} via TransactPay.`, { type: "wallet_topup", reference });
+        if (isDriver) {
+            await sendPushToDriver(request.auth.uid, `Wallet Credited! ₦${amountNaira.toLocaleString()}`, `Your driver wallet has been successfully credited with ₦${amountNaira.toLocaleString()} via TransactPay.`, { type: "wallet_topup", reference });
+        }
+        else {
+            await sendPushToCustomer(request.auth.uid, `Wallet Credited! ₦${amountNaira.toLocaleString()}`, `Your wallet has been successfully credited with ₦${amountNaira.toLocaleString()} via TransactPay.`, { type: "wallet_topup", reference });
+        }
     }
     catch (pushErr) {
         logger.warn("Failed to send wallet topup push notification", { uid: request.auth.uid, error: String(pushErr) });
     }
-    logger.info("Wallet topped up via TransactPay", { uid: request.auth.uid, amountNaira, reference });
+    logger.info("Wallet topped up via TransactPay", { uid: request.auth.uid, isDriver, amountNaira, reference });
     return { amountNaira };
 });
 /**
@@ -1936,38 +1964,61 @@ exports.createDedicatedVirtualAccount = (0, https_1.onCall)(TRANSACTPAY_CALLABLE
         throw new https_1.HttpsError("unauthenticated", "Must be signed in.");
     }
     const uid = request.auth.uid;
-    const userDocRef = customersCollection.doc(uid);
-    const userDoc = await userDocRef.get();
+    const payload = request.data;
+    const reqRole = payload?.role?.toLowerCase();
+    let isDriver = reqRole === "driver";
+    let userDocRef = isDriver ? driversCollection.doc(uid) : customersCollection.doc(uid);
+    let userDoc = await userDocRef.get();
+    if (!userDoc.exists) {
+        if (isDriver) {
+            const custDoc = await customersCollection.doc(uid).get();
+            if (custDoc.exists) {
+                userDocRef = customersCollection.doc(uid);
+                userDoc = custDoc;
+                isDriver = false;
+            }
+        }
+        else {
+            const drivDoc = await driversCollection.doc(uid).get();
+            if (drivDoc.exists) {
+                userDocRef = driversCollection.doc(uid);
+                userDoc = drivDoc;
+                isDriver = true;
+            }
+        }
+    }
     const userData = userDoc.data() || {};
+    const defaultLabel = isDriver ? "Driver" : "Customer";
     // Check if dedicated account already exists in Firestore
     const existingNum = userData.virtualAccountNumber;
     if (existingNum && String(existingNum).trim().length > 0) {
         return {
             accountNumber: String(existingNum).trim(),
             bankName: userData.virtualAccountBankName || "Moniepoint Microfinance Bank",
-            accountName: userData.virtualAccountName || `CaRide / ${userData.fullName || "Customer"}`,
+            accountName: userData.virtualAccountName || `CaRide / ${userData.fullName || defaultLabel}`,
             status: "active",
         };
     }
     const rawEmail = userData.email || request.auth.token.email || "";
     const email = sanitizeEmail(rawEmail);
-    const fullName = userData.fullName || request.auth.token.name || "Customer";
+    const fullName = userData.fullName || request.auth.token.name || defaultLabel;
     const mobile = userData.phoneNumber || userData.phone || "+2348012345678";
-    const reference = `DVA-${uid.slice(0, 8)}-${Date.now()}`;
-    const alias = `CaRide_${uid}`;
+    const reference = `DVA-${isDriver ? "DRV-" : ""}${uid.slice(0, 8)}-${Date.now()}`;
+    const alias = `CaRide_${isDriver ? "drv_" : ""}${uid}`;
     let accountNumber = "";
     let bankName = "Moniepoint Microfinance Bank";
     let accountName = `CaRide / ${fullName}`;
     try {
         logger.info("createDedicatedVirtualAccount: Generating static virtual account via TransactPay", {
             uid,
+            isDriver,
             alias,
             reference,
         });
         // Call TransactPay official static / dedicated virtual account generation endpoint
         const genRes = await transactpayRequest("POST", "/payment/virtual-account/generate", {
             Alias: alias,
-            Narration: `CaRide Top-Up for ${fullName}`,
+            Narration: `CaRide Top-Up for ${fullName} (${defaultLabel})`,
             Reference: reference,
         });
         logger.info("createDedicatedVirtualAccount: TransactPay response", { genRes });
@@ -1997,8 +2048,7 @@ exports.createDedicatedVirtualAccount = (0, https_1.onCall)(TRANSACTPAY_CALLABLE
             .slice(0, 8);
         accountNumber = `99${hashDigits}`;
     }
-    // Persist permanently in Firestore under customers/{uid}
-    const payload = request.data;
+    // Persist permanently in Firestore under respective collection (drivers/{uid} or customers/{uid})
     const bvn = payload?.bvn?.trim();
     await userDocRef.set({
         virtualAccountNumber: accountNumber,
@@ -2010,7 +2060,7 @@ exports.createDedicatedVirtualAccount = (0, https_1.onCall)(TRANSACTPAY_CALLABLE
         virtualAccountCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
-    logger.info("createDedicatedVirtualAccount: SUCCESS", { uid, accountNumber, bankName, accountName, hasBvn: Boolean(bvn) });
+    logger.info("createDedicatedVirtualAccount: SUCCESS", { uid, isDriver, accountNumber, bankName, accountName, hasBvn: Boolean(bvn) });
     return {
         accountNumber,
         bankName,
@@ -2113,56 +2163,107 @@ exports.transactPayWebhook = (0, https_1.onRequest)({
             payload.email ||
             "").trim().toLowerCase();
         const customerEmail = rawCustomerEmail;
-        // 2. Locate the customer
+        // 2. Locate the customer or driver
         let targetUid = null;
-        // Check accountReference (e.g. DVA-{uid}-...) or reference
+        let isDriver = false;
+        let userRef = customersCollection.doc("unknown");
+        // Check accountReference (e.g. DVA-{uid}-... or DVA-DRV-{uid}-...) or reference
         const refToMatch = accountRef || reference;
-        const uidMatch = refToMatch.match(/(?:TOPUP-[A-Z]+-|DVA-)([a-zA-Z0-9]{5,28})/);
+        const uidMatch = refToMatch.match(/(?:TOPUP-[A-Z]+-|DVA-(?:DRV-)?)([a-zA-Z0-9]{5,28})/);
         if (uidMatch && uidMatch[1]) {
             const candidateUid = uidMatch[1];
-            const directDoc = await customersCollection.doc(candidateUid).get();
-            if (directDoc.exists) {
+            const directDriver = await driversCollection.doc(candidateUid).get();
+            if (directDriver.exists) {
                 targetUid = candidateUid;
+                isDriver = true;
+                userRef = driversCollection.doc(candidateUid);
+            }
+            else {
+                const directDoc = await customersCollection.doc(candidateUid).get();
+                if (directDoc.exists) {
+                    targetUid = candidateUid;
+                    isDriver = false;
+                    userRef = customersCollection.doc(candidateUid);
+                }
             }
         }
-        // Lookup by dedicated virtual account number in customers collection
+        // Lookup by dedicated virtual account number in drivers then customers collection
         if (!targetUid && recipientAccount) {
-            const snap = await customersCollection
+            const driverSnap = await driversCollection
                 .where("virtualAccountNumber", "==", recipientAccount)
                 .limit(1)
                 .get();
-            if (!snap.empty) {
-                targetUid = snap.docs[0].id;
+            if (!driverSnap.empty) {
+                targetUid = driverSnap.docs[0].id;
+                isDriver = true;
+                userRef = driversCollection.doc(targetUid);
+            }
+            else {
+                const snap = await customersCollection
+                    .where("virtualAccountNumber", "==", recipientAccount)
+                    .limit(1)
+                    .get();
+                if (!snap.empty) {
+                    targetUid = snap.docs[0].id;
+                    isDriver = false;
+                    userRef = customersCollection.doc(targetUid);
+                }
             }
         }
-        // Lookup by virtualAccountReference in customers collection
+        // Lookup by virtualAccountReference in drivers then customers collection
         if (!targetUid && accountRef) {
-            const snap = await customersCollection
+            const driverSnap = await driversCollection
                 .where("virtualAccountReference", "==", accountRef)
                 .limit(1)
                 .get();
-            if (!snap.empty) {
-                targetUid = snap.docs[0].id;
+            if (!driverSnap.empty) {
+                targetUid = driverSnap.docs[0].id;
+                isDriver = true;
+                userRef = driversCollection.doc(targetUid);
+            }
+            else {
+                const snap = await customersCollection
+                    .where("virtualAccountReference", "==", accountRef)
+                    .limit(1)
+                    .get();
+                if (!snap.empty) {
+                    targetUid = snap.docs[0].id;
+                    isDriver = false;
+                    userRef = customersCollection.doc(targetUid);
+                }
             }
         }
-        // Lookup by customer email
+        // Lookup by email
         if (!targetUid && isValidEmail(customerEmail)) {
-            const emailSnap = await customersCollection
+            const driverEmailSnap = await driversCollection
                 .where("email", "==", customerEmail)
                 .limit(1)
                 .get();
-            if (!emailSnap.empty) {
-                targetUid = emailSnap.docs[0].id;
+            if (!driverEmailSnap.empty) {
+                targetUid = driverEmailSnap.docs[0].id;
+                isDriver = true;
+                userRef = driversCollection.doc(targetUid);
+            }
+            else {
+                const emailSnap = await customersCollection
+                    .where("email", "==", customerEmail)
+                    .limit(1)
+                    .get();
+                if (!emailSnap.empty) {
+                    targetUid = emailSnap.docs[0].id;
+                    isDriver = false;
+                    userRef = customersCollection.doc(targetUid);
+                }
             }
         }
         if (!targetUid) {
-            logger.error("transactPayWebhook: Customer could not be identified", {
+            logger.error("transactPayWebhook: User could not be identified", {
                 reference,
                 accountRef,
                 recipientAccount,
                 customerEmail,
             });
-            res.status(200).json({ received: true, error: "Customer not found" });
+            res.status(200).json({ received: true, error: "User not found" });
             return;
         }
         // 3. Idempotency Check using transactpayReceipts
@@ -2175,11 +2276,11 @@ exports.transactPayWebhook = (0, https_1.onRequest)({
             return;
         }
         // 4. Atomic Firestore Transaction (Credit Wallet & Log)
-        const userRef = customersCollection.doc(targetUid);
         await admin.firestore().runTransaction(async (tx) => {
             tx.set(receiptRef, {
                 reference,
                 uid: targetUid,
+                userType: isDriver ? "driver" : "customer",
                 amountNaira,
                 method: "transactpay_webhook",
                 recipientAccount,
@@ -2191,11 +2292,12 @@ exports.transactPayWebhook = (0, https_1.onRequest)({
             const txRef = admin.firestore().collection("walletTransactions").doc();
             tx.set(txRef, {
                 uid: targetUid,
+                userType: isDriver ? "driver" : "customer",
                 type: "credit",
                 amountNaira,
                 method: "transactpay",
                 reference,
-                description: "Wallet Top Up (Bank Transfer)",
+                description: isDriver ? "Driver Wallet Top Up (Dedicated Account)" : "Wallet Top Up (Bank Transfer)",
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
         });
@@ -2212,7 +2314,12 @@ exports.transactPayWebhook = (0, https_1.onRequest)({
         }
         // 6. Send Push Notification
         try {
-            await sendPushToCustomer(targetUid, `Deposit Received! ₦${amountNaira.toLocaleString()}`, `Your dedicated virtual account received a transfer of ₦${amountNaira.toLocaleString()}. Your wallet has been credited.`, { type: "wallet_topup", reference });
+            if (isDriver) {
+                await sendPushToDriver(targetUid, `Deposit Received! ₦${amountNaira.toLocaleString()}`, `Your dedicated driver virtual account received a transfer of ₦${amountNaira.toLocaleString()}. Your driver wallet has been credited.`, { type: "wallet_topup", reference });
+            }
+            else {
+                await sendPushToCustomer(targetUid, `Deposit Received! ₦${amountNaira.toLocaleString()}`, `Your dedicated virtual account received a transfer of ₦${amountNaira.toLocaleString()}. Your wallet has been credited.`, { type: "wallet_topup", reference });
+            }
         }
         catch (pushErr) {
             logger.warn("transactPayWebhook: Failed to send push notification", { targetUid, error: String(pushErr) });
@@ -3202,7 +3309,8 @@ exports.completeRide = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstance
                     const creditTxRef = admin.firestore().collection("credit_transactions").doc();
                     tx.set(creditTxRef, {
                         uid: customerUid,
-                        type: "referral_reward",
+                        type: "cashback",
+                        rawType: "cashback",
                         amountNaira: firstRideAmount,
                         rideId,
                         description: "First Ride Cashback Reward",
@@ -3244,6 +3352,7 @@ exports.completeRide = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstance
                             tx.set(creditTxRef, {
                                 uid: customerUid,
                                 type: "trip_cashback",
+                                rawType: "cashback",
                                 amountNaira: cashbackAmount,
                                 rideId,
                                 fareAmount: finalFare,
@@ -3279,6 +3388,7 @@ exports.completeRide = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstance
                             tx.set(creditTxRef, {
                                 uid: customerUid,
                                 type: "trip_cashback",
+                                rawType: "cashback",
                                 amountNaira: cashbackAmount,
                                 rideId,
                                 fareAmount: finalFare,

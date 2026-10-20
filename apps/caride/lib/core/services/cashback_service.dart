@@ -185,7 +185,8 @@ class CashbackService {
         final creditTxRef = _firestore.collection('credit_transactions').doc();
         tx.set(creditTxRef, {
           'uid': customerUid,
-          'type': 'referral_reward',
+          'type': 'cashback',
+          'rawType': 'cashback',
           'amountNaira': config.amount,
           'rideId': rideId,
           'description': 'First Ride Cashback Reward',
@@ -278,6 +279,7 @@ class CashbackService {
           tx.set(creditTxRef, {
             'uid': customerUid,
             'type': 'trip_cashback',
+            'rawType': 'cashback',
             'amountNaira': cashbackAmount,
             'rideId': rideId,
             'fareAmount': fareAmount,
@@ -318,6 +320,7 @@ class CashbackService {
           tx.set(creditTxRef, {
             'uid': customerUid,
             'type': 'trip_cashback',
+            'rawType': 'cashback',
             'amountNaira': cashbackAmount,
             'rideId': rideId,
             'fareAmount': fareAmount,

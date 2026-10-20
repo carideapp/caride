@@ -13,9 +13,9 @@ void main() {
     ]);
   });
 
-  test('ride options include Regular/Comfort/Luxury/Courier', () {
+  test('ride options include Regular/Comfort/Luxury/Tricycle/Motorcycle/Courier', () {
     final types =
         RideOptionsRepository.fallbackOptions.map((o) => o.type).toList();
-    expect(types, ['Regular', 'Comfort', 'Luxury', 'Courier']);
+    expect(types, ['Regular', 'Comfort', 'Luxury', 'Tricycle', 'Motorcycle', 'Courier']);
   });
 }
