@@ -3833,6 +3833,7 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
       const firstRideAmount = typeof settingsData.firstRideCashbackAmount === "number" && settingsData.firstRideCashbackAmount > 0
         ? settingsData.firstRideCashbackAmount
         : 500;
+      const firstRideDest = (settingsData.firstRideCashbackDestination as string) || "subsidy_wallet";
 
       if (isFirstRideActive && firstRideAmount > 0) {
         await admin.firestore().runTransaction(async (tx) => {
@@ -3841,16 +3842,29 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
           const cData = custDoc.data() || {};
           if (cData.hasReceivedFirstRideCashback === true) return; // Idempotent
 
-          const currentBal = (cData.walletBalance as number) || 0;
-          tx.update(customersCollection.doc(customerUid), {
-            walletBalance: currentBal + firstRideAmount,
-            hasReceivedFirstRideCashback: true,
-            firstRideCashbackAmount: firstRideAmount,
-            firstRideCashbackRideId: rideId,
-            firstRideCashbackAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          if (firstRideDest === "subsidy_wallet") {
+            const currentCredit = (cData.creditBalance as number) || 0;
+            tx.update(customersCollection.doc(customerUid), {
+              creditBalance: currentCredit + firstRideAmount,
+              hasReceivedFirstRideCashback: true,
+              firstRideCashbackAmount: firstRideAmount,
+              firstRideCashbackRideId: rideId,
+              firstRideCashbackAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          } else {
+            const currentBal = (cData.walletBalance as number) || 0;
+            tx.update(customersCollection.doc(customerUid), {
+              walletBalance: currentBal + firstRideAmount,
+              hasReceivedFirstRideCashback: true,
+              firstRideCashbackAmount: firstRideAmount,
+              firstRideCashbackRideId: rideId,
+              firstRideCashbackAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
 
+          // Always record in walletTransactions so it appears in Recent Transactions history
           const walletTxRef = admin.firestore().collection("walletTransactions").doc();
           tx.set(walletTxRef, {
             uid: customerUid,
@@ -3858,25 +3872,27 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
             rawType: "cashback",
             amountNaira: firstRideAmount,
             description: "First Ride Cashback",
-            method: "Cashback",
+            method: firstRideDest === "subsidy_wallet" ? "Subsidy Wallet" : "Cashback",
             status: "completed",
             rideId,
-            reference: rideId,
+            reference: `cashback_${rideId}`,
+            destination: firstRideDest,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
 
           const creditTxRef = admin.firestore().collection("credit_transactions").doc();
           tx.set(creditTxRef, {
             uid: customerUid,
-            type: "cashback",
+            type: "first_ride_cashback",
             rawType: "cashback",
             amountNaira: firstRideAmount,
             rideId,
+            destination: firstRideDest,
             description: "First Ride Cashback Reward",
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         });
-        logger.info("First ride cashback processed server-side", { customerUid, rideId, firstRideAmount });
+        logger.info("First ride cashback processed server-side", { customerUid, rideId, firstRideAmount, firstRideDest });
       }
 
       // 2. Percentage Trip Cashback Award (e.g. 5% on ₦5,000+ trips)
@@ -3887,7 +3903,7 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
       const tripCashbackMinFare = typeof settingsData.tripCashbackMinFare === "number" && settingsData.tripCashbackMinFare > 0
         ? settingsData.tripCashbackMinFare
         : 5000;
-      const tripCashbackDest = (settingsData.tripCashbackDestination as string) || "main_wallet";
+      const tripCashbackDest = (settingsData.tripCashbackDestination as string) || "subsidy_wallet";
 
       if (isTripCashbackActive && tripCashbackPercent > 0 && finalFare >= tripCashbackMinFare) {
         const rawCashback = (finalFare * tripCashbackPercent) / 100;
@@ -3910,6 +3926,23 @@ export const completeRide = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
               tx.update(customersCollection.doc(customerUid), {
                 creditBalance: currentCredit + cashbackAmount,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              // CRITICAL: Always create walletTransactions record so Recent Transactions displays it!
+              const walletTxRef = admin.firestore().collection("walletTransactions").doc();
+              tx.set(walletTxRef, {
+                uid: customerUid,
+                type: "credit",
+                rawType: "cashback",
+                amountNaira: cashbackAmount,
+                description: `${tripCashbackPercent}% Trip Cashback (₦${Math.round(finalFare)} trip)`,
+                method: "Subsidy Wallet",
+                status: "completed",
+                rideId,
+                reference: `cashback_${rideId}`,
+                cashbackPercent: tripCashbackPercent,
+                destination: "subsidy_wallet",
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
               });
 
               const creditTxRef = admin.firestore().collection("credit_transactions").doc();

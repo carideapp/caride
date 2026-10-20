@@ -31,8 +31,10 @@ class WalletTransaction {
     final descStr = (data['description'] as String?)?.trim().toLowerCase() ?? '';
 
     final isCashback = rawTypeField == 'cashback' ||
+        rawTypeField == 'first_ride_cashback' ||
         typeStr == 'cashback' ||
         typeStr == 'trip_cashback' ||
+        typeStr == 'first_ride_cashback' ||
         descStr.contains('cashback');
 
     final isCredit = isCashback ||
@@ -45,10 +47,20 @@ class WalletTransaction {
         descStr.contains('bonus');
 
     final effectiveRawType = isCashback
-        ? 'cashback'
+        ? (typeStr == 'first_ride_cashback' || descStr.contains('first ride')
+            ? 'first_ride_cashback'
+            : 'cashback')
         : (rawTypeField.isNotEmpty
             ? rawTypeField
             : (typeStr.contains('referral') ? 'referral' : typeStr));
+
+    final isSubsidy = data['destination'] == 'subsidy_wallet' ||
+        (data['method'] as String?)?.toLowerCase().contains('subsidy') == true ||
+        descStr.contains('subsidy');
+
+    final effectiveMethod = (data['method'] as String?)?.isNotEmpty == true
+        ? data['method'] as String
+        : (isSubsidy ? 'Subsidy Wallet' : 'Wallet');
 
     return WalletTransaction(
       id: doc.id,
@@ -56,7 +68,7 @@ class WalletTransaction {
       rawType: effectiveRawType,
       reference: (data['reference'] as String?) ?? (data['rideId'] as String?) ?? '',
       amountNaira: (data['amountNaira'] as num?)?.toDouble() ?? 0,
-      method: (data['method'] as String?) ?? (data['destination'] == 'subsidy_wallet' ? 'Subsidy Wallet' : 'Wallet'),
+      method: effectiveMethod,
       description: (data['description'] as String?) ?? '',
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -126,7 +138,9 @@ class WalletTransactionRepository {
       final seenCashbackRefs = <String>{};
       final dedupedList = <WalletTransaction>[];
       for (final tx in list) {
-        final isCashback = tx.rawType == 'cashback' || tx.description.toLowerCase().contains('cashback');
+        final isCashback = tx.rawType == 'cashback' ||
+            tx.rawType == 'first_ride_cashback' ||
+            tx.description.toLowerCase().contains('cashback');
         if (isCashback && tx.reference.isNotEmpty) {
           final cleanRef = tx.reference.startsWith('cashback_')
               ? tx.reference.substring('cashback_'.length)

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:design_system/design_system.dart';
@@ -105,28 +106,28 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     );
   }
 
-  Future<void> _handleAuthAction(String roleId, bool isLogin) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selected_role', roleId);
-    if (!mounted) return;
+  void _handleAuthAction(String roleId, bool isLogin) {
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('selected_role', roleId);
+      } catch (e) {
+        debugPrint('Failed to persist selected_role: $e');
+      }
+    }());
 
-    if (roleId == 'driver') {
-      if (isLogin) {
-        context.push(DriverRoutePaths.login);
-      } else {
-        context.push(DriverRoutePaths.signup);
-      }
-    } else if (roleId == 'fleet') {
-      if (isLogin) {
-        context.push(FleetRoutePaths.login);
-      } else {
-        context.push(FleetRoutePaths.signup);
-      }
-    } else {
-      if (isLogin) {
-        context.push(CustomerRoutePaths.login);
-      } else {
-        context.push(CustomerRoutePaths.signup);
+    final path = roleId == 'driver'
+        ? (isLogin ? DriverRoutePaths.login : DriverRoutePaths.signup)
+        : roleId == 'fleet'
+            ? (isLogin ? FleetRoutePaths.login : FleetRoutePaths.signup)
+            : (isLogin ? CustomerRoutePaths.login : CustomerRoutePaths.signup);
+
+    try {
+      context.push(path);
+    } catch (e, stack) {
+      debugPrint('Navigation push failed ($e), falling back to go: $stack');
+      if (mounted) {
+        context.go(path);
       }
     }
   }

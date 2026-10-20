@@ -574,34 +574,42 @@ CustomerRouterBundle createCustomerRouter({
       if (d.driverDelegates != null) ...[
         GoRoute(
           path: DriverRoutePaths.getStarted,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.getStarted(context),
         ),
         GoRoute(
           path: DriverRoutePaths.login,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.login(context),
         ),
         GoRoute(
           path: DriverRoutePaths.signup,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.signup(context),
         ),
         GoRoute(
           path: DriverRoutePaths.otp,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.otp(context),
         ),
         GoRoute(
           path: DriverRoutePaths.registerSuccess,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.registerSuccess(context),
         ),
         GoRoute(
           path: DriverRoutePaths.forgotPassword,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.forgotPassword(context),
         ),
         GoRoute(
           path: DriverRoutePaths.onboarding,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.onboarding(context),
         ),
         GoRoute(
           path: DriverRoutePaths.pendingApproval,
+          parentNavigatorKey: rootNavigatorKey,
           builder: (context, state) => d.driverDelegates!.pendingApproval(context),
         ),
         StatefulShellRoute.indexedStack(

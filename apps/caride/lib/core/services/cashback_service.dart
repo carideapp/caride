@@ -24,36 +24,38 @@ class CashbackService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   /// Fetches the configured first ride cashback settings from config/referralSettings.
-  Future<({bool isActive, double amount})> getCashbackConfig() async {
+  Future<({bool isActive, double amount, String destination})> getCashbackConfig() async {
     try {
       final snap = await _firestore.collection('config').doc('referralSettings').get();
       if (!snap.exists) {
-        return (isActive: true, amount: 500.0);
+        return (isActive: true, amount: 500.0, destination: 'subsidy_wallet');
       }
       final data = snap.data() ?? {};
       final isActive = data['isFirstRideCashbackActive'] != false;
       final amount = (data['firstRideCashbackAmount'] as num?)?.toDouble() ?? 500.0;
-      return (isActive: isActive, amount: amount > 0 ? amount : 500.0);
+      final destination = (data['firstRideCashbackDestination'] as String?) ?? 'subsidy_wallet';
+      return (isActive: isActive, amount: amount > 0 ? amount : 500.0, destination: destination);
     } catch (e) {
       developer.log('Error reading cashback config: $e', name: 'CashbackService');
-      return (isActive: true, amount: 500.0);
+      return (isActive: true, amount: 500.0, destination: 'subsidy_wallet');
     }
   }
 
   /// Streams the current first ride cashback settings for real-time reactive UI.
-  Stream<({bool isActive, double amount})> watchCashbackConfig() {
+  Stream<({bool isActive, double amount, String destination})> watchCashbackConfig() {
     return _firestore
         .collection('config')
         .doc('referralSettings')
         .snapshots()
         .map((snap) {
       if (!snap.exists) {
-        return (isActive: true, amount: 500.0);
+        return (isActive: true, amount: 500.0, destination: 'subsidy_wallet');
       }
       final data = snap.data() ?? {};
       final isActive = data['isFirstRideCashbackActive'] != false;
       final amount = (data['firstRideCashbackAmount'] as num?)?.toDouble() ?? 500.0;
-      return (isActive: isActive, amount: amount > 0 ? amount : 500.0);
+      final destination = (data['firstRideCashbackDestination'] as String?) ?? 'subsidy_wallet';
+      return (isActive: isActive, amount: amount > 0 ? amount : 500.0, destination: destination);
     });
   }
 
@@ -153,20 +155,33 @@ class CashbackService {
           return false;
         }
 
-        final currentBalance = (data['walletBalance'] as num?)?.toDouble() ?? 0.0;
-        final newBalance = currentBalance + config.amount;
+        if (config.destination == 'subsidy_wallet') {
+          final currentCredit = (data['creditBalance'] as num?)?.toDouble() ?? 0.0;
+          final newCredit = currentCredit + config.amount;
 
-        // Update customer profile
-        tx.update(customerRef, {
-          'walletBalance': newBalance,
-          'hasReceivedFirstRideCashback': true,
-          'firstRideCashbackAmount': config.amount,
-          'firstRideCashbackRideId': rideId,
-          'firstRideCashbackAwardedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+          tx.update(customerRef, {
+            'creditBalance': newCredit,
+            'hasReceivedFirstRideCashback': true,
+            'firstRideCashbackAmount': config.amount,
+            'firstRideCashbackRideId': rideId,
+            'firstRideCashbackAwardedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          final currentBalance = (data['walletBalance'] as num?)?.toDouble() ?? 0.0;
+          final newBalance = currentBalance + config.amount;
 
-        // Create wallet transaction record
+          tx.update(customerRef, {
+            'walletBalance': newBalance,
+            'hasReceivedFirstRideCashback': true,
+            'firstRideCashbackAmount': config.amount,
+            'firstRideCashbackRideId': rideId,
+            'firstRideCashbackAwardedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // Create wallet transaction record so it shows up in Recent Transactions
         final walletTxRef = _firestore.collection('walletTransactions').doc();
         tx.set(walletTxRef, {
           'uid': customerUid,
@@ -174,10 +189,11 @@ class CashbackService {
           'rawType': 'cashback',
           'amountNaira': config.amount,
           'description': 'First Ride Cashback',
-          'method': 'Cashback',
+          'method': config.destination == 'subsidy_wallet' ? 'Subsidy Wallet' : 'Cashback',
           'status': 'completed',
           'rideId': rideId,
-          'reference': rideId,
+          'reference': 'cashback_$rideId',
+          'destination': config.destination,
           'createdAt': FieldValue.serverTimestamp(),
         });
 
@@ -185,16 +201,17 @@ class CashbackService {
         final creditTxRef = _firestore.collection('credit_transactions').doc();
         tx.set(creditTxRef, {
           'uid': customerUid,
-          'type': 'cashback',
+          'type': 'first_ride_cashback',
           'rawType': 'cashback',
           'amountNaira': config.amount,
           'rideId': rideId,
+          'destination': config.destination,
           'description': 'First Ride Cashback Reward',
           'createdAt': FieldValue.serverTimestamp(),
         });
 
         developer.log(
-          'Awarded ₦${config.amount} first ride cashback to customer $customerUid for ride $rideId',
+          'Awarded ₦${config.amount} first ride cashback to customer $customerUid into ${config.destination} for ride $rideId',
           name: 'CashbackService',
         );
         return true;
@@ -272,6 +289,23 @@ class CashbackService {
           tx.update(customerRef, {
             'creditBalance': newCredit,
             'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+          // CRITICAL: Always create walletTransactions record so Recent Transactions displays it!
+          final walletTxRef = _firestore.collection('walletTransactions').doc();
+          tx.set(walletTxRef, {
+            'uid': customerUid,
+            'type': 'credit',
+            'rawType': 'cashback',
+            'amountNaira': cashbackAmount,
+            'description': '$percentFormatted% Trip Cashback (₦${fareAmount.toStringAsFixed(0)} trip)',
+            'method': 'Subsidy Wallet',
+            'status': 'completed',
+            'rideId': rideId,
+            'reference': 'cashback_$rideId',
+            'cashbackPercent': config.percent,
+            'destination': 'subsidy_wallet',
+            'createdAt': FieldValue.serverTimestamp(),
           });
 
           // Ledger record in credit_transactions

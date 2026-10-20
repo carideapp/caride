@@ -474,13 +474,21 @@ service cloud.firestore {
     // ─── Wallet Transactions ───────────────────────────────────
     match /walletTransactions/{txId} {
       // Users can read their own transactions
-      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
 
-      // ONLY Cloud Functions can create, update, or delete.
-      allow write: if false;
+      // Users can write their own cashback/subsidy transaction logs; Admins can manage
+      allow create: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
 
-      // Admin can do everything
-      allow read, write: if isAdmin();
+    // ─── Credit Transactions (Subsidiary Wallet) ───────────────
+    match /credit_transactions/{txId} {
+      // Users can read their own credit/subsidy transactions
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+      // Users can write their own credit transaction logs; Admins can manage
+      allow create: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
     }
 
     // ─── Platform Earnings (Commission) ───────────────────────

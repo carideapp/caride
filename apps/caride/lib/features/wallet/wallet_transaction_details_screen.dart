@@ -28,6 +28,9 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
   String _getTransactionTitle() {
     final desc = transaction.description.toLowerCase();
     final rawType = transaction.rawType.toLowerCase();
+    if (rawType == 'first_ride_cashback' || desc.contains('first ride')) {
+      return 'First Ride Cashback';
+    }
     if (rawType == 'cashback' ||
         rawType == 'trip_cashback' ||
         desc.contains('cashback')) {

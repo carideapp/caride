@@ -27,6 +27,9 @@ class WalletScreen extends StatelessWidget {
   String _getTransactionTitle(WalletTransaction t) {
     final desc = t.description.toLowerCase();
     final rawType = t.rawType.toLowerCase();
+    if (rawType == 'first_ride_cashback' || desc.contains('first ride')) {
+      return 'First Ride Cashback';
+    }
     if (rawType == 'cashback' ||
         rawType == 'trip_cashback' ||
         desc.contains('cashback')) {
@@ -265,6 +268,41 @@ class WalletScreen extends StatelessWidget {
                                     color: Colors.white70,
                                   ),
                                 ),
+                                if (profile != null && profile.creditBalance > 0) ...[
+                                  const SizedBox(height: 14),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 7,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.16),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: 0.25),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.savings_outlined,
+                                          size: 15,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 7),
+                                        Text(
+                                          'Subsidiary Wallet: ₦${_formatMoney(profile.creditBalance)}',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -355,24 +393,28 @@ class WalletScreen extends StatelessWidget {
                                       ?.toDouble();
 
                               return StreamBuilder<
-                                ({bool isActive, double amount})
+                                ({bool isActive, double amount, String destination})
                               >(
                                 stream: CashbackService.instance
                                     .watchCashbackConfig(),
                                 builder: (context, configSnap) {
                                   final config =
                                       configSnap.data ??
-                                      (isActive: true, amount: 500.0);
+                                      (isActive: true, amount: 500.0, destination: 'subsidy_wallet');
                                   if (!config.isActive && !hasReceived) {
                                     return const SizedBox.shrink();
                                   }
+
+                                  final destLabel = config.destination == 'subsidy_wallet'
+                                      ? 'subsidiary wallet'
+                                      : 'wallet';
 
                                   if (hasReceived) {
                                     return _CollapsibleCashbackCard(
                                       title: 'First Ride Cashback Claimed! 🎉',
                                       badgeText: 'CLAIMED',
                                       description:
-                                          '₦${_formatMoney(receivedAmount ?? config.amount)} bonus was successfully credited to your wallet upon your first completed ride.',
+                                          '₦${_formatMoney(receivedAmount ?? config.amount)} bonus was successfully credited to your $destLabel upon your first completed ride.',
                                       icon: Icons.redeem_rounded,
                                       accentColor: const Color(0xFF10B981),
                                       lightBgColors: const [
@@ -392,7 +434,7 @@ class WalletScreen extends StatelessWidget {
                                     badgeText:
                                         '₦${_formatMoney(config.amount)} REWARD',
                                     description:
-                                        'Complete your very 1st ride booking to receive ₦${_formatMoney(config.amount)} bonus directly in your wallet.',
+                                        'Complete your very 1st ride booking to receive ₦${_formatMoney(config.amount)} bonus directly in your $destLabel.',
                                     icon: Icons.card_giftcard_rounded,
                                     accentColor: AppColors.brand,
                                     lightBgColors: const [
@@ -563,6 +605,7 @@ class WalletScreen extends StatelessWidget {
 
                                     final isCashback =
                                         t.rawType == 'cashback' ||
+                                        t.rawType == 'first_ride_cashback' ||
                                         t.description.toLowerCase().contains(
                                           'cashback',
                                         );
@@ -584,7 +627,12 @@ class WalletScreen extends StatelessWidget {
                                               ? Icons.arrow_downward_rounded
                                               : Icons.arrow_outward_rounded);
                                     final badgeLabel = isCashback
-                                        ? '🎁 Cashback'
+                                        ? (t.rawType == 'first_ride_cashback' ||
+                                                t.description
+                                                    .toLowerCase()
+                                                    .contains('first ride')
+                                            ? '🎁 1st Ride'
+                                            : '🎁 Cashback')
                                         : (isCredit
                                               ? (t.rawType == 'referral'
                                                     ? '↙ Referral'
