@@ -101,10 +101,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         borderRadius: BorderRadius.circular(26)),
                   ),
                   onPressed: () async {
+                    final router = GoRouter.of(context);
                     Navigator.of(sheetContext).pop();
                     await driverAuthController.signOut();
-                    if (!context.mounted) return;
-                    context.go(DriverRoutePaths.login);
+                    router.go(DriverRoutePaths.login);
                   },
                   child: const Text('Yes, Sign Out',
                       style:

@@ -174,28 +174,32 @@ class CustomerAuthController extends ChangeNotifier {
     final resolvedCode = await _resolveReferralCode(referredByCode);
     _tempReferredByCode = resolvedCode;
 
-    // Default: send OTP to email first (email is default since SMS Sender ID approval is pending)
+    // Default: send OTP to SMS first
     final cleanPhone = TermiiService.formatToLocal11Digits(phone.trim());
     tempPhone = cleanPhone;
     _setBusy(true);
     try {
-      final targetEmail = tempEmail;
-      if (targetEmail != null && targetEmail.isNotEmpty) {
-        _pendingChallenge = await _repository.requestEmailOtp(
-          email: targetEmail,
-          isSignUp: true,
-          referredByCode: _tempReferredByCode,
-        );
-      } else {
+      if (cleanPhone.isNotEmpty) {
         final result = await TermiiService.instance.sendOtp(cleanPhone);
         _pendingChallenge = AuthChallenge(
           challengeId: result.pinId,
-          email: '$cleanPhone@phone.caride.com',
+          email: (tempEmail != null && tempEmail!.isNotEmpty)
+              ? tempEmail!
+              : '$cleanPhone@phone.caride.com',
           phone: cleanPhone,
           expiresAt: DateTime.now().add(const Duration(minutes: 10)),
           isSignUp: true,
           channel: 'sms',
         );
+      } else {
+        final targetEmail = tempEmail;
+        if (targetEmail != null && targetEmail.isNotEmpty) {
+          _pendingChallenge = await _repository.requestEmailOtp(
+            email: targetEmail,
+            isSignUp: true,
+            referredByCode: _tempReferredByCode,
+          );
+        }
       }
 
       if (_pendingChallenge != null) {
@@ -716,11 +720,43 @@ class CustomerAuthController extends ChangeNotifier {
 
 
   Future<void> signOut() async {
-    // Wipe all locally cached credentials and user-scoped preferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('selected_role');
-    await prefs.remove('dismissed_popup_announcements');
-    await _repository.signOut();
+    _profileSub?.cancel();
+    _metadataSub?.cancel();
+    _currentProfile = null;
+    _loadedUid = null;
+    _activeRole = 'customer';
+    _customerExists = false;
+    _driverExists = false;
+    _fleetExists = false;
+    _driverProfileCompleted = false;
+    _driverApprovalStatus = 'draft';
+    _profileLoaded = true;
+    _metadataLoaded = true;
+    _pendingChallenge = null;
+    tempFullName = null;
+    tempPhone = null;
+    tempEmail = null;
+    tempPhotoFile = null;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('selected_role');
+      await prefs.remove('dismissed_popup_announcements');
+    } catch (e) {
+      debugPrint('[CustomerAuthController] Error clearing preferences: $e');
+    }
+
+    try {
+      await PendingOtpSessionService.instance.clearSession();
+    } catch (_) {}
+
+    try {
+      await _repository.signOut();
+    } catch (e) {
+      debugPrint('[CustomerAuthController] Error during repository signOut: $e');
+    }
+
+    notifyListeners();
   }
 
   void _setBusy(bool value) {

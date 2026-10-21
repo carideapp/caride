@@ -111,10 +111,10 @@ class _AccountScreenState extends State<AccountScreen> {
                     ),
                   ),
                   onPressed: () async {
+                    final router = GoRouter.of(context);
                     Navigator.of(sheetContext).pop();
                     await customerAuthController.signOut();
-                    if (!context.mounted) return;
-                    context.go(CustomerRoutePaths.welcome);
+                    router.go(CustomerRoutePaths.welcome);
                   },
                   child: const Text(
                     'Yes, Sign Out',

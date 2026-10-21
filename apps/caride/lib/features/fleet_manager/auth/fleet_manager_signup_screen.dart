@@ -151,10 +151,8 @@ class _FleetManagerSignupScreenState extends State<FleetManagerSignupScreen> {
     try {
       final activeChallenge = fleetAuthController.pendingChallenge;
       final cleanPhone = TermiiService.formatToLocal11Digits(_phoneController.text.trim());
-      final cleanEmail = _emailController.text.trim().toLowerCase();
       final match = activeChallenge != null &&
-          ((activeChallenge.isSms && activeChallenge.phone == cleanPhone) ||
-           (!activeChallenge.isSms && activeChallenge.email.toLowerCase() == cleanEmail));
+          activeChallenge.isSms && activeChallenge.phone == cleanPhone;
 
       if (!match) {
         await fleetAuthController.requestSignupOtp();

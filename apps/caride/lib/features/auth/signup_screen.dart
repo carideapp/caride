@@ -112,7 +112,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
     if (_pendingSessionEmail != null) {
       final restored = await customerAuthController.restorePendingSession();
-      if (restored && mounted) {
+      if (restored && mounted && customerAuthController.pendingChallenge?.isSms == true) {
         context.push(CustomerRoutePaths.otp);
         return;
       }

@@ -178,11 +178,10 @@ class _FleetSettingsScreenState extends State<FleetSettingsScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                         ),
                         onPressed: () async {
+                          final router = GoRouter.of(context);
                           Navigator.pop(ctx);
-                          fleetManagerController.reset();
-                          await fleetAuthRepository.signOut();
-                          if (!mounted) return;
-                          context.go(CustomerRoutePaths.welcome);
+                          await fleetAuthController.signOut();
+                          router.go(CustomerRoutePaths.welcome);
                         },
                         child: const Text(
                           'Sign Out',

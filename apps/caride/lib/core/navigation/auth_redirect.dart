@@ -164,7 +164,9 @@ String? customerAuthRedirect(GoRouterState state) {
                         location == FleetRoutePaths.vehicles ||
                         location == FleetRoutePaths.bookings ||
                         location == FleetRoutePaths.drivers ||
-                        (location.startsWith('/driver') && !guestOnlyRoutes.contains(location));
+                        (location.startsWith('/profile') && !guestOnlyRoutes.contains(location)) ||
+                        (location.startsWith('/driver') && !guestOnlyRoutes.contains(location)) ||
+                        (location.startsWith('/fleet') && !guestOnlyRoutes.contains(location));
     if (isAuthRoute) {
       return CustomerRoutePaths.welcome;
     }

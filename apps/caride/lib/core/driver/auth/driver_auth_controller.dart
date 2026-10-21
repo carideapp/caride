@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_challenge.dart';
 import 'auth_repository.dart';
 import '../../auth/pending_otp_session.dart';
+import '../../auth/customer_auth_controller.dart';
 import '../../services/termii_service.dart';
 
 class DriverAuthController extends ChangeNotifier {
@@ -61,27 +62,31 @@ class DriverAuthController extends ChangeNotifier {
     if (state != null) _tempState = state;
     if (profilePhotoUrl != null) _tempProfilePhotoUrl = profilePhotoUrl;
 
-    // Default: send OTP to email first (email is default since SMS Sender ID approval is pending)
+    // Default: send OTP to SMS first
     final cleanPhone = TermiiService.formatToLocal11Digits(phone.trim());
     _pendingPhone = cleanPhone;
     _setBusy(true);
     try {
-      final targetEmail = _tempEmail;
-      if (targetEmail != null && targetEmail.isNotEmpty) {
-        _pendingChallenge = await _repository.requestEmailOtp(
-          email: targetEmail,
-          isSignUp: true,
-        );
-      } else {
+      if (cleanPhone.isNotEmpty) {
         final result = await TermiiService.instance.sendOtp(cleanPhone);
         _pendingChallenge = AuthChallenge(
           challengeId: result.pinId,
-          email: '$cleanPhone@phone.caride.com',
+          email: (_tempEmail != null && _tempEmail!.isNotEmpty)
+              ? _tempEmail!
+              : '$cleanPhone@phone.caride.com',
           phone: cleanPhone,
           expiresAt: DateTime.now().add(const Duration(minutes: 10)),
           isSignUp: true,
           channel: 'sms',
         );
+      } else {
+        final targetEmail = _tempEmail;
+        if (targetEmail != null && targetEmail.isNotEmpty) {
+          _pendingChallenge = await _repository.requestEmailOtp(
+            email: targetEmail,
+            isSignUp: true,
+          );
+        }
       }
 
       if (_pendingChallenge != null) {
@@ -543,11 +548,40 @@ class DriverAuthController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
-    // Wipe all locally cached credentials and user-scoped preferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('selected_role');
-    await prefs.remove('dismissed_popup_announcements');
-    await _repository.signOut();
+    _pendingChallenge = null;
+    _pendingReferralCode = null;
+    _pendingFullName = null;
+    _pendingPhone = null;
+    _tempEmail = null;
+    _tempPassword = null;
+    _tempUsername = null;
+    _tempCountry = null;
+    _tempState = null;
+    _tempProfilePhotoUrl = null;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('selected_role');
+      await prefs.remove('dismissed_popup_announcements');
+    } catch (e) {
+      debugPrint('[DriverAuthController] Error clearing preferences: $e');
+    }
+
+    try {
+      await PendingOtpSessionService.instance.clearSession();
+    } catch (_) {}
+
+    try {
+      await _repository.signOut();
+    } catch (e) {
+      debugPrint('[DriverAuthController] Error during repository signOut: $e');
+    }
+
+    try {
+      await customerAuthController.signOut();
+    } catch (_) {}
+
+    notifyListeners();
   }
 
   void _setBusy(bool value) {

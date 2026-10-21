@@ -8,6 +8,7 @@ import 'package:shared_models/shared_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/auth/auth_challenge.dart';
+import '../../../../core/auth/customer_auth_controller.dart';
 import '../../../../core/auth/pending_otp_session.dart';
 import '../../../../core/services/termii_service.dart';
 import '../../controllers/fleet_manager_controller.dart';
@@ -143,25 +144,25 @@ class FleetAuthController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('selected_role', 'fleet');
 
-      // Default: send OTP to email first (email is default since SMS Sender ID approval is pending)
+      // Default: send OTP to SMS first
       final cleanPhone = TermiiService.formatToLocal11Digits(phone.trim());
       final userEmail = email.trim();
 
-      if (userEmail.isNotEmpty) {
-        pendingChallenge = await _repository.requestEmailOtp(
-          email: userEmail,
-          isSignUp: true,
-          referredByCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
-        );
-      } else {
+      if (cleanPhone.isNotEmpty) {
         final result = await TermiiService.instance.sendOtp(cleanPhone);
         pendingChallenge = AuthChallenge(
           challengeId: result.pinId,
-          email: '$cleanPhone@phone.caride.com',
+          email: userEmail.isNotEmpty ? userEmail : '$cleanPhone@phone.caride.com',
           phone: cleanPhone,
           expiresAt: DateTime.now().add(const Duration(minutes: 10)),
           isSignUp: true,
           channel: 'sms',
+        );
+      } else if (userEmail.isNotEmpty) {
+        pendingChallenge = await _repository.requestEmailOtp(
+          email: userEmail,
+          isSignUp: true,
+          referredByCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
         );
       }
 
@@ -606,12 +607,29 @@ class FleetAuthController extends ChangeNotifier {
 
   Future<void> signOut() async {
     resetDraft();
+    pendingChallenge = null;
     fleetManagerController.reset();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('selected_role');
+      await prefs.remove('dismissed_popup_announcements');
     } catch (_) {}
-    await _repository.signOut();
+
+    try {
+      await PendingOtpSessionService.instance.clearSession();
+    } catch (_) {}
+
+    try {
+      await _repository.signOut();
+    } catch (e) {
+      debugPrint('[FleetAuthController] Error during repository signOut: $e');
+    }
+
+    try {
+      await customerAuthController.signOut();
+    } catch (_) {}
+
+    notifyListeners();
   }
 
   void _setBusy(bool value) {

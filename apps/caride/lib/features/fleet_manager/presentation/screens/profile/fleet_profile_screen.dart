@@ -1,5 +1,6 @@
 import 'package:caride/app/theme_mode_controller.dart';
 import 'package:caride/core/auth/customer_auth_controller.dart';
+import 'package:caride/features/fleet_manager/auth/controllers/fleet_auth_controller.dart';
 import 'package:caride/features/fleet_manager/controllers/fleet_manager_controller.dart';
 import 'package:caride/features/fleet_manager/presentation/widgets/fleet_bottom_nav.dart';
 import 'package:design_system/design_system.dart';
@@ -302,6 +303,35 @@ class _FleetProfileScreenState extends State<FleetProfileScreen> {
                       ],
                     ),
                   ),
+
+                  // ── CARD GROUP 4: Account Actions ──
+                  _buildSectionHeader('Account Actions', isDark),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.glassBorderDark
+                            : const Color(0xFFE5E7EB),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        _ProfileMenuItem(
+                          title: 'Sign Out',
+                          icon: Icons.logout_rounded,
+                          isDark: isDark,
+                          primaryTextColor: AppColors.error,
+                          iconColor: AppColors.error,
+                          iconBgColor: AppColors.error.withValues(alpha: 0.1),
+                          showChevron: false,
+                          onTap: () => _showLogoutBottomSheet(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             );
@@ -338,6 +368,124 @@ class _FleetProfileScreenState extends State<FleetProfileScreen> {
       ),
     );
   }
+
+  void _showLogoutBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    color: AppColors.error,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Sign Out',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF111827),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to sign out of your fleet account?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : const Color(0xFF6B7280),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    onPressed: () async {
+                      final router = GoRouter.of(context);
+                      Navigator.of(sheetContext).pop();
+                      await fleetAuthController.signOut();
+                      router.go(CustomerRoutePaths.welcome);
+                    },
+                    child: const Text(
+                      'Yes, Sign Out',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : const Color(0xFF4B5563),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _ProfileMenuItem extends StatelessWidget {
@@ -349,6 +497,9 @@ class _ProfileMenuItem extends StatelessWidget {
     required this.onTap,
     this.badge,
     this.badgeColor,
+    this.iconColor,
+    this.iconBgColor,
+    this.showChevron = true,
   });
 
   final String title;
@@ -358,13 +509,17 @@ class _ProfileMenuItem extends StatelessWidget {
   final VoidCallback onTap;
   final String? badge;
   final Color? badgeColor;
+  final Color? iconColor;
+  final Color? iconBgColor;
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
-    final iconBgColor = isDark
-        ? AppColors.brand.withValues(alpha: 0.18)
-        : AppColors.brand.withValues(alpha: 0.10);
-    final iconColor = AppColors.brand;
+    final effectiveIconBg = iconBgColor ??
+        (isDark
+            ? AppColors.brand.withValues(alpha: 0.18)
+            : AppColors.brand.withValues(alpha: 0.10));
+    final effectiveIconColor = iconColor ?? AppColors.brand;
 
     return InkWell(
       onTap: onTap,
@@ -377,10 +532,10 @@ class _ProfileMenuItem extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: iconBgColor,
+                color: effectiveIconBg,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: iconColor, size: 20),
+              child: Icon(icon, color: effectiveIconColor, size: 20),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -417,11 +572,12 @@ class _ProfileMenuItem extends StatelessWidget {
               ),
               const SizedBox(width: 6),
             ],
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Color(0xFF9CA3AF),
-              size: 20,
-            ),
+            if (showChevron)
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF9CA3AF),
+                size: 20,
+              ),
           ],
         ),
       ),
