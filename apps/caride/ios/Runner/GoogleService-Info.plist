@@ -2,8 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CLIENT_ID</key>
+	<string>907513616513-p2pmf2gbteiaattcoa4kignn2n6qn3cs.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.907513616513-p2pmf2gbteiaattcoa4kignn2n6qn3cs</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>907513616513-0ti7r7vu5q80aoblvuu5mc8oj1i8900u.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyCwC93Gz7Jz8HgyddOCFOgio9MO6Hwnpf0</string>
+	<string>AIzaSyCw3_QY7NNmaI13bOpNoKwibLzj3LSIT_M</string>
 	<key>GCM_SENDER_ID</key>
 	<string>907513616513</string>
 	<key>PLIST_VERSION</key>
@@ -25,7 +31,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:907513616513:ios:ed77f1a0eb8fb68cf45580</string>
+	<string>1:907513616513:ios:959788845883150bf45580</string>
 	<key>DATABASE_URL</key>
 	<string>https://caride-app-default-rtdb.firebaseio.com</string>
 </dict>

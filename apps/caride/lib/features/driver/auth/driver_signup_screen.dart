@@ -2,9 +2,10 @@ import 'dart:io';
 
 import 'package:caride/core/auth/pending_otp_session.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
+import 'package:caride/core/services/termii_service.dart';
+import 'package:caride/core/utils/auth_error_mapper.dart';
 import 'package:caride/features/driver/profile/driver_terms_screen.dart';
 import 'package:design_system/design_system.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:navigation/navigation.dart';
@@ -168,32 +169,61 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     }
   }
 
+  void _navigateToOtp() {
+    try {
+      context.push(DriverRoutePaths.otp);
+    } catch (e) {
+      debugPrint('[DriverSignupScreen] Navigation push failed ($e), falling back to go');
+      if (mounted) {
+        context.go(DriverRoutePaths.otp);
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_acceptTerms) {
       setState(() => _errorMessage = 'You must accept the Terms & Conditions to proceed.');
       return;
     }
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final phoneNum = _phone.text.trim();
+    final cleanPhone = TermiiService.formatToLocal11Digits(phoneNum);
+    final emailAddr = _email.text.trim();
+
+    // If an OTP was already sent for this phone or email and is still valid, reuse it and proceed
+    if (_pendingSessionEmail != null) {
+      final restored = await driverAuthController.restorePendingSession();
+      if (restored && mounted) {
+        final pending = driverAuthController.pendingChallenge;
+        if (pending != null &&
+            DateTime.now().isBefore(pending.expiresAt) &&
+            (pending.phone == cleanPhone || pending.email == emailAddr)) {
+          _navigateToOtp();
+          return;
+        }
+      }
+    }
+
     setState(() {
       _loading = true;
       _errorMessage = null;
     });
+
+    final code = _referralCode.text.trim().isEmpty ? null : _referralCode.text.trim();
+    final rawUsername = _username.text.trim().replaceAll('@', '').toLowerCase();
+    final cleanFullName = _fullName.text.trim();
+
+    await PendingOtpSessionService.instance.saveDraft('driver', {
+      'fullName': cleanFullName,
+      'username': _username.text.trim(),
+      'email': emailAddr,
+      'phone': phoneNum,
+      'referralCode': _referralCode.text.trim(),
+      'state': _selectedState,
+    });
+
     try {
-      final code = _referralCode.text.trim().isEmpty ? null : _referralCode.text.trim();
-      final rawUsername = _username.text.trim().replaceAll('@', '').toLowerCase();
-      final cleanFullName = _fullName.text.trim();
-      final phoneNum = _phone.text.trim();
-      final emailAddr = _email.text.trim();
-
-      await PendingOtpSessionService.instance.saveDraft('driver', {
-        'fullName': cleanFullName,
-        'username': _username.text.trim(),
-        'email': emailAddr,
-        'phone': phoneNum,
-        'referralCode': _referralCode.text.trim(),
-        'state': _selectedState,
-      });
-
       await driverAuthController.requestOtpForSignup(
         phoneNum,
         emailAddr,
@@ -207,76 +237,17 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('selected_role', 'driver');
-
-      if (!mounted) return;
-      context.push(DriverRoutePaths.otp);
     } catch (e) {
+      debugPrint('[DriverSignupScreen] Error during driver signup: $e');
       if (!mounted) return;
-      setState(() => _errorMessage = _friendlyError(e));
+      setState(() => _errorMessage = mapAuthErrorMessage(e));
+      return;
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
 
-  String _friendlyError(Object e) {
-    final msg = e.toString().toLowerCase();
-    if (msg.contains('termii') ||
-        msg.contains('country inactive') ||
-        msg.contains('sms is unavailable') ||
-        msg.contains('sms code') ||
-        msg.contains('unable to send verification sms')) {
-      return 'OTP code via sms is unavailable at the moment, please try again later.';
-    }
-
-    if (msg.contains('canceled') ||
-        msg.contains('cancelled') ||
-        msg.contains('sign_in_canceled') ||
-        msg.contains('cancelled by user') ||
-        msg.contains('googlesigninexceptioncode.canceled') ||
-        msg.contains('12501')) {
-      return 'Sign-in was cancelled.';
-    }
-
-    if (e is FirebaseAuthException) {
-      final message = (e.message ?? '').toLowerCase();
-      switch (e.code) {
-        case 'already-exists':
-        case 'email-already-in-use':
-          return 'An account with this email already exists. Please sign in.';
-        case 'invalid-argument':
-        case 'invalid-email':
-          return 'Enter a valid email address.';
-        case 'weak-password':
-          return 'Password must be at least 6 characters.';
-        case 'failed-precondition':
-          if (message.contains('gmail credentials')) {
-            return 'Email signup is not configured yet. Please contact support.';
-          }
-          return 'Signup is temporarily unavailable. Please try again shortly.';
-        case 'unavailable':
-        case 'internal':
-        case 'deadline-exceeded':
-          return 'Service is temporarily unavailable. Please try again.';
-        case 'network-request-failed':
-          return 'Network error. Please check your connection.';
-      }
-    }
-
-    if (msg.contains('already-exists') || msg.contains('already in use')) {
-      return 'An account with this email already exists. Please sign in.';
-    }
-    if (msg.contains('network') ||
-        msg.contains('connection') ||
-        msg.contains('unexpected end of stream') ||
-        msg.contains('okhttp') ||
-        msg.contains('internal-error') ||
-        msg.contains('internal error')) {
-      return 'A connection error occurred. Please check your internet connection and try again.';
-    }
-    if (msg.contains('gmail credentials')) {
-      return 'Email signup is not configured yet. Please contact support.';
-    }
-    return 'Unable to create account. Please try again.';
+    if (!mounted) return;
+    _navigateToOtp();
   }
 
   void _onBack() {
@@ -403,9 +374,8 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                         padding: const EdgeInsets.symmetric(vertical: 8),
                                       ),
                                       onPressed: () async {
-                                        final router = GoRouter.of(context);
                                         await driverAuthController.restorePendingSession();
-                                        if (mounted) router.push(DriverRoutePaths.otp);
+                                        if (mounted) _navigateToOtp();
                                       },
                                       child: const Text('Enter Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                     ),

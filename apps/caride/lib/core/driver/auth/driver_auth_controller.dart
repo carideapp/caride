@@ -68,17 +68,30 @@ class DriverAuthController extends ChangeNotifier {
     _setBusy(true);
     try {
       if (cleanPhone.isNotEmpty) {
-        final result = await TermiiService.instance.sendOtp(cleanPhone);
-        _pendingChallenge = AuthChallenge(
-          challengeId: result.pinId,
-          email: (_tempEmail != null && _tempEmail!.isNotEmpty)
-              ? _tempEmail!
-              : '$cleanPhone@phone.caride.com',
-          phone: cleanPhone,
-          expiresAt: DateTime.now().add(const Duration(minutes: 10)),
-          isSignUp: true,
-          channel: 'sms',
-        );
+        try {
+          final result = await TermiiService.instance.sendOtp(cleanPhone);
+          _pendingChallenge = AuthChallenge(
+            challengeId: result.pinId,
+            email: (_tempEmail != null && _tempEmail!.isNotEmpty)
+                ? _tempEmail!
+                : '$cleanPhone@phone.caride.com',
+            phone: cleanPhone,
+            expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+            isSignUp: true,
+            channel: 'sms',
+          );
+        } catch (smsError) {
+          debugPrint('[DriverAuthController] SMS OTP failed ($smsError). Trying email fallback...');
+          final targetEmail = _tempEmail;
+          if (targetEmail != null && targetEmail.isNotEmpty) {
+            _pendingChallenge = await _repository.requestEmailOtp(
+              email: targetEmail,
+              isSignUp: true,
+            );
+          } else {
+            rethrow;
+          }
+        }
       } else {
         final targetEmail = _tempEmail;
         if (targetEmail != null && targetEmail.isNotEmpty) {

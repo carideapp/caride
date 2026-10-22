@@ -292,7 +292,7 @@ class WalletScreen extends StatelessWidget {
                                         ),
                                         const SizedBox(width: 7),
                                         Text(
-                                          'Subsidiary Wallet: ₦${_formatMoney(profile.creditBalance)}',
+                                          'Subsidy Wallet: ₦${_formatMoney(profile.creditBalance)}',
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
@@ -406,12 +406,12 @@ class WalletScreen extends StatelessWidget {
                                   }
 
                                   final destLabel = config.destination == 'subsidy_wallet'
-                                      ? 'subsidiary wallet'
+                                      ? 'Subsidy Wallet'
                                       : 'wallet';
 
                                   if (hasReceived) {
                                     return _CollapsibleCashbackCard(
-                                      title: 'First Ride Cashback Claimed! 🎉',
+                                      title: 'First Ride Cashback Claimed!',
                                       badgeText: 'CLAIMED',
                                       description:
                                           '₦${_formatMoney(receivedAmount ?? config.amount)} bonus was successfully credited to your $destLabel upon your first completed ride.',

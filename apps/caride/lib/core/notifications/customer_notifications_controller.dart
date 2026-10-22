@@ -94,6 +94,11 @@ class CustomerNotificationsController {
       badge: true,
       sound: true,
     );
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
   }
 
   Future<void> _syncTokenForUser(String uid) async {

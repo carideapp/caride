@@ -51,6 +51,11 @@ class FcmService {
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
       return;
     }
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
 
     _authSub ??= _auth.authStateChanges().listen((user) async {
       if (user == null) return;

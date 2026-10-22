@@ -314,6 +314,16 @@ service cloud.firestore {
         (resource.data.sharingCode != null && exists(/databases/$(database)/documents/sharedTrips/$(resource.data.sharingCode)))
       );
 
+      // Customer can update their broadcast fare offer while the ride is still pending / bidding
+      allow update: if isSignedIn() &&
+        resource.data.customerUid == request.auth.uid &&
+        resource.data.status in ['requested', 'bidding'] &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['customerOffer', 'amountNaira', 'updatedAt']) &&
+        (!('customerOffer' in request.resource.data) || (request.resource.data.customerOffer is number && request.resource.data.customerOffer > 0)) &&
+        (!('amountNaira' in request.resource.data) || (request.resource.data.amountNaira is number && request.resource.data.amountNaira > 0));
+
+      // Customer can rate driver after ride completion
       allow update: if isSignedIn() &&
         resource.data.customerUid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys()

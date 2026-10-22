@@ -3,7 +3,7 @@ description: "CaRide - Premium ride-hailing and courier service application."
 
 publish_to: 'none' 
 
-version: 1.0.5+29
+version: 1.0.5+30
 
 environment:
   sdk: ^3.9.0
