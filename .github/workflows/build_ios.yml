@@ -116,12 +116,11 @@ jobs:
       # ── UPLOAD BUILD ARTIFACTS ────────────────────────────────────────────
       - name: Upload IPA Artifact to GitHub Actions
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: caride-ios-ipa
-          path: |
-            apps/caride/build/ios/ipa/*.ipa
-            apps/caride/build/ios/archive/Runner.xcarchive
-          retention-days: 14
+          path: apps/caride/build/ios/ipa/*.ipa
+          retention-days: 3
 
       # ── LOCATE GENERATED IPA ─────────────────────────────────────────────
       - name: Locate IPA Path
