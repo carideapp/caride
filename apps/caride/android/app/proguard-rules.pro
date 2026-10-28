@@ -2,13 +2,24 @@
 # CaRide – ProGuard / R8 rules
 # ============================================================
 
-# ---- Flutter -----------------------------------------------
+# ---- Flutter & Plugins (Pigeon & Method Channels) ----------
 -keep class io.flutter.** { *; }
+-keepclassmembers class io.flutter.** { *; }
 -keep class io.flutter.plugin.** { *; }
+-keep class io.flutter.plugins.** { *; }
+-keepclassmembers class io.flutter.plugins.** { *; }
 -keep class io.flutter.util.** { *; }
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.embedding.** { *; }
--dontwarn io.flutter.embedding.**
+-keep class dev.flutter.** { *; }
+-keepclassmembers class dev.flutter.** { *; }
+-dontwarn io.flutter.**
+-dontwarn dev.flutter.**
+
+# Specifically for shared_preferences
+-keep class io.flutter.plugins.sharedpreferences.** { *; }
+-keepclassmembers class io.flutter.plugins.sharedpreferences.** { *; }
+-dontwarn io.flutter.plugins.sharedpreferences.**
 
 # ---- Firebase ----------------------------------------------
 -keep class com.google.firebase.** { *; }

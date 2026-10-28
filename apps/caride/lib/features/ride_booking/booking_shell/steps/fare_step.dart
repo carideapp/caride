@@ -2,6 +2,7 @@ import 'package:caride/features/profile/data/account_repository.dart';
 import 'package:caride/features/ride_booking/booking_shell/booking_shell_controller.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/payment_methods_bottom_sheet.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/promos_bottom_sheet.dart';
+import 'package:caride/features/ride_booking/data/ride_pricing_repository.dart';
 import 'package:caride/features/wallet/widgets/dedicated_account_bottom_sheet.dart';
 import 'package:caride/features/wallet/widgets/pending_bank_transfer_widgets.dart';
 import 'package:design_system/design_system.dart';
@@ -234,6 +235,32 @@ class _FareStepState extends State<FareStep> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              if (c.activeStatePricingOverride != null &&
+                                  c.operatingState != null &&
+                                  c.operatingState!.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brand.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    c.activeStatePricingOverride!.mode ==
+                                            VehiclePricingMode.percentage
+                                        ? '${c.operatingState} rate (${c.activeStatePricingOverride!.adjustmentPercent >= 0 ? '+' : ''}${c.activeStatePricingOverride!.adjustmentPercent.round()}%) applied'
+                                        : '${c.operatingState} custom rate applied',
+                                    style: AppTextStyles.labelSmall.copyWith(
+                                      color: AppColors.brand,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

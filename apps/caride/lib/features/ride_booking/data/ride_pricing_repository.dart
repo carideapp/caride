@@ -34,6 +34,102 @@ class RideTypePricing {
   }
 }
 
+/// Pricing mode for a vehicle type within a specific state.
+enum VehiclePricingMode {
+  defaultMode,
+  percentage,
+  custom,
+}
+
+/// Normalizes Nigerian state names to handle variations (e.g. "Edo State" -> "edo", "Abuja" -> "fct (abuja)").
+String normalizeStateName(String? raw) {
+  if (raw == null) return '';
+  var s = raw.trim().toLowerCase();
+  s = s.replaceAll(RegExp(r'\s+state$'), '').trim();
+  if (s == 'abuja' || s == 'fct' || s == 'fct (abuja)' || s.contains('abuja')) {
+    return 'fct (abuja)';
+  }
+  return s;
+}
+
+/// State-specific pricing adjustment or custom rate for a vehicle type.
+class VehicleStatePricing {
+  const VehicleStatePricing({
+    this.mode = VehiclePricingMode.defaultMode,
+    this.adjustmentPercent = 0.0,
+    this.customPricing,
+  });
+
+  final VehiclePricingMode mode;
+  final double adjustmentPercent;
+  final RideTypePricing? customPricing;
+
+  factory VehicleStatePricing.fromMap(Map<String, dynamic> data) {
+    final modeStr = (data['mode'] as String? ?? 'default').toLowerCase();
+    final mode = switch (modeStr) {
+      'percentage' => VehiclePricingMode.percentage,
+      'custom' => VehiclePricingMode.custom,
+      _ => VehiclePricingMode.defaultMode,
+    };
+
+    final adj = (data['adjustmentPercent'] as num?)?.toDouble() ?? 0.0;
+    RideTypePricing? custom;
+    if (mode == VehiclePricingMode.custom) {
+      final baseFare = (data['baseFare'] as num?)?.toDouble() ?? 0.0;
+      final perKm = (data['perKmRate'] as num?)?.toDouble() ?? 0.0;
+      final perMin = (data['perMinuteRate'] as num?)?.toDouble() ?? 0.0;
+      custom = RideTypePricing(
+        baseFare: baseFare,
+        perKmRate: perKm,
+        perMinuteRate: perMin,
+      );
+    }
+
+    return VehicleStatePricing(
+      mode: mode,
+      adjustmentPercent: adj,
+      customPricing: custom,
+    );
+  }
+}
+
+/// Mapping of vehicle types to state pricing overrides for a single Nigerian state.
+class StatePricingConfig {
+  const StatePricingConfig({
+    this.vehicles = const {},
+  });
+
+  final Map<String, VehicleStatePricing> vehicles;
+
+  VehicleStatePricing? forVehicle(String rideType) {
+    final key = _normalizeKey(rideType);
+    return vehicles[key];
+  }
+
+  static String _normalizeKey(String rideType) {
+    return switch (rideType.trim().toLowerCase()) {
+      'comfort' => 'comfort',
+      'luxury' => 'luxury',
+      'courier' => 'courier',
+      'tricycle' || 'keke' => 'tricycle',
+      'motorcycle' || 'bike' => 'motorcycle',
+      _ => 'regular',
+    };
+  }
+
+  factory StatePricingConfig.fromMap(Map<String, dynamic> data) {
+    final vehicles = <String, VehicleStatePricing>{};
+    for (final entry in data.entries) {
+      if (entry.value is Map) {
+        vehicles[entry.key.toLowerCase()] = VehicleStatePricing.fromMap(
+          Map<String, dynamic>.from(entry.value as Map),
+        );
+      }
+    }
+    return StatePricingConfig(vehicles: vehicles);
+  }
+}
+
 /// Full pricing config for ride types.
 class RidePricingConfig {
   const RidePricingConfig({
@@ -43,6 +139,7 @@ class RidePricingConfig {
     required this.courier,
     this.tricycle = defaultTricycle,
     this.motorcycle = defaultMotorcycle,
+    this.statePricing = const {},
   });
 
   final RideTypePricing regular;
@@ -51,6 +148,7 @@ class RidePricingConfig {
   final RideTypePricing courier;
   final RideTypePricing tricycle;
   final RideTypePricing motorcycle;
+  final Map<String, StatePricingConfig> statePricing;
 
   static const RideTypePricing defaultTricycle =
       RideTypePricing(baseFare: 400, perKmRate: 150, perMinuteRate: 30);
@@ -65,10 +163,23 @@ class RidePricingConfig {
     courier: RideTypePricing(baseFare: 600, perKmRate: 200, perMinuteRate: 40),
     tricycle: defaultTricycle,
     motorcycle: defaultMotorcycle,
+    statePricing: {},
   );
 
   factory RidePricingConfig.fromMap(Map<String, dynamic> data) {
     final fallback = RidePricingConfig.defaults;
+    final rawStatePricing = data['statePricing'];
+    final stateMap = <String, StatePricingConfig>{};
+    if (rawStatePricing is Map) {
+      for (final entry in rawStatePricing.entries) {
+        if (entry.value is Map) {
+          stateMap[entry.key.toString()] = StatePricingConfig.fromMap(
+            Map<String, dynamic>.from(entry.value as Map),
+          );
+        }
+      }
+    }
+
     return RidePricingConfig(
       regular: RideTypePricing.fromMap(
         (data['regular'] as Map?)?.cast<String, dynamic>() ?? {},
@@ -94,6 +205,7 @@ class RidePricingConfig {
         (data['motorcycle'] as Map?)?.cast<String, dynamic>() ?? {},
         fallback: fallback.motorcycle,
       ),
+      statePricing: stateMap,
     );
   }
 
@@ -106,6 +218,71 @@ class RidePricingConfig {
       'motorcycle' || 'bike' => motorcycle,
       _ => regular,
     };
+  }
+
+  /// Returns the pricing for [rideType], taking into account any state-specific overrides
+  /// (percentage adjustments or custom rate cards) for [operatingState].
+  RideTypePricing getPricingFor({
+    required String rideType,
+    String? operatingState,
+  }) {
+    final base = forType(rideType);
+    if (operatingState == null || operatingState.trim().isEmpty) {
+      return base;
+    }
+
+    final normTarget = normalizeStateName(operatingState);
+    if (normTarget.isEmpty) return base;
+
+    StatePricingConfig? matchedStateConfig;
+    for (final entry in statePricing.entries) {
+      if (normalizeStateName(entry.key) == normTarget) {
+        matchedStateConfig = entry.value;
+        break;
+      }
+    }
+
+    if (matchedStateConfig == null) return base;
+
+    final override = matchedStateConfig.forVehicle(rideType);
+    if (override == null || override.mode == VehiclePricingMode.defaultMode) {
+      return base;
+    }
+
+    if (override.mode == VehiclePricingMode.custom && override.customPricing != null) {
+      return override.customPricing!;
+    }
+
+    if (override.mode == VehiclePricingMode.percentage) {
+      final mult = 1.0 + (override.adjustmentPercent / 100.0);
+      return RideTypePricing(
+        baseFare: (base.baseFare * mult).clamp(0.0, double.infinity),
+        perKmRate: (base.perKmRate * mult).clamp(0.0, double.infinity),
+        perMinuteRate: (base.perMinuteRate * mult).clamp(0.0, double.infinity),
+      );
+    }
+
+    return base;
+  }
+
+  /// Returns the state override metadata for UI displays/badges if an override is active.
+  VehicleStatePricing? getOverrideFor({
+    required String rideType,
+    String? operatingState,
+  }) {
+    if (operatingState == null || operatingState.trim().isEmpty) return null;
+    final normTarget = normalizeStateName(operatingState);
+    if (normTarget.isEmpty) return null;
+
+    for (final entry in statePricing.entries) {
+      if (normalizeStateName(entry.key) == normTarget) {
+        final override = entry.value.forVehicle(rideType);
+        if (override != null && override.mode != VehiclePricingMode.defaultMode) {
+          return override;
+        }
+      }
+    }
+    return null;
   }
 }
 

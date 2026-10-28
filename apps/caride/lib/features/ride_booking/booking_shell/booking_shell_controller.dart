@@ -332,6 +332,7 @@ class BookingShellController extends ChangeNotifier {
         final actualAddress =
             await _searchService?.reverseGeocode(fastPos.latitude, fastPos.longitude);
         if (actualAddress != null && actualAddress.isNotEmpty) {
+          _maybeInferStateFromAddress(actualAddress);
           _from = MapboxPlace(
             id: 'gps',
             placeName: actualAddress,
@@ -385,8 +386,39 @@ class BookingShellController extends ChangeNotifier {
     notifyListeners();
   }
 
+  VehicleStatePricing? get activeStatePricingOverride {
+    return _pricingConfig.getOverrideFor(
+      rideType: _rideType,
+      operatingState: _operatingState,
+    );
+  }
+
+  void _maybeInferStateFromAddress(String? address) {
+    if (address == null || address.trim().isEmpty) return;
+    if (_operatingState != null && _operatingState!.trim().isNotEmpty) return;
+
+    const nigerianStates = [
+      'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno',
+      'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'FCT (Abuja)', 'Gombe',
+      'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos',
+      'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto',
+      'Taraba', 'Yobe', 'Zamfara', 'Abuja'
+    ];
+
+    final lower = address.toLowerCase();
+    for (final st in nigerianStates) {
+      final norm = st.toLowerCase().replaceAll(' (abuja)', '');
+      final pattern = RegExp('\\b$norm\\b', caseSensitive: false);
+      if (pattern.hasMatch(lower) || lower.contains(norm)) {
+        _operatingState = st == 'Abuja' ? 'FCT (Abuja)' : st;
+        break;
+      }
+    }
+  }
+
   void setFrom(MapboxPlace place) {
     _from = place;
+    _maybeInferStateFromAddress(place.placeName);
     _recentPlacesRepository?.recordPlace(place);
     notifyListeners();
     unawaited(refreshRoute());
@@ -453,7 +485,10 @@ class BookingShellController extends ChangeNotifier {
     final config = _pricingConfig;
     if (info == null) return;
 
-    final pricing = config.forType(_rideType);
+    final pricing = config.getPricingFor(
+      rideType: _rideType,
+      operatingState: _operatingState,
+    );
     final suggested = pricing.baseFare +
         (info.distanceKm * pricing.perKmRate) +
         (info.durationMinutes * pricing.perMinuteRate);

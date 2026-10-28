@@ -137,7 +137,10 @@ class _ChooseRideScreenState extends State<ChooseRideScreen> {
   String _formattedPrice(String rideType) {
     final cfg = _config;
     if (cfg == null) return '...';
-    final pricing = cfg.forType(rideType);
+    final pricing = cfg.getPricingFor(
+      rideType: rideType,
+      operatingState: widget.params?.pickupLabel,
+    );
     final distKm = _distanceKmForPricing();
     final durationMins = _durationMinutesForPricing();
     final range = _pricingRepo.computePriceRange(

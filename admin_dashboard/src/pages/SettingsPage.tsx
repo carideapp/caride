@@ -9,6 +9,29 @@ interface PricingDetails {
   perMinuteRate: number;
 }
 
+export type VehiclePricingMode = 'default' | 'percentage' | 'custom';
+
+export interface VehicleStatePricing {
+  mode: VehiclePricingMode;
+  adjustmentPercent?: number; // e.g. +5 for +5%, -10 for -10%
+  baseFare?: number;
+  perKmRate?: number;
+  perMinuteRate?: number;
+}
+
+export interface StatePricingConfig {
+  regular?: VehicleStatePricing;
+  comfort?: VehicleStatePricing;
+  luxury?: VehicleStatePricing;
+  courier?: VehicleStatePricing;
+  tricycle?: VehicleStatePricing;
+  motorcycle?: VehicleStatePricing;
+}
+
+export interface StatePricingMap {
+  [stateName: string]: StatePricingConfig;
+}
+
 interface PricingConfig {
   regular: PricingDetails;
   comfort: PricingDetails;
@@ -121,6 +144,8 @@ export function SettingsPage() {
   const [legalCategory, setLegalCategory] = useState<LegalCategory>('rider');
   const [legalSubTab, setLegalSubTab] = useState<LegalSubTab>('terms');
   const [pricing, setPricing] = useState<PricingConfig>(defaultPricing);
+  const [statePricing, setStatePricing] = useState<StatePricingMap>({});
+  const [selectedStateForPricing, setSelectedStateForPricing] = useState<string>('Edo');
   const [serviceAvailability, setServiceAvailability] = useState<ServiceAvailabilityConfig>(defaultServiceAvailability);
   const [maxDriverNegativeBalance, setMaxDriverNegativeBalance] = useState<number>(3000);
   const [fleetCommissionPercent, setFleetCommissionPercent] = useState<number>(15);
@@ -186,7 +211,7 @@ export function SettingsPage() {
           const docRef = doc(db, 'config', 'ridePricing');
           const snap = await getDoc(docRef);
           if (snap.exists()) {
-            const data = snap.data() as Partial<PricingConfig>;
+            const data = snap.data() as Partial<PricingConfig> & { statePricing?: StatePricingMap };
             setPricing({
               regular: { ...defaultPricing.regular, ...data.regular },
               comfort: { ...defaultPricing.comfort, ...data.comfort },
@@ -195,6 +220,9 @@ export function SettingsPage() {
               tricycle: { ...defaultPricing.tricycle, ...data.tricycle },
               motorcycle: { ...defaultPricing.motorcycle, ...data.motorcycle },
             });
+            if (data.statePricing && typeof data.statePricing === 'object') {
+              setStatePricing(data.statePricing);
+            }
           }
         } catch (e) { console.warn('Pricing fetch error:', e); }
 
@@ -420,6 +448,90 @@ export function SettingsPage() {
     }));
   };
 
+  const handleVehicleStateModeChange = (
+    stateName: string,
+    vehicleKey: keyof PricingConfig,
+    mode: VehiclePricingMode
+  ) => {
+    setStatePricing((prev) => {
+      const currentState = prev[stateName] || {};
+      const currentVehicle = currentState[vehicleKey] || { mode: 'default' };
+      const baseDefault = pricing[vehicleKey];
+
+      let updatedVehicle: VehicleStatePricing;
+      if (mode === 'percentage') {
+        updatedVehicle = {
+          mode: 'percentage',
+          adjustmentPercent: currentVehicle.adjustmentPercent ?? 5,
+        };
+      } else if (mode === 'custom') {
+        updatedVehicle = {
+          mode: 'custom',
+          baseFare: currentVehicle.baseFare ?? baseDefault.baseFare,
+          perKmRate: currentVehicle.perKmRate ?? baseDefault.perKmRate,
+          perMinuteRate: currentVehicle.perMinuteRate ?? baseDefault.perMinuteRate,
+        };
+      } else {
+        updatedVehicle = { mode: 'default' };
+      }
+
+      return {
+        ...prev,
+        [stateName]: {
+          ...currentState,
+          [vehicleKey]: updatedVehicle,
+        },
+      };
+    });
+  };
+
+  const handleVehicleStatePercentChange = (
+    stateName: string,
+    vehicleKey: keyof PricingConfig,
+    percent: number
+  ) => {
+    setStatePricing((prev) => ({
+      ...prev,
+      [stateName]: {
+        ...(prev[stateName] || {}),
+        [vehicleKey]: {
+          ...(prev[stateName]?.[vehicleKey] || { mode: 'percentage' }),
+          mode: 'percentage',
+          adjustmentPercent: percent,
+        },
+      },
+    }));
+  };
+
+  const handleVehicleStateCustomRateChange = (
+    stateName: string,
+    vehicleKey: keyof PricingConfig,
+    field: 'baseFare' | 'perKmRate' | 'perMinuteRate',
+    value: number
+  ) => {
+    setStatePricing((prev) => ({
+      ...prev,
+      [stateName]: {
+        ...(prev[stateName] || {}),
+        [vehicleKey]: {
+          ...(prev[stateName]?.[vehicleKey] || { mode: 'custom' }),
+          mode: 'custom',
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const handleRemoveStatePricing = (stateName: string) => {
+    if (window.confirm(`Are you sure you want to remove all pricing overrides for ${stateName}? It will revert to National Default pricing.`)) {
+      setStatePricing((prev) => {
+        const copy = { ...prev };
+        delete copy[stateName];
+        return copy;
+      });
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -435,6 +547,7 @@ export function SettingsPage() {
           courier: pricing.courier,
           tricycle: pricing.tricycle,
           motorcycle: pricing.motorcycle,
+          statePricing: statePricing,
         }, { merge: true });
 
         const availRef = doc(db, 'config', 'serviceAvailability');
@@ -1137,6 +1250,334 @@ export function SettingsPage() {
                   </div>
                 );
               })}
+            </div>
+          </article>
+
+          {/* State-Specific Pricing Overrides (Option 3: Hybrid) */}
+          <article className="card" style={{ marginBottom: 'var(--space-5)', padding: 'var(--space-5)' }}>
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <span style={{ fontSize: '1.5rem' }}>📍</span>
+                  <div>
+                    <h3 style={{ margin: 0, fontWeight: 800 }}>State-Specific Pricing & Rate Adjustments</h3>
+                    <p className="muted" style={{ fontSize: '0.87rem', margin: '4px 0 0 0' }}>
+                      Configure regional pricing adjustments per Nigerian state. Set percentage increases/decreases (+/- X%) or custom rate cards per vehicle type. States without overrides automatically use the National Default rates above.
+                    </p>
+                  </div>
+                </div>
+
+                {/* State selector dropdown */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label htmlFor="stateSelector" style={{ fontSize: '0.85rem', fontWeight: 600 }}>Select State:</label>
+                  <select
+                    id="stateSelector"
+                    className="field__input"
+                    value={selectedStateForPricing}
+                    onChange={(e) => setSelectedStateForPricing(e.target.value)}
+                    style={{ padding: '8px 14px', borderRadius: 8, minWidth: 160 }}
+                  >
+                    {NIGERIAN_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state} {statePricing[state] ? '★ (Configured)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Configured States Badges */}
+            <div style={{ marginBottom: 'var(--space-4)', padding: '10px 14px', background: 'var(--color-bg-alt)', borderRadius: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                  Active State Pricing Overrides:
+                </span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                  {Object.keys(statePricing).length} state(s) configured
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {Object.keys(statePricing).length === 0 ? (
+                  <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                    No state overrides configured yet. All 36 states + FCT currently use the National Default rates.
+                  </span>
+                ) : (
+                  Object.keys(statePricing).map((st) => {
+                    const isCurrent = selectedStateForPricing === st;
+                    const stConfig = statePricing[st] || {};
+                    const overriddenCount = Object.values(stConfig).filter((v) => v?.mode && v.mode !== 'default').length;
+                    return (
+                      <div
+                        key={st}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '4px 10px',
+                          borderRadius: 9999,
+                          border: isCurrent ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          background: isCurrent ? 'rgba(34, 197, 94, 0.15)' : 'var(--color-card)',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setSelectedStateForPricing(st)}
+                      >
+                        <span>{st}</span>
+                        <span style={{ fontSize: '0.72rem', opacity: 0.8, color: 'var(--color-primary)' }}>
+                          ({overriddenCount} active)
+                        </span>
+                        <button
+                          type="button"
+                          title="Remove state override"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveStatePricing(st);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--color-danger, #ef4444)',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            padding: '0 2px',
+                            marginLeft: 4,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Active Selected State Card */}
+            <div style={{ border: '1.5px solid var(--color-border)', borderRadius: 12, padding: 18, background: 'var(--color-card)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--color-border)', paddingBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: 700, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>📍 {selectedStateForPricing} State Pricing</span>
+                    {statePricing[selectedStateForPricing] && (
+                      <span style={{ fontSize: '0.72rem', background: 'rgba(34, 197, 94, 0.2)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: 6 }}>
+                        Active Overrides
+                      </span>
+                    )}
+                  </h4>
+                  <p className="muted" style={{ margin: '4px 0 0 0', fontSize: '0.82rem' }}>
+                    Adjust pricing rules for individual vehicle types in {selectedStateForPricing}.
+                  </p>
+                </div>
+                {statePricing[selectedStateForPricing] && (
+                  <button
+                    type="button"
+                    className="btn btn--subtle"
+                    style={{ fontSize: '0.8rem', color: '#ef4444', borderColor: '#ef4444' }}
+                    onClick={() => handleRemoveStatePricing(selectedStateForPricing)}
+                  >
+                    Reset {selectedStateForPricing} to Default
+                  </button>
+                )}
+              </div>
+
+              {/* Grid of vehicle types for this state */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+                {(
+                  [
+                    { key: 'regular', name: 'Regular Ride', icon: '🚗' },
+                    { key: 'comfort', name: 'Comfort Ride', icon: '🛋️' },
+                    { key: 'luxury', name: 'Luxury Ride', icon: '✨' },
+                    { key: 'courier', name: 'Courier Delivery', icon: '📦' },
+                    { key: 'tricycle', name: 'Tricycle (Keke)', icon: '🛺' },
+                    { key: 'motorcycle', name: 'Motorcycle (Bike)', icon: '🏍️' },
+                  ] as const
+                ).map(({ key, name, icon }) => {
+                  const stateConfig = statePricing[selectedStateForPricing]?.[key] || { mode: 'default' };
+                  const mode = stateConfig.mode || 'default';
+                  const baseDef = pricing[key];
+                  const percent = stateConfig.adjustmentPercent ?? 0;
+
+                  // Preview calculations
+                  const mult = 1 + percent / 100;
+                  const previewBase = mode === 'custom' ? (stateConfig.baseFare ?? baseDef.baseFare) : Math.round(baseDef.baseFare * mult);
+                  const previewKm = mode === 'custom' ? (stateConfig.perKmRate ?? baseDef.perKmRate) : Math.round(baseDef.perKmRate * mult);
+                  const previewMin = mode === 'custom' ? (stateConfig.perMinuteRate ?? baseDef.perMinuteRate) : Math.round(baseDef.perMinuteRate * mult);
+
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 10,
+                        padding: 14,
+                        background: mode === 'default' ? 'var(--color-bg-alt)' : 'transparent',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: '1.2rem' }}>{icon}</span>
+                          <span style={{ fontWeight: 700, fontSize: '0.92rem' }}>{name}</span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            fontWeight: 700,
+                            background:
+                              mode === 'percentage'
+                                ? percent >= 0
+                                  ? 'rgba(34, 197, 94, 0.2)'
+                                  : 'rgba(239, 68, 68, 0.2)'
+                                : mode === 'custom'
+                                ? 'rgba(59, 130, 246, 0.2)'
+                                : 'rgba(156, 163, 175, 0.2)',
+                            color:
+                              mode === 'percentage'
+                                ? percent >= 0
+                                  ? 'var(--color-primary)'
+                                  : '#ef4444'
+                                : mode === 'custom'
+                                ? '#3b82f6'
+                                : 'var(--color-text-muted)',
+                          }}
+                        >
+                          {mode === 'percentage'
+                            ? `${percent >= 0 ? '+' : ''}${percent}% Adjusted`
+                            : mode === 'custom'
+                            ? 'Custom Rate Card'
+                            : 'Inherit Default'}
+                        </span>
+                      </div>
+
+                      {/* Mode Segmented Switcher */}
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                        {(
+                          [
+                            { mKey: 'default', label: 'Default' },
+                            { mKey: 'percentage', label: '% Adjust' },
+                            { mKey: 'custom', label: 'Custom' },
+                          ] as const
+                        ).map(({ mKey, label }) => (
+                          <button
+                            key={mKey}
+                            type="button"
+                            onClick={() => handleVehicleStateModeChange(selectedStateForPricing, key, mKey)}
+                            style={{
+                              flex: 1,
+                              padding: '5px 8px',
+                              fontSize: '0.75rem',
+                              fontWeight: mode === mKey ? 700 : 500,
+                              borderRadius: 6,
+                              border: mode === mKey ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                              background: mode === mKey ? 'var(--color-primary)' : 'transparent',
+                              color: mode === mKey ? '#fff' : 'inherit',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Mode: Default */}
+                      {mode === 'default' && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                          Uses National Default: <strong>₦{baseDef.baseFare.toLocaleString()}</strong> base + <strong>₦{baseDef.perKmRate}/km</strong> + <strong>₦{baseDef.perMinuteRate}/min</strong>.
+                        </div>
+                      )}
+
+                      {/* Mode: Percentage */}
+                      {mode === 'percentage' && (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            {/* Increase / Decrease Toggle */}
+                            <select
+                              className="field__input"
+                              value={percent >= 0 ? 'increase' : 'decrease'}
+                              onChange={(e) => {
+                                const isInc = e.target.value === 'increase';
+                                const absVal = Math.abs(percent) || 5;
+                                handleVehicleStatePercentChange(selectedStateForPricing, key, isInc ? absVal : -absVal);
+                              }}
+                              style={{ padding: '6px 8px', fontSize: '0.8rem', borderRadius: 6, width: 110 }}
+                            >
+                              <option value="increase">Increase (+)</option>
+                              <option value="decrease">Decrease (-)</option>
+                            </select>
+
+                            {/* Percentage input */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+                              <input
+                                type="number"
+                                className="field__input"
+                                min="0"
+                                max="100"
+                                step="1"
+                                value={Math.abs(percent)}
+                                onChange={(e) => {
+                                  const val = Math.abs(parseFloat(e.target.value) || 0);
+                                  const sign = percent < 0 ? -1 : 1;
+                                  handleVehicleStatePercentChange(selectedStateForPricing, key, sign * val);
+                                }}
+                                style={{ padding: '6px 8px', fontSize: '0.8rem', borderRadius: 6, width: '100%' }}
+                              />
+                              <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>%</span>
+                            </div>
+                          </div>
+
+                          {/* Calculated Preview */}
+                          <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-alt)', padding: '6px 10px', borderRadius: 6 }}>
+                            Preview: <strong>₦{previewBase.toLocaleString()}</strong> base • <strong>₦{previewKm}/km</strong> • <strong>₦{previewMin}/min</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mode: Custom */}
+                      {mode === 'custom' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label style={{ fontSize: '0.76rem', width: 90, color: 'var(--color-text-muted)' }}>Base Fare:</label>
+                            <input
+                              type="number"
+                              className="field__input"
+                              min="0"
+                              value={stateConfig.baseFare ?? baseDef.baseFare}
+                              onChange={(e) => handleVehicleStateCustomRateChange(selectedStateForPricing, key, 'baseFare', parseFloat(e.target.value) || 0)}
+                              style={{ padding: '5px 8px', fontSize: '0.8rem', borderRadius: 6, flex: 1 }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label style={{ fontSize: '0.76rem', width: 90, color: 'var(--color-text-muted)' }}>Per Km:</label>
+                            <input
+                              type="number"
+                              className="field__input"
+                              min="0"
+                              value={stateConfig.perKmRate ?? baseDef.perKmRate}
+                              onChange={(e) => handleVehicleStateCustomRateChange(selectedStateForPricing, key, 'perKmRate', parseFloat(e.target.value) || 0)}
+                              style={{ padding: '5px 8px', fontSize: '0.8rem', borderRadius: 6, flex: 1 }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label style={{ fontSize: '0.76rem', width: 90, color: 'var(--color-text-muted)' }}>Per Min:</label>
+                            <input
+                              type="number"
+                              className="field__input"
+                              min="0"
+                              value={stateConfig.perMinuteRate ?? baseDef.perMinuteRate}
+                              onChange={(e) => handleVehicleStateCustomRateChange(selectedStateForPricing, key, 'perMinuteRate', parseFloat(e.target.value) || 0)}
+                              style={{ padding: '5px 8px', fontSize: '0.8rem', borderRadius: 6, flex: 1 }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </article>
 

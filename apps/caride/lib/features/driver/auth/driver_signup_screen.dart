@@ -27,6 +27,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   final _phone = TextEditingController();
   final _password = TextEditingController();
   final _referralCode = TextEditingController();
+  final _scrollController = ScrollController();
   File? _profilePhotoFile;
   bool _obscurePassword = true;
   bool _loading = false;
@@ -132,7 +133,18 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     _phone.dispose();
     _password.dispose();
     _referralCode.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   Future<void> _pickProfilePhoto() async {
@@ -157,6 +169,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       if (bytes > 5 * 1024 * 1024) {
         final sizeMb = (bytes / (1024 * 1024)).toStringAsFixed(1);
         setState(() => _errorMessage = "Profile photo exceeds the 5MB size limit (actual: $sizeMb MB). Please select a smaller image.");
+        _scrollToTop();
         return;
       }
 
@@ -166,6 +179,10 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       });
     } catch (e) {
       debugPrint('[DriverSignupScreen] Error picking profile photo: $e');
+      if (mounted) {
+        setState(() => _errorMessage = "Unable to access photo gallery. Please check app permissions and try again.");
+        _scrollToTop();
+      }
     }
   }
 
@@ -182,10 +199,21 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
   Future<void> _submit() async {
     if (!_acceptTerms) {
-      setState(() => _errorMessage = 'You must accept the Terms & Conditions to proceed.');
+      setState(() => _errorMessage = 'You must accept the Driver Terms & Conditions to proceed.');
+      _scrollToTop();
       return;
     }
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      setState(() => _errorMessage = 'Please complete all required fields correctly.');
+      _scrollToTop();
+      return;
+    }
+
+    if (_selectedState == null || _selectedState!.trim().isEmpty) {
+      setState(() => _errorMessage = 'Please select your operating state.');
+      _scrollToTop();
+      return;
+    }
 
     final phoneNum = _phone.text.trim();
     final cleanPhone = TermiiService.formatToLocal11Digits(phoneNum);
@@ -235,12 +263,17 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         state: _selectedState ?? '',
       );
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('selected_role', 'driver');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('selected_role', 'driver');
+      } catch (storageErr) {
+        debugPrint('[DriverSignupScreen] Warning: SharedPreferences write failed: $storageErr');
+      }
     } catch (e) {
       debugPrint('[DriverSignupScreen] Error during driver signup: $e');
       if (!mounted) return;
       setState(() => _errorMessage = mapAuthErrorMessage(e));
+      _scrollToTop();
       return;
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -292,6 +325,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
             // Scrollable Content
             Expanded(
               child: SingleChildScrollView(
+                controller: _scrollController,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24.0,
                   vertical: 8.0,
@@ -575,8 +609,11 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                           ),
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Full name is required.';
-                          if (v.trim().length < 2) return 'Full name must be at least 2 characters.';
+                          final val = v?.trim() ?? '';
+                          if (val.isEmpty) return 'Full name is required.';
+                          if (val.length < 3) return 'Full name must be at least 3 characters.';
+                          final parts = val.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+                          if (parts.length < 2) return 'Please enter both your first and last name.';
                           return null;
                         },
                       ),
@@ -796,11 +833,17 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                 final v = value?.trim() ?? '';
                                 if (v.isEmpty) return 'Please enter your phone number.';
                                 final digitsOnly = v.replaceAll(RegExp(r'\D'), '');
+                                if (digitsOnly.startsWith('234') && digitsOnly.length == 13) {
+                                  return 'Enter your 11-digit number (e.g. 0${digitsOnly.substring(3)}).';
+                                }
+                                if (digitsOnly.length == 10 && !digitsOnly.startsWith('0')) {
+                                  return 'Add a leading 0 (e.g. 0$digitsOnly).';
+                                }
                                 if (digitsOnly.length != 11) {
                                   return 'Phone number must be exactly 11 digits.';
                                 }
                                 if (!digitsOnly.startsWith('0')) {
-                                  return 'Phone number must start with 0 (e.g. 0801...).';
+                                  return 'Phone number must start with 0 (e.g. 08012345678).';
                                 }
                                 return null;
                               },
