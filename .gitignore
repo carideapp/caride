@@ -60,3 +60,12 @@ coverage/
 *.env
 *.env.*
 !*.env.example
+
+.vercel
+
+/.vercel/
+/admin_dashboard/
+/website/
+/.agents/
+/*.md
+/*.ips
