@@ -24,38 +24,64 @@ class WalletTransaction {
   final String description;
   final DateTime createdAt;
 
-  factory WalletTransaction.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory WalletTransaction.fromDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? {};
     final typeStr = (data['type'] as String?)?.trim().toLowerCase() ?? '';
-    final rawTypeField = (data['rawType'] as String?)?.trim().toLowerCase() ?? '';
-    final descStr = (data['description'] as String?)?.trim().toLowerCase() ?? '';
+    final rawTypeField =
+        (data['rawType'] as String?)?.trim().toLowerCase() ?? '';
+    final descStr =
+        (data['description'] as String?)?.trim().toLowerCase() ?? '';
 
-    final isCashback = rawTypeField == 'cashback' ||
+    final isAdminCredit =
+        rawTypeField == 'admin_credit' ||
+        typeStr == 'admin_credit' ||
+        descStr.contains('admin credit');
+    final isAdminDebit =
+        rawTypeField == 'admin_debit' ||
+        typeStr == 'admin_debit' ||
+        descStr.contains('admin debit');
+
+    final isCashback =
+        rawTypeField == 'cashback' ||
         rawTypeField == 'first_ride_cashback' ||
         typeStr == 'cashback' ||
         typeStr == 'trip_cashback' ||
         typeStr == 'first_ride_cashback' ||
         descStr.contains('cashback');
 
-    final isCredit = isCashback ||
-        typeStr == 'credit' ||
-        typeStr == 'referral' ||
-        typeStr == 'referral_credit' ||
-        typeStr == 'referral_reward' ||
-        descStr.contains('referral') ||
-        descStr.contains('reward') ||
-        descStr.contains('bonus');
+    final isCredit =
+        !isAdminDebit &&
+        (isAdminCredit ||
+            isCashback ||
+            typeStr == 'credit' ||
+            typeStr == 'referral' ||
+            typeStr == 'referral_credit' ||
+            typeStr == 'referral_reward' ||
+            descStr.contains('referral') ||
+            descStr.contains('reward') ||
+            descStr.contains('bonus'));
 
-    final effectiveRawType = isCashback
-        ? (typeStr == 'first_ride_cashback' || descStr.contains('first ride')
-            ? 'first_ride_cashback'
-            : 'cashback')
-        : (rawTypeField.isNotEmpty
-            ? rawTypeField
-            : (typeStr.contains('referral') ? 'referral' : typeStr));
+    final effectiveRawType = isAdminCredit
+        ? 'admin_credit'
+        : (isAdminDebit
+              ? 'admin_debit'
+              : (isCashback
+                    ? (typeStr == 'first_ride_cashback' ||
+                              descStr.contains('first ride')
+                          ? 'first_ride_cashback'
+                          : 'cashback')
+                    : (rawTypeField.isNotEmpty
+                          ? rawTypeField
+                          : (typeStr.contains('referral')
+                                ? 'referral'
+                                : typeStr))));
 
-    final isSubsidy = data['destination'] == 'subsidy_wallet' ||
-        (data['method'] as String?)?.toLowerCase().contains('subsidy') == true ||
+    final isSubsidy =
+        data['destination'] == 'subsidy_wallet' ||
+        (data['method'] as String?)?.toLowerCase().contains('subsidy') ==
+            true ||
         descStr.contains('subsidy');
 
     final effectiveMethod = (data['method'] as String?)?.isNotEmpty == true
@@ -66,24 +92,26 @@ class WalletTransaction {
       id: doc.id,
       type: isCredit ? WalletTxType.credit : WalletTxType.debit,
       rawType: effectiveRawType,
-      reference: (data['reference'] as String?) ?? (data['rideId'] as String?) ?? '',
+      reference:
+          (data['reference'] as String?) ?? (data['rideId'] as String?) ?? '',
       amountNaira: (data['amountNaira'] as num?)?.toDouble() ?? 0,
       method: effectiveMethod,
       description: (data['description'] as String?) ?? '',
-      createdAt:
-          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
   factory WalletTransaction.fromRentalBookingDoc(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? {};
-    final vehicleTitle = (data['vehicleTitle'] as String?) ??
+    final vehicleTitle =
+        (data['vehicleTitle'] as String?) ??
         (data['vehicleName'] as String?) ??
         'Rental Vehicle';
     final amount = (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
-    final paymentMethodRaw =
-        (data['paymentMethod'] as String? ?? '').toLowerCase();
+    final paymentMethodRaw = (data['paymentMethod'] as String? ?? '')
+        .toLowerCase();
 
     String methodLabel = 'Card';
     if (paymentMethodRaw == 'wallet') {
@@ -118,7 +146,7 @@ class WalletTransaction {
 
 class WalletTransactionRepository {
   WalletTransactionRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
@@ -138,7 +166,8 @@ class WalletTransactionRepository {
       final seenCashbackRefs = <String>{};
       final dedupedList = <WalletTransaction>[];
       for (final tx in list) {
-        final isCashback = tx.rawType == 'cashback' ||
+        final isCashback =
+            tx.rawType == 'cashback' ||
             tx.rawType == 'first_ride_cashback' ||
             tx.description.toLowerCase().contains('cashback');
         if (isCashback && tx.reference.isNotEmpty) {
@@ -167,12 +196,12 @@ class WalletTransactionRepository {
           .where('uid', isEqualTo: uid)
           .snapshots()
           .listen((snap) {
-        for (final doc in snap.docs) {
-          final tx = WalletTransaction.fromDoc(doc);
-          txMap[tx.id] = tx;
-        }
-        emitLatest();
-      }, onError: (_) {}),
+            for (final doc in snap.docs) {
+              final tx = WalletTransaction.fromDoc(doc);
+              txMap[tx.id] = tx;
+            }
+            emitLatest();
+          }, onError: (_) {}),
     );
 
     // 2. Listen to credit_transactions where uid == uid (subsidiary/credit wallet transactions)
@@ -182,12 +211,12 @@ class WalletTransactionRepository {
           .where('uid', isEqualTo: uid)
           .snapshots()
           .listen((snap) {
-        for (final doc in snap.docs) {
-          final tx = WalletTransaction.fromDoc(doc);
-          txMap['credit_${doc.id}'] = tx;
-        }
-        emitLatest();
-      }, onError: (_) {}),
+            for (final doc in snap.docs) {
+              final tx = WalletTransaction.fromDoc(doc);
+              txMap['credit_${doc.id}'] = tx;
+            }
+            emitLatest();
+          }, onError: (_) {}),
     );
 
     // 3. Listen to rental_bookings where customerId == uid
@@ -197,24 +226,25 @@ class WalletTransactionRepository {
           .where('customerId', isEqualTo: uid)
           .snapshots()
           .listen((snap) {
-        for (final doc in snap.docs) {
-          final data = doc.data();
-          final paymentStatus =
-              (data['paymentStatus'] as String? ?? '').toLowerCase();
-          final status = (data['status'] as String? ?? '').toLowerCase();
-          final isPaid = paymentStatus == 'paid' ||
-              status == 'confirmed' ||
-              status == 'in_progress' ||
-              status == 'inprogress' ||
-              status == 'completed';
+            for (final doc in snap.docs) {
+              final data = doc.data();
+              final paymentStatus = (data['paymentStatus'] as String? ?? '')
+                  .toLowerCase();
+              final status = (data['status'] as String? ?? '').toLowerCase();
+              final isPaid =
+                  paymentStatus == 'paid' ||
+                  status == 'confirmed' ||
+                  status == 'in_progress' ||
+                  status == 'inprogress' ||
+                  status == 'completed';
 
-          if (isPaid) {
-            final tx = WalletTransaction.fromRentalBookingDoc(doc);
-            txMap[tx.id] = tx;
-          }
-        }
-        emitLatest();
-      }, onError: (_) {}),
+              if (isPaid) {
+                final tx = WalletTransaction.fromRentalBookingDoc(doc);
+                txMap[tx.id] = tx;
+              }
+            }
+            emitLatest();
+          }, onError: (_) {}),
     );
 
     controller.onCancel = () {
@@ -226,4 +256,3 @@ class WalletTransactionRepository {
     return controller.stream;
   }
 }
-

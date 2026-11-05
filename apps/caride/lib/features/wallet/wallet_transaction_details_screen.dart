@@ -28,6 +28,12 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
   String _getTransactionTitle() {
     final desc = transaction.description.toLowerCase();
     final rawType = transaction.rawType.toLowerCase();
+    if (rawType == 'admin_credit' || desc.contains('admin credit')) {
+      return 'Admin Credit';
+    }
+    if (rawType == 'admin_debit' || desc.contains('admin debit')) {
+      return 'Admin Debit';
+    }
     if (rawType == 'first_ride_cashback' || desc.contains('first ride')) {
       return 'First Ride Cashback';
     }
@@ -280,6 +286,38 @@ class WalletTransactionDetailsScreen extends StatelessWidget {
                         value: transaction.description.isNotEmpty
                             ? transaction.description
                             : 'Earning credited from referral trip',
+                      ),
+                    ],
+                  ),
+                )
+              else if (title == 'Admin Credit' || title == 'Admin Debit')
+                GlassSurface(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Admin Adjustment Summary',
+                        style: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _buildDetailRow(
+                        label: 'Adjustment Action',
+                        value: title,
+                      ),
+                      _buildDetailRow(
+                        label: 'Reason / Description',
+                        value: transaction.description.isNotEmpty
+                            ? transaction.description
+                            : 'Manual wallet adjustment processed by administration',
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'This balance adjustment was processed securely by CaRide Administration for payment reconciliation, refund, or account resolution.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          height: 1.4,
+                        ),
                       ),
                     ],
                   ),

@@ -25,6 +25,12 @@ class DriverTransactionDetailsScreen extends StatelessWidget {
     final desc = transaction.description.toLowerCase();
     final type = transaction.type.toLowerCase();
 
+    if (desc.contains('admin credit') || type == 'admin_credit') {
+      return 'Admin Credit';
+    }
+    if (desc.contains('admin debit') || type == 'admin_debit') {
+      return 'Admin Debit';
+    }
     if (desc.contains('referral') || type.contains('referral')) {
       return 'Referral Commission';
     }
@@ -179,6 +185,18 @@ class DriverTransactionDetailsScreen extends StatelessWidget {
                               ? 'Trip Earnings / Wallet Credit'
                               : 'Wallet Payout / Debit'),
                     ),
+                    if (title == 'Admin Credit' || title == 'Admin Debit') ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'This balance adjustment was processed securely by CaRide Administration for payment reconciliation, refund, or account resolution.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

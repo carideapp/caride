@@ -33,25 +33,30 @@ class DriverWalletScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
     final cardBg = isDark ? AppColors.darkSurface : Colors.white;
     final repo = DriverWalletRepository();
     final user = FirebaseAuth.instance.currentUser;
-    final driverName = (user?.displayName != null && user!.displayName!.isNotEmpty)
+    final driverName =
+        (user?.displayName != null && user!.displayName!.isNotEmpty)
         ? user.displayName!
         : 'CaRide Driver';
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : const Color(0xFFF9FAFB),
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : const Color(0xFFF9FAFB),
       body: SafeArea(
         child: Column(
           children: [
             // ── Top Bar (Circular Back Button per AGENTS.md) ──
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 12.0,
+              ),
               child: Row(
                 children: [
                   Container(
@@ -93,8 +98,10 @@ class DriverWalletScreen extends StatelessWidget {
                   final liveBalance = balSnap.data ?? 0.0;
 
                   return ListView(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     children: [
                       // ── Hero Wallet Balance Card (Zero Drop-Shadow) ──
                       Container(
@@ -105,11 +112,11 @@ class DriverWalletScreen extends StatelessWidget {
                             colors: isDark
                                 ? [
                                     const Color(0xFF0F3E22),
-                                    const Color(0xFF062816)
+                                    const Color(0xFF062816),
                                   ]
                                 : [
                                     const Color(0xFF16A34A),
-                                    const Color(0xFF0D7A36)
+                                    const Color(0xFF0D7A36),
                                   ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -130,8 +137,9 @@ class DriverWalletScreen extends StatelessWidget {
                                     Container(
                                       padding: const EdgeInsets.all(6),
                                       decoration: BoxDecoration(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.15),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.15,
+                                        ),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: const Icon(
@@ -154,7 +162,9 @@ class DriverWalletScreen extends StatelessWidget {
                                 // Settlement Account Pill
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(20),
@@ -162,8 +172,11 @@ class DriverWalletScreen extends StatelessWidget {
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.credit_card_rounded,
-                                          color: Colors.white, size: 14),
+                                      Icon(
+                                        Icons.credit_card_rounded,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
                                       SizedBox(width: 6),
                                       Text(
                                         'Direct Payout',
@@ -217,17 +230,20 @@ class DriverWalletScreen extends StatelessWidget {
                                 elevation: 0,
                                 minimumSize: const Size(0, 50),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 14),
+                                  horizontal: 12,
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(28),
                                 ),
                               ),
-                              icon: const Icon(Icons.add_rounded,
-                                  size: 18),
+                              icon: const Icon(Icons.add_rounded, size: 18),
                               label: const Text(
                                 'Top Up',
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 13),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
@@ -243,24 +259,31 @@ class DriverWalletScreen extends StatelessWidget {
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    isDark ? AppColors.darkSurface : Colors.white,
+                                backgroundColor: isDark
+                                    ? AppColors.darkSurface
+                                    : Colors.white,
                                 foregroundColor: primaryTextColor,
                                 elevation: 0,
                                 minimumSize: const Size(0, 50),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 14),
+                                  horizontal: 12,
+                                  vertical: 14,
+                                ),
                                 side: BorderSide(color: borderColor),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(28),
                                 ),
                               ),
-                              icon: const Icon(Icons.arrow_upward_rounded,
-                                  size: 16),
+                              icon: const Icon(
+                                Icons.arrow_upward_rounded,
+                                size: 16,
+                              ),
                               label: const Text(
                                 'Withdraw',
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 13),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
@@ -276,24 +299,31 @@ class DriverWalletScreen extends StatelessWidget {
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    isDark ? AppColors.darkSurface : Colors.white,
+                                backgroundColor: isDark
+                                    ? AppColors.darkSurface
+                                    : Colors.white,
                                 foregroundColor: primaryTextColor,
                                 elevation: 0,
                                 minimumSize: const Size(0, 50),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 14),
+                                  horizontal: 12,
+                                  vertical: 14,
+                                ),
                                 side: BorderSide(color: borderColor),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(28),
                                 ),
                               ),
-                              icon: const Icon(Icons.account_balance_rounded,
-                                  size: 16),
+                              icon: const Icon(
+                                Icons.account_balance_rounded,
+                                size: 16,
+                              ),
                               label: const Text(
                                 'Banks',
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 13),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
@@ -351,7 +381,9 @@ class DriverWalletScreen extends StatelessWidget {
                                 padding: EdgeInsets.all(32),
                                 child: Center(
                                   child: CircularProgressIndicator(
-                                      color: AppColors.brand, strokeWidth: 2.5),
+                                    color: AppColors.brand,
+                                    strokeWidth: 2.5,
+                                  ),
                                 ),
                               );
                             }
@@ -361,14 +393,17 @@ class DriverWalletScreen extends StatelessWidget {
                             if (txns.isEmpty) {
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 24, vertical: 48),
+                                  horizontal: 24,
+                                  vertical: 48,
+                                ),
                                 child: Column(
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.all(16),
                                       decoration: BoxDecoration(
-                                        color: AppColors.brand
-                                            .withValues(alpha: 0.1),
+                                        color: AppColors.brand.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
@@ -412,25 +447,51 @@ class DriverWalletScreen extends StatelessWidget {
                               itemBuilder: (ctx, index) {
                                 final tx = txns[index];
                                 final isCredit = tx.isCredit;
-                                final title = tx.description.isNotEmpty
-                                    ? tx.description
-                                    : (isCredit ? 'Trip Earnings' : 'Wallet Withdrawal');
+                                final isAdminCredit =
+                                    tx.type == 'admin_credit' ||
+                                    tx.description.toLowerCase().contains(
+                                      'admin credit',
+                                    );
+                                final isAdminDebit =
+                                    tx.type == 'admin_debit' ||
+                                    tx.description.toLowerCase().contains(
+                                      'admin debit',
+                                    );
+                                final title = isAdminCredit
+                                    ? 'Admin Credit'
+                                    : (isAdminDebit
+                                          ? 'Admin Debit'
+                                          : (tx.description.isNotEmpty
+                                                ? tx.description
+                                                : (isCredit
+                                                      ? 'Trip Earnings'
+                                                      : 'Wallet Withdrawal')));
                                 final dateFormatted = _formatDate(tx.createdAt);
                                 final amountFormatted =
                                     '${isCredit ? "+" : "-"}₦${_formatMoney(tx.amountNaira)}';
 
                                 final iconBg = isCredit
                                     ? (isDark
-                                        ? const Color(0xFF14301D)
-                                        : const Color(0xFFF0FDF4))
+                                          ? const Color(0xFF14301D)
+                                          : const Color(0xFFF0FDF4))
                                     : const Color(0xFFFEF2F2);
-                                final iconColor =
-                                    isCredit ? AppColors.brand : AppColors.error;
-                                final iconData = isCredit
-                                    ? Icons.local_taxi_rounded
-                                    : Icons.arrow_outward_rounded;
-                                final badgeLabel =
-                                    isCredit ? '↙ Credit' : '↗ Payout';
+                                final iconColor = isCredit
+                                    ? AppColors.brand
+                                    : AppColors.error;
+                                final iconData = (isAdminCredit || isAdminDebit)
+                                    ? (isAdminCredit
+                                          ? Icons.arrow_downward_rounded
+                                          : Icons.arrow_outward_rounded)
+                                    : (isCredit
+                                          ? Icons.local_taxi_rounded
+                                          : Icons.arrow_outward_rounded);
+                                final badgeLabel = isAdminCredit
+                                    ? '⚙ Admin Credit'
+                                    : (isAdminDebit
+                                          ? '⚙ Admin Debit'
+                                          : (isCredit
+                                                ? '↙ Credit'
+                                                : '↗ Payout'));
 
                                 return InkWell(
                                   onTap: () {
@@ -438,106 +499,119 @@ class DriverWalletScreen extends StatelessWidget {
                                       MaterialPageRoute(
                                         builder: (_) =>
                                             DriverTransactionDetailsScreen(
-                                          transaction: tx,
-                                        ),
+                                              transaction: tx,
+                                            ),
                                       ),
                                     );
                                   },
                                   child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 14),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 44,
-                                        height: 44,
-                                        decoration: BoxDecoration(
-                                          color: iconBg,
-                                          shape: BoxShape.circle,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 44,
+                                          height: 44,
+                                          decoration: BoxDecoration(
+                                            color: iconBg,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            iconData,
+                                            color: iconColor,
+                                            size: 20,
+                                          ),
                                         ),
-                                        child: Icon(iconData,
-                                            color: iconColor, size: 20),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                title,
+                                                style: TextStyle(
+                                                  fontSize: 14.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: primaryTextColor,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                dateFormatted,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isDark
+                                                      ? AppColors
+                                                            .textSecondaryDark
+                                                      : const Color(0xFF6B7280),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Column(
                                           crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                              CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                              title,
+                                              amountFormatted,
                                               style: TextStyle(
-                                                fontSize: 14.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: primaryTextColor,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w800,
+                                                color: isCredit
+                                                    ? AppColors.brand
+                                                    : AppColors.error,
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              dateFormatted,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDark
-                                                    ? AppColors.textSecondaryDark
-                                                    : const Color(0xFF6B7280),
+                                            const SizedBox(height: 4),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: isCredit
+                                                    ? AppColors.brand
+                                                          .withValues(
+                                                            alpha: 0.1,
+                                                          )
+                                                    : AppColors.error
+                                                          .withValues(
+                                                            alpha: 0.1,
+                                                          ),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                badgeLabel,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: isCredit
+                                                      ? AppColors.brand
+                                                      : AppColors.error,
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            amountFormatted,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w800,
-                                              color: isCredit
-                                                  ? AppColors.brand
-                                                  : AppColors.error,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: isCredit
-                                                  ? AppColors.brand
-                                                      .withValues(alpha: 0.1)
-                                                  : AppColors.error
-                                                      .withValues(alpha: 0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              badgeLabel,
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                                color: isCredit
-                                                  ? AppColors.brand
-                                                  : AppColors.error,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          );
-                        },
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 32),
+                      const SizedBox(height: 32),
                     ],
                   );
                 },

@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendAnnouncementPush = exports.onChatMessageCreated = exports.takeWeeklyWalletSnapshot = exports.reconcileStuckRides = exports.adminRetryFailedPayout = exports.adminExecuteSettlementBatch = exports.adminCreateSettlementBatch = exports.adminProcessSinglePayout = exports.adminProcessWithdrawal = exports.onRideUpdatedDriverNotify = exports.onRideUpdatedCustomerNotify = exports.onRideCreatedCustomerNotify = exports.onRideStatusChanged = exports.rateCustomer = exports.cancelRideByCustomer = exports.respondToBid = exports.completeRide = exports.publishDriverLocation = exports.updateRideStatus = exports.createDriverBid = exports.submitDriverApplication = exports.onDriverRatingChanged = exports.notifyDriverApprovalStatus = exports.sendDriverWelcomeOnProfileCreate = exports.sendWelcomeEmailOnProfileCreate = exports.onVehicleReviewUpdated = exports.onVehicleReviewCreated = exports.onDriverDocumentUpdated = exports.onDriverDocumentCreated = exports.saveDriverBankAccount = exports.resolveTransactPayBankAccount = exports.listTransactPayBanks = exports.saveTransactPayCard = exports.transactPayWebhook = exports.createDedicatedVirtualAccount = exports.verifyTransactPayTransaction = exports.chargeTransactPayCard = exports.initializeTransactPayTransaction = exports.initializeBankTransfer = exports.initializeTierSettings = exports.deleteStaffAccount = exports.processStaffWithdrawal = exports.requestStaffWithdrawal = exports.updateStaffProfile = exports.createStaffAccount = exports.applyReferralCode = exports.createDriverProfileCallable = exports.verifyEmailOtp = exports.sendCustomPasswordResetEmail = exports.requestEmailOtp = void 0;
-exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
+exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
 exports.encryptTransactPayPayload = encryptTransactPayPayload;
 exports.transactpayRequest = transactpayRequest;
 const node_crypto_1 = __importDefault(require("node:crypto"));
@@ -5827,4 +5827,304 @@ exports.confirmSelfDriveReturn = (0, https_1.onCall)({ region: REGION_PRIMARY },
     });
     logger.info("Self-drive return confirmed", { bookingId, uid });
     return { success: true };
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Manual Wallet Adjustments & Lookups
+// ─────────────────────────────────────────────────────────────────────────────
+exports.adminLookupUserForAdjustment = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication required.");
+    }
+    const [adminSnap, staffSnap] = await Promise.all([
+        admin.firestore().collection("admins").doc(request.auth.uid).get(),
+        admin.firestore().collection("staff").doc(request.auth.uid).get(),
+    ]);
+    if (!adminSnap.exists && !staffSnap.exists) {
+        throw new https_1.HttpsError("permission-denied", "Unauthorized. Administrator or Staff access required.");
+    }
+    const queryStr = String(request.data?.query ?? "").trim();
+    if (!queryStr) {
+        throw new https_1.HttpsError("invalid-argument", "Search query is required.");
+    }
+    const queryLower = queryStr.toLowerCase();
+    const results = [];
+    const seenUids = new Set();
+    const addCustomerDoc = (docSnap) => {
+        if (!docSnap.exists || seenUids.has(docSnap.id))
+            return;
+        seenUids.add(docSnap.id);
+        const d = docSnap.data() ?? {};
+        results.push({
+            uid: docSnap.id,
+            fullName: String(d.fullName ?? ""),
+            email: String(d.email ?? ""),
+            phone: String(d.phone ?? ""),
+            accountType: "customer",
+            walletBalance: typeof d.walletBalance === "number" ? d.walletBalance : 0,
+            photoUrl: String(d.photoUrl ?? d.profilePhotoUrl ?? d.avatarUrl ?? ""),
+        });
+    };
+    const addDriverDoc = (docSnap) => {
+        if (!docSnap.exists || seenUids.has(docSnap.id))
+            return;
+        seenUids.add(docSnap.id);
+        const d = docSnap.data() ?? {};
+        results.push({
+            uid: docSnap.id,
+            fullName: String(d.fullName ?? ""),
+            email: String(d.email ?? ""),
+            phone: String(d.phone ?? ""),
+            accountType: "driver",
+            walletBalance: typeof d.walletBalance === "number" ? d.walletBalance : 0,
+            photoUrl: String(d.profilePhotoUrl ?? d.photoUrl ?? d.avatarUrl ?? ""),
+            approvalStatus: String(d.approvalStatus ?? "pending"),
+        });
+    };
+    // 1. Search customers
+    const [customerByEmail, customerByLower, customerById] = await Promise.all([
+        customersCollection.where("email", "==", queryStr).limit(5).get(),
+        customersCollection.where("emailLower", "==", queryLower).limit(5).get(),
+        customersCollection.doc(queryStr).get().catch(() => null),
+    ]);
+    customerByEmail.docs.forEach(addCustomerDoc);
+    customerByLower.docs.forEach(addCustomerDoc);
+    if (customerById && customerById.exists)
+        addCustomerDoc(customerById);
+    // 2. Search drivers
+    const [driverByEmail, driverByLower, driverById] = await Promise.all([
+        driversCollection.where("email", "==", queryStr).limit(5).get(),
+        driversCollection.where("emailLower", "==", queryLower).limit(5).get(),
+        driversCollection.doc(queryStr).get().catch(() => null),
+    ]);
+    driverByEmail.docs.forEach(addDriverDoc);
+    driverByLower.docs.forEach(addDriverDoc);
+    if (driverById && driverById.exists)
+        addDriverDoc(driverById);
+    // 3. Fallback: Search Firebase Auth by email if query looks like email
+    if (results.length === 0 && queryStr.includes("@")) {
+        try {
+            const userRecord = await admin.auth().getUserByEmail(queryStr);
+            if (userRecord && !seenUids.has(userRecord.uid)) {
+                const [cDoc, dDoc] = await Promise.all([
+                    customersCollection.doc(userRecord.uid).get(),
+                    driversCollection.doc(userRecord.uid).get(),
+                ]);
+                if (cDoc.exists)
+                    addCustomerDoc(cDoc);
+                if (dDoc.exists)
+                    addDriverDoc(dDoc);
+            }
+        }
+        catch (_) { }
+    }
+    return { results };
+});
+exports.adminAdjustWalletBalance = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 1 }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication required.");
+    }
+    const [adminSnap, staffSnap] = await Promise.all([
+        admin.firestore().collection("admins").doc(request.auth.uid).get(),
+        admin.firestore().collection("staff").doc(request.auth.uid).get(),
+    ]);
+    if (!adminSnap.exists && !staffSnap.exists) {
+        throw new https_1.HttpsError("permission-denied", "Unauthorized. Only authorized administrators can adjust wallet balances.");
+    }
+    const adminData = adminSnap.exists ? (adminSnap.data() ?? {}) : (staffSnap.data() ?? {});
+    const adminName = String(adminData.fullName ??
+        adminData.name ??
+        (adminData.firstName ? `${adminData.firstName} ${adminData.lastName ?? ""}`.trim() : "") ??
+        request.auth.token.email ??
+        "Administrator");
+    const adminEmail = String(adminData.email ?? request.auth.token.email ?? "");
+    const { userId, userType, adjustmentType, amount, description, idempotencyKey, } = request.data;
+    if (!userId || typeof userId !== "string" || !userId.trim()) {
+        throw new https_1.HttpsError("invalid-argument", "Missing or invalid userId.");
+    }
+    const cleanUserId = userId.trim();
+    if (userType !== "customer" && userType !== "driver") {
+        throw new https_1.HttpsError("invalid-argument", "userType must be 'customer' or 'driver'.");
+    }
+    if (adjustmentType !== "credit" && adjustmentType !== "debit") {
+        throw new https_1.HttpsError("invalid-argument", "adjustmentType must be 'credit' or 'debit'.");
+    }
+    const parsedAmount = Number(amount);
+    if (!parsedAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
+        throw new https_1.HttpsError("invalid-argument", "Adjustment amount must be a positive number greater than 0.");
+    }
+    const normalizedAmount = Math.round(parsedAmount * 100) / 100;
+    const cleanDescription = String(description ?? "").trim();
+    if (!cleanDescription || cleanDescription.length < 3) {
+        throw new https_1.HttpsError("invalid-argument", "A valid description/reason is required (minimum 3 characters).");
+    }
+    // Check duplicate submission via idempotencyKey if provided
+    const cleanKey = idempotencyKey?.trim();
+    if (cleanKey) {
+        const existingAdj = await admin
+            .firestore()
+            .collection("walletAdjustments")
+            .where("idempotencyKey", "==", cleanKey)
+            .limit(1)
+            .get();
+        if (!existingAdj.empty) {
+            const existingData = existingAdj.docs[0].data();
+            logger.info("Duplicate adjustment detected via idempotency key, returning previous record", { cleanKey });
+            return {
+                success: true,
+                isDuplicate: true,
+                transactionId: existingData.transactionId,
+                previousBalance: existingData.previousBalance,
+                resultingBalance: existingData.resultingBalance,
+                amount: existingData.amount,
+                adjustmentType: existingData.adjustmentType,
+            };
+        }
+    }
+    const targetRef = userType === "customer"
+        ? customersCollection.doc(cleanUserId)
+        : driversCollection.doc(cleanUserId);
+    let previousBalance = 0;
+    let resultingBalance = 0;
+    let targetEmail = "";
+    let targetName = "";
+    const txRef = admin.firestore().collection("walletTransactions").doc();
+    const adjRef = admin.firestore().collection("walletAdjustments").doc();
+    await admin.firestore().runTransaction(async (transaction) => {
+        const targetSnap = await transaction.get(targetRef);
+        if (!targetSnap.exists) {
+            throw new https_1.HttpsError("not-found", `${userType === "customer" ? "Customer" : "Driver"} profile not found in database.`);
+        }
+        const userData = targetSnap.data() ?? {};
+        targetEmail = String(userData.email ?? "");
+        targetName = String(userData.fullName ?? "");
+        previousBalance = Number(userData.walletBalance ?? 0);
+        if (isNaN(previousBalance))
+            previousBalance = 0;
+        if (adjustmentType === "debit") {
+            if (previousBalance < normalizedAmount) {
+                throw new https_1.HttpsError("failed-precondition", `Insufficient wallet balance. Available balance is ₦${previousBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}, cannot debit ₦${normalizedAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}.`);
+            }
+            resultingBalance = Math.round((previousBalance - normalizedAmount) * 100) / 100;
+        }
+        else {
+            resultingBalance = Math.round((previousBalance + normalizedAmount) * 100) / 100;
+        }
+        // Update user wallet balance
+        transaction.update(targetRef, {
+            walletBalance: resultingBalance,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Write walletTransactions entry
+        transaction.set(txRef, {
+            uid: cleanUserId,
+            userType: userType,
+            type: adjustmentType === "credit" ? "credit" : "debit",
+            rawType: adjustmentType === "credit" ? "admin_credit" : "admin_debit",
+            category: "admin_adjustment",
+            amountNaira: normalizedAmount,
+            method: "Admin Adjustment",
+            description: cleanDescription,
+            adminId: request.auth.uid,
+            adminEmail: adminEmail,
+            adminName: adminName,
+            previousBalance: previousBalance,
+            resultingBalance: resultingBalance,
+            idempotencyKey: cleanKey || null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Write permanent walletAdjustments audit log
+        transaction.set(adjRef, {
+            adminId: request.auth.uid,
+            adminEmail: adminEmail,
+            adminName: adminName,
+            userId: cleanUserId,
+            userType: userType,
+            userEmail: targetEmail,
+            userName: targetName,
+            adjustmentType: adjustmentType,
+            amount: normalizedAmount,
+            previousBalance: previousBalance,
+            resultingBalance: resultingBalance,
+            description: cleanDescription,
+            transactionId: txRef.id,
+            idempotencyKey: cleanKey || null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Write in-app notification subcollections
+        const formattedAmountStr = normalizedAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 });
+        const notifTitle = adjustmentType === "credit" ? "Wallet Credited" : "Wallet Debited";
+        const notifBody = adjustmentType === "credit"
+            ? `Your wallet has been credited with ₦${formattedAmountStr}. Reason: ${cleanDescription}`
+            : `Your wallet has been debited by ₦${formattedAmountStr}. Reason: ${cleanDescription}`;
+        const notifData = {
+            title: notifTitle,
+            body: notifBody,
+            type: adjustmentType === "credit" ? "admin_credit" : "admin_debit",
+            amount: normalizedAmount,
+            description: cleanDescription,
+            resultingBalance: resultingBalance,
+            isRead: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        const roleNotifRef = (userType === "customer" ? customersCollection : driversCollection)
+            .doc(cleanUserId)
+            .collection("notifications")
+            .doc();
+        transaction.set(roleNotifRef, notifData);
+        const userNotifRef = admin.firestore()
+            .collection("users")
+            .doc(cleanUserId)
+            .collection("notifications")
+            .doc();
+        transaction.set(userNotifRef, notifData);
+        const globalNotifRef = admin.firestore().collection("notifications").doc();
+        transaction.set(globalNotifRef, {
+            ...notifData,
+            recipientId: cleanUserId,
+            recipientType: userType,
+        });
+    });
+    // Send push notification outside transaction
+    try {
+        const formattedAmountStr = normalizedAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 });
+        const pushTitle = adjustmentType === "credit" ? "Wallet Credited" : "Wallet Debited";
+        const pushBody = adjustmentType === "credit"
+            ? `Your wallet has been credited with ₦${formattedAmountStr}. Reason: ${cleanDescription}`
+            : `Your wallet has been debited by ₦${formattedAmountStr}. Reason: ${cleanDescription}`;
+        const pushData = {
+            type: adjustmentType === "credit" ? "admin_credit" : "admin_debit",
+            amount: String(normalizedAmount),
+            description: cleanDescription,
+        };
+        if (userType === "driver") {
+            await sendPushToDriver(cleanUserId, pushTitle, pushBody, pushData);
+        }
+        else {
+            await sendPushToCustomer(cleanUserId, pushTitle, pushBody, pushData);
+        }
+    }
+    catch (pushErr) {
+        logger.warn("Failed to dispatch push notification for wallet adjustment", {
+            userId: cleanUserId,
+            pushErr: String(pushErr),
+        });
+    }
+    logger.info("Admin wallet adjustment completed successfully", {
+        adminId: request.auth.uid,
+        userId: cleanUserId,
+        userType,
+        adjustmentType,
+        amount: normalizedAmount,
+        previousBalance,
+        resultingBalance,
+        transactionId: txRef.id,
+    });
+    return {
+        success: true,
+        transactionId: txRef.id,
+        previousBalance,
+        resultingBalance,
+        amount: normalizedAmount,
+        adjustmentType,
+    };
 });

@@ -501,6 +501,12 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ─── Wallet Adjustments ────────────────────────────────────
+    match /walletAdjustments/{adjustmentId} {
+      allow read: if isAdmin() || isStaff();
+      allow write: if false; // Cloud Functions only
+    }
+
     // ─── Platform Earnings (Commission) ───────────────────────
     match /platformEarnings/{docId} {
       allow read: if isAdmin();

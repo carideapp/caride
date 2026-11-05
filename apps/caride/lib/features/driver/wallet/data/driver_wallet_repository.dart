@@ -16,6 +16,7 @@ class DriverWalletTransaction {
   });
 
   final String id;
+
   /// 'credit' | 'debit'
   final String type;
   final double amountNaira;
@@ -27,12 +28,19 @@ class DriverWalletTransaction {
   bool get isCredit {
     final t = type.toLowerCase().trim();
     final d = description.toLowerCase();
-    if (t == 'debit' || t == 'payout' || t == 'commission_debit') return false;
+    if (t == 'debit' ||
+        t == 'admin_debit' ||
+        t == 'payout' ||
+        t == 'commission_debit' ||
+        d.contains('admin debit'))
+      return false;
     if (t == 'credit' ||
+        t == 'admin_credit' ||
         t == 'referral_credit' ||
         t == 'referral_reward' ||
         t == 'cashback' ||
         t == 'bonus' ||
+        d.contains('admin credit') ||
         d.contains('referral') ||
         d.contains('cashback') ||
         d.contains('earnings')) {
@@ -64,10 +72,10 @@ class DriverWalletRepository {
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
     FirebaseFunctions? functions,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance,
-        _functions = functions ??
-            FirebaseFunctions.instanceFor(region: 'us-east1');
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _functions =
+           functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -79,14 +87,10 @@ class DriverWalletRepository {
     final uid = _uid;
     if (uid == null) return Stream.value(0.0);
 
-    return _firestore
-        .collection('drivers')
-        .doc(uid)
-        .snapshots()
-        .map((doc) {
-          if (!doc.exists) return 0.0;
-          return (doc.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
-        });
+    return _firestore.collection('drivers').doc(uid).snapshots().map((doc) {
+      if (!doc.exists) return 0.0;
+      return (doc.data()?['walletBalance'] as num?)?.toDouble() ?? 0.0;
+    });
   }
 
   Stream<List<DriverWalletTransaction>> streamTransactions() {
@@ -99,10 +103,9 @@ class DriverWalletRepository {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map(
-          (snap) =>
-              snap.docs
-                  .map(DriverWalletTransaction.fromDoc)
-                  .toList(growable: false),
+          (snap) => snap.docs
+              .map(DriverWalletTransaction.fromDoc)
+              .toList(growable: false),
         );
   }
 
@@ -123,7 +126,8 @@ class DriverWalletRepository {
           'Moniepoint Microfinance Bank';
 
       final user = _auth.currentUser;
-      final defaultName = user?.displayName != null && user!.displayName!.isNotEmpty
+      final defaultName =
+          user?.displayName != null && user!.displayName!.isNotEmpty
           ? 'CaRide / ${user.displayName}'
           : 'CaRide Driver';
 
@@ -158,9 +162,11 @@ class DriverWalletRepository {
       final data = driverDoc.data();
       if (data != null) {
         final num = data['virtualAccountNumber'] as String?;
-        final bank = (data['virtualAccountBankName'] as String?) ??
+        final bank =
+            (data['virtualAccountBankName'] as String?) ??
             'Moniepoint Microfinance Bank';
-        final name = (data['virtualAccountName'] as String?) ??
+        final name =
+            (data['virtualAccountName'] as String?) ??
             (user.displayName?.isNotEmpty == true
                 ? 'CaRide / ${user.displayName}'
                 : 'CaRide Driver');
@@ -196,8 +202,7 @@ class DriverWalletRepository {
           (user.displayName?.isNotEmpty == true
               ? 'CaRide / ${user.displayName}'
               : 'CaRide Driver');
-      final accountNumber =
-          (resData['accountNumber'] as String?)?.trim() ?? '';
+      final accountNumber = (resData['accountNumber'] as String?)?.trim() ?? '';
 
       final finalNumber = accountNumber.isNotEmpty
           ? accountNumber

@@ -950,7 +950,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
                         style: AppTextStyles.titleLarge.copyWith(
                           fontWeight: FontWeight.w900,
                           fontSize: 20,
-                          color: Colors.black,
+                          color: isDark ? Colors.white : Colors.black,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -1079,7 +1079,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
                         style: AppTextStyles.titleLarge.copyWith(
                           fontWeight: FontWeight.w900,
                           fontSize: 20,
-                          color: Colors.black,
+                          color: isDark ? Colors.white : Colors.black,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),

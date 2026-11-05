@@ -27,6 +27,12 @@ class WalletScreen extends StatelessWidget {
   String _getTransactionTitle(WalletTransaction t) {
     final desc = t.description.toLowerCase();
     final rawType = t.rawType.toLowerCase();
+    if (rawType == 'admin_credit' || desc.contains('admin credit')) {
+      return 'Admin Credit';
+    }
+    if (rawType == 'admin_debit' || desc.contains('admin debit')) {
+      return 'Admin Debit';
+    }
     if (rawType == 'first_ride_cashback' || desc.contains('first ride')) {
       return 'First Ride Cashback';
     }
@@ -268,7 +274,8 @@ class WalletScreen extends StatelessWidget {
                                     color: Colors.white70,
                                   ),
                                 ),
-                                if (profile != null && profile.creditBalance > 0) ...[
+                                if (profile != null &&
+                                    profile.creditBalance > 0) ...[
                                   const SizedBox(height: 14),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -276,10 +283,14 @@ class WalletScreen extends StatelessWidget {
                                       vertical: 7,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.16),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.16,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.25),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.25,
+                                        ),
                                       ),
                                     ),
                                     child: Row(
@@ -393,19 +404,28 @@ class WalletScreen extends StatelessWidget {
                                       ?.toDouble();
 
                               return StreamBuilder<
-                                ({bool isActive, double amount, String destination})
+                                ({
+                                  bool isActive,
+                                  double amount,
+                                  String destination,
+                                })
                               >(
                                 stream: CashbackService.instance
                                     .watchCashbackConfig(),
                                 builder: (context, configSnap) {
                                   final config =
                                       configSnap.data ??
-                                      (isActive: true, amount: 500.0, destination: 'subsidy_wallet');
+                                      (
+                                        isActive: true,
+                                        amount: 500.0,
+                                        destination: 'subsidy_wallet',
+                                      );
                                   if (!config.isActive && !hasReceived) {
                                     return const SizedBox.shrink();
                                   }
 
-                                  final destLabel = config.destination == 'subsidy_wallet'
+                                  final destLabel =
+                                      config.destination == 'subsidy_wallet'
                                       ? 'Subsidy Wallet'
                                       : 'wallet';
 
@@ -626,20 +646,33 @@ class WalletScreen extends StatelessWidget {
                                         : (isCredit
                                               ? Icons.arrow_downward_rounded
                                               : Icons.arrow_outward_rounded);
-                                    final badgeLabel = isCashback
-                                        ? (t.rawType == 'first_ride_cashback' ||
-                                                t.description
-                                                    .toLowerCase()
-                                                    .contains('first ride')
-                                            ? '🎁 1st Ride'
-                                            : '🎁 Cashback')
-                                        : (isCredit
-                                              ? (t.rawType == 'referral'
-                                                    ? '↙ Referral'
-                                                    : '↙ Top Up')
-                                              : (title.contains('Withdrawal')
-                                                    ? '↗ Payout'
-                                                    : '↗ Payment'));
+                                    final badgeLabel =
+                                        (t.rawType == 'admin_credit' ||
+                                            title == 'Admin Credit')
+                                        ? '⚙ Admin Credit'
+                                        : ((t.rawType == 'admin_debit' ||
+                                                  title == 'Admin Debit')
+                                              ? '⚙ Admin Debit'
+                                              : (isCashback
+                                                    ? (t.rawType ==
+                                                                  'first_ride_cashback' ||
+                                                              t.description
+                                                                  .toLowerCase()
+                                                                  .contains(
+                                                                    'first ride',
+                                                                  )
+                                                          ? '🎁 1st Ride'
+                                                          : '🎁 Cashback')
+                                                    : (isCredit
+                                                          ? (t.rawType ==
+                                                                    'referral'
+                                                                ? '↙ Referral'
+                                                                : '↙ Top Up')
+                                                          : (title.contains(
+                                                                  'Withdrawal',
+                                                                )
+                                                                ? '↗ Payout'
+                                                                : '↗ Payment'))));
 
                                     return InkWell(
                                       borderRadius: BorderRadius.circular(20),
