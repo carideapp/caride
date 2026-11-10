@@ -5,8 +5,7 @@ import 'package:caride/core/driver/utils/maps_launcher.dart';
 import 'package:caride/features/driver/location/driver_presence_controller.dart';
 import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'
-    show Clipboard, ClipboardData, HapticFeedback;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, HapticFeedback;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:caride/core/driver/config/app_env.dart';
 import 'package:caride/core/utils/phone_launcher.dart';
@@ -55,23 +54,15 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
     } catch (e) {
       if (mounted) {
         final raw = e.toString().toLowerCase();
-        String userFriendlyError =
-            'Unable to complete ride. Please check your connection and try again.';
-        if (raw.contains('network') ||
-            raw.contains('unavailable') ||
-            raw.contains('connection')) {
-          userFriendlyError =
-              'Network connection issue. Please check your internet connection and tap "End Ride" again.';
+        String userFriendlyError = 'Unable to complete ride. Please check your connection and try again.';
+        if (raw.contains('network') || raw.contains('unavailable') || raw.contains('connection')) {
+          userFriendlyError = 'Network connection issue. Please check your internet connection and tap "End Ride" again.';
         } else if (raw.contains('not the assigned driver')) {
-          userFriendlyError =
-              'You are not listed as the assigned driver for this ride.';
-        } else if (raw.contains('not in started state') ||
-            raw.contains('failed-precondition')) {
-          userFriendlyError =
-              'The ride status has changed. Please refresh your trip status.';
+          userFriendlyError = 'You are not listed as the assigned driver for this ride.';
+        } else if (raw.contains('not in started state') || raw.contains('failed-precondition')) {
+          userFriendlyError = 'The ride status has changed. Please refresh your trip status.';
         } else if (raw.contains('not found')) {
-          userFriendlyError =
-              'Ride details could not be found. Please refresh your trip status.';
+          userFriendlyError = 'Ride details could not be found. Please refresh your trip status.';
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -79,9 +70,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
             content: Text(userFriendlyError),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
         );
       }
@@ -96,9 +85,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: isDark
-          ? AppColors.darkBackground
-          : AppColors.lightBackground,
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
       appBar: GlassAppBar(
         leading: Navigator.of(context).canPop()
             ? IconButton(
@@ -128,8 +115,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                 ),
               );
             }
-            if (ride.status == 'driverEnRoute' ||
-                ride.status == 'driverArrived') {
+            if (ride.status == 'driverEnRoute' || ride.status == 'driverArrived') {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
                 context.pushReplacement(DriverRoutePaths.tripPickup);
@@ -137,16 +123,14 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
               return const Center(child: AppLoader());
             }
 
-            final displayFare =
-                ride.finalFare ?? ride.amountNaira ?? ride.customerOffer;
+            final displayFare = ride.finalFare ?? ride.amountNaira ?? ride.customerOffer;
 
             Widget mapPreview;
             if (ride.pickupLat != null &&
                 ride.pickupLng != null &&
                 ride.dropoffLat != null &&
                 ride.dropoffLng != null) {
-              final staticMapUrl =
-                  'https://maps.googleapis.com/maps/api/staticmap'
+              final staticMapUrl = 'https://maps.googleapis.com/maps/api/staticmap'
                   '?size=600x340'
                   '&scale=2'
                   '&theme=dark'
@@ -163,15 +147,9 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                   width: double.infinity,
                   errorBuilder: (context, error, stackTrace) => Container(
                     height: 180,
-                    color: isDark
-                        ? AppColors.darkSurfaceRaised
-                        : AppColors.lightSurfaceRaised,
+                    color: isDark ? AppColors.darkSurfaceRaised : AppColors.lightSurfaceRaised,
                     child: const Center(
-                      child: Icon(
-                        Icons.map_outlined,
-                        size: 48,
-                        color: AppColors.brand,
-                      ),
+                      child: Icon(Icons.map_outlined, size: 48, color: AppColors.brand),
                     ),
                   ),
                 ),
@@ -180,17 +158,11 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
               mapPreview = Container(
                 height: 180,
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.darkSurfaceRaised
-                      : AppColors.lightSurfaceRaised,
+                  color: isDark ? AppColors.darkSurfaceRaised : AppColors.lightSurfaceRaised,
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: const Center(
-                  child: Icon(
-                    Icons.map_outlined,
-                    size: 48,
-                    color: AppColors.brand,
-                  ),
+                  child: Icon(Icons.map_outlined, size: 48, color: AppColors.brand),
                 ),
               );
             }
@@ -200,10 +172,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                 children: [
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.pagePadding,
-                        vertical: AppSpacing.md,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -216,8 +185,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: PrimaryButton(
-                                    onPressed: () =>
-                                        _openDropoffDirections(ride),
+                                    onPressed: () => _openDropoffDirections(ride),
                                     icon: Icons.navigation_rounded,
                                     label: 'Get Route Directions',
                                   ),
@@ -231,10 +199,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                   ),
 
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.pagePadding,
-                      vertical: AppSpacing.md,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
                     child: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                       future: FirebaseFirestore.instance
                           .collection('customers')
@@ -242,15 +207,11 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                           .get(),
                       builder: (context, userSnap) {
                         final userData = userSnap.data?.data();
-                        final fullName =
-                            userData?['fullName'] as String? ?? 'Customer';
+                        final fullName = userData?['fullName'] as String? ?? 'Customer';
                         final phone = userData?['phone'] as String? ?? '';
-                        final isCustomerVerified =
-                            (userData?['isVerified'] == true) ||
+                        final isCustomerVerified = (userData?['isVerified'] == true) ||
                             (userData?['isNinVerified'] == true) ||
-                            ((userData?['verificationStatus'] as String?)
-                                    ?.toLowerCase() ==
-                                'verified');
+                            ((userData?['verificationStatus'] as String?)?.toLowerCase() == 'verified');
                         return GlassContainer(
                           padding: const EdgeInsets.all(AppSpacing.md),
                           child: Column(
@@ -265,8 +226,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                   const SizedBox(width: AppSpacing.sm),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -274,8 +234,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                             Flexible(
                                               child: Text(
                                                 fullName,
-                                                style:
-                                                    AppTextStyles.titleMedium,
+                                                style: AppTextStyles.titleMedium,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -293,14 +252,9 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                         if (phone.isNotEmpty)
                                           Text(
                                             phone,
-                                            style: AppTextStyles.bodySmall
-                                                .copyWith(
-                                                  color: isDark
-                                                      ? AppColors
-                                                            .textSecondaryDark
-                                                      : AppColors
-                                                            .textSecondaryLight,
-                                                ),
+                                            style: AppTextStyles.bodySmall.copyWith(
+                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                            ),
                                           )
                                         else
                                           Text(
@@ -310,11 +264,10 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                         const SizedBox(height: 4),
                                         Text(
                                           NgnFormat.whole(displayFare),
-                                          style: AppTextStyles.titleMedium
-                                              .copyWith(
-                                                color: AppColors.brand,
-                                                fontWeight: FontWeight.w900,
-                                              ),
+                                          style: AppTextStyles.titleMedium.copyWith(
+                                            color: AppColors.brand,
+                                            fontWeight: FontWeight.w900,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -322,36 +275,21 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                   // Call icon button
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: AppColors.brand.withValues(
-                                        alpha: 0.12,
-                                      ),
+                                      color: AppColors.brand.withValues(alpha: 0.12),
                                       shape: BoxShape.circle,
                                     ),
                                     child: IconButton(
-                                      icon: const Icon(
-                                        Icons.phone_rounded,
-                                        color: AppColors.brand,
-                                        size: 20,
-                                      ),
+                                      icon: const Icon(Icons.phone_rounded, color: AppColors.brand, size: 20),
                                       tooltip: 'Call Rider',
                                       onPressed: () async {
                                         if (phone.isNotEmpty) {
-                                          final phoneUri = Uri(
-                                            scheme: 'tel',
-                                            path: phone,
-                                          );
+                                          final phoneUri = Uri(scheme: 'tel', path: phone);
                                           if (await canLaunchUrl(phoneUri)) {
                                             await launchUrl(phoneUri);
                                           }
                                         } else {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Rider phone number not available.',
-                                              ),
-                                            ),
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Rider phone number not available.')),
                                           );
                                         }
                                       },
@@ -361,17 +299,11 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                   // Chat icon button
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: AppColors.brand.withValues(
-                                        alpha: 0.12,
-                                      ),
+                                      color: AppColors.brand.withValues(alpha: 0.12),
                                       shape: BoxShape.circle,
                                     ),
                                     child: IconButton(
-                                      icon: const Icon(
-                                        Icons.chat_bubble_rounded,
-                                        color: AppColors.brand,
-                                        size: 20,
-                                      ),
+                                      icon: const Icon(Icons.chat_bubble_rounded, color: AppColors.brand, size: 20),
                                       tooltip: 'Chat with Rider',
                                       onPressed: () => context.push(
                                         DriverRoutePaths.conversation,
@@ -386,17 +318,13 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                               ),
                               const SizedBox(height: AppSpacing.md),
                               GlassContainer(
-                                tint: isDark
-                                    ? AppColors.darkSurfaceRaised
-                                    : AppColors.lightSurfaceRaised,
+                                tint: isDark ? AppColors.darkSurfaceRaised : AppColors.lightSurfaceRaised,
                                 padding: const EdgeInsets.all(AppSpacing.md),
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
                                     Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         const Padding(
                                           padding: EdgeInsets.only(top: 2),
@@ -409,17 +337,12 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                         const SizedBox(width: AppSpacing.sm),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 'DROPOFF ADDRESS',
                                                 style: AppTextStyles.caption.copyWith(
-                                                  color: isDark
-                                                      ? AppColors
-                                                            .textSecondaryDark
-                                                      : AppColors
-                                                            .textSecondaryLight,
+                                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -432,42 +355,25 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                           ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(
-                                            Icons.copy_rounded,
-                                            size: 18,
-                                          ),
+                                          icon: const Icon(Icons.copy_rounded, size: 18),
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(),
                                           onPressed: () {
-                                            Clipboard.setData(
-                                              ClipboardData(
-                                                text: ride.dropoffLabel,
-                                              ),
-                                            );
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Dropoff address copied!',
-                                                ),
-                                              ),
+                                            Clipboard.setData(ClipboardData(text: ride.dropoffLabel));
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Dropoff address copied!')),
                                             );
                                           },
                                         ),
                                       ],
                                     ),
-                                    if (ride.rideType.toLowerCase() ==
-                                        'courier') ...[
+                                    if (ride.rideType.toLowerCase() == 'courier') ...[
                                       const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: AppSpacing.xs,
-                                        ),
+                                        padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
                                         child: Divider(),
                                       ),
                                       Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
                                         children: [
                                           const Padding(
                                             padding: EdgeInsets.only(top: 2),
@@ -480,104 +386,60 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                           const SizedBox(width: AppSpacing.sm),
                                           Expanded(
                                             child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(
                                                   'RECEIVER DETAILS',
                                                   style: AppTextStyles.caption.copyWith(
-                                                    color: isDark
-                                                        ? AppColors
-                                                              .textSecondaryDark
-                                                        : AppColors
-                                                              .textSecondaryLight,
+                                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                                     fontWeight: FontWeight.bold,
                                                   ),
                                                 ),
                                                 const SizedBox(height: 2),
                                                 Text(
                                                   '${ride.receiverName ?? "—"} (${ride.receiverPhone ?? "—"})',
-                                                  style:
-                                                      AppTextStyles.bodyMedium,
+                                                  style: AppTextStyles.bodyMedium,
                                                 ),
                                               ],
                                             ),
                                           ),
-                                          if (ride.receiverPhone != null &&
-                                              ride
-                                                  .receiverPhone!
-                                                  .isNotEmpty) ...[
+                                          if (ride.receiverPhone != null && ride.receiverPhone!.isNotEmpty) ...[
                                             IconButton(
-                                              icon: const Icon(
-                                                Icons.phone_enabled_rounded,
-                                                size: 18,
-                                                color: AppColors.brand,
-                                              ),
+                                              icon: const Icon(Icons.phone_enabled_rounded, size: 18, color: AppColors.brand),
                                               padding: EdgeInsets.zero,
-                                              constraints:
-                                                  const BoxConstraints(),
+                                              constraints: const BoxConstraints(),
                                               onPressed: () async {
-                                                final ok =
-                                                    await PhoneLauncher.call(
-                                                      ride.receiverPhone!,
-                                                    );
+                                                final ok = await PhoneLauncher.call(ride.receiverPhone!);
                                                 if (!context.mounted) return;
                                                 if (!ok) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Unable to place call.',
-                                                      ),
-                                                    ),
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(content: Text('Unable to place call.')),
                                                   );
                                                 }
                                               },
                                             ),
-                                            const SizedBox(
-                                              width: AppSpacing.md,
-                                            ),
+                                            const SizedBox(width: AppSpacing.md),
                                             IconButton(
-                                              icon: const Icon(
-                                                Icons.copy_rounded,
-                                                size: 18,
-                                              ),
+                                              icon: const Icon(Icons.copy_rounded, size: 18),
                                               padding: EdgeInsets.zero,
-                                              constraints:
-                                                  const BoxConstraints(),
+                                              constraints: const BoxConstraints(),
                                               onPressed: () {
-                                                Clipboard.setData(
-                                                  ClipboardData(
-                                                    text:
-                                                        '${ride.receiverName ?? ""} - ${ride.receiverPhone ?? ""}',
-                                                  ),
-                                                );
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'Receiver details copied!',
-                                                    ),
-                                                  ),
+                                                Clipboard.setData(ClipboardData(text: '${ride.receiverName ?? ""} - ${ride.receiverPhone ?? ""}'));
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Receiver details copied!')),
                                                 );
                                               },
                                             ),
                                           ],
                                         ],
                                       ),
-                                      if (ride.deliveryPin != null &&
-                                          ride.deliveryPin!.isNotEmpty) ...[
+                                      if (ride.deliveryPin != null && ride.deliveryPin!.isNotEmpty) ...[
                                         const Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: AppSpacing.xs,
-                                          ),
+                                          padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
                                           child: Divider(),
                                         ),
                                         Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             const Padding(
                                               padding: EdgeInsets.only(top: 2),
@@ -587,32 +449,22 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                                                 size: 16,
                                               ),
                                             ),
-                                            const SizedBox(
-                                              width: AppSpacing.sm,
-                                            ),
+                                            const SizedBox(width: AppSpacing.sm),
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
                                                     'DELIVERY PIN',
-                                                    style: AppTextStyles.caption
-                                                        .copyWith(
-                                                          color: isDark
-                                                              ? AppColors
-                                                                    .textSecondaryDark
-                                                              : AppColors
-                                                                    .textSecondaryLight,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
+                                                    style: AppTextStyles.caption.copyWith(
+                                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                                      fontWeight: FontWeight.bold,
+                                                  ),
                                                   ),
                                                   const SizedBox(height: 2),
                                                   Text(
                                                     ride.deliveryPin!,
-                                                    style: AppTextStyles
-                                                        .bodyMedium,
+                                                    style: AppTextStyles.bodyMedium,
                                                   ),
                                                 ],
                                               ),
@@ -659,8 +511,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
               left: AppSpacing.pagePadding,
               right: AppSpacing.pagePadding,
               top: AppSpacing.md,
-              bottom:
-                  AppSpacing.md + MediaQuery.of(sheetContext).viewInsets.bottom,
+              bottom: AppSpacing.md + MediaQuery.of(sheetContext).viewInsets.bottom,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -698,9 +549,7 @@ class _TripActiveScreenState extends State<TripActiveScreen> {
                         HapticFeedback.vibrate();
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
                           const SnackBar(
-                            content: Text(
-                              'Incorrect Delivery PIN. Please try again.',
-                            ),
+                            content: Text('Incorrect Delivery PIN. Please try again.'),
                             backgroundColor: AppColors.error,
                           ),
                         );

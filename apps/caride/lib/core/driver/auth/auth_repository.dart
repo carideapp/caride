@@ -11,10 +11,13 @@ class DriverAuthRepository {
     FirebaseAuth? auth,
     FirebaseFunctions? functions,
     FirebaseFirestore? firestore,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _functions =
-            functions ?? FirebaseFunctions.instanceFor(region: AppEnv.firebaseFunctionsRegion),
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _functions =
+           functions ??
+           FirebaseFunctions.instanceFor(
+             region: AppEnv.firebaseFunctionsRegion,
+           ),
+       _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFunctions _functions;
@@ -23,7 +26,6 @@ class DriverAuthRepository {
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
   User? get currentUser => _auth.currentUser;
-
 
   Future<AuthChallenge> requestEmailOtp({
     required String email,
@@ -115,8 +117,11 @@ class DriverAuthRepository {
     final driverRef = _firestore.collection('drivers').doc(user.uid);
 
     try {
+      final cleanEmail = email.trim();
       final callable = _functions.httpsCallable('createDriverProfileCallable');
       await callable.call<Map<String, dynamic>>({
+        if (cleanEmail.isNotEmpty && !cleanEmail.endsWith('@phone.caride.com'))
+          'email': cleanEmail,
         'referredByCode': referralCode,
         'fullName': fullName,
         'phone': phone,
@@ -128,11 +133,14 @@ class DriverAuthRepository {
       });
     } catch (e) {
       debugPrint('Failed to provision driver profile via callable: $e');
+      final cleanFallbackEmail = email.trim().endsWith('@phone.caride.com')
+          ? ''
+          : email.trim();
       final snapshot = await driverRef.get();
       if (!snapshot.exists) {
         await driverRef.set({
           'uid': user.uid,
-          'email': email,
+          'email': cleanFallbackEmail,
           'role': 'driver',
           'profileCompleted': false,
           'createdAt': now,
@@ -201,7 +209,10 @@ class DriverAuthRepository {
     // Verify this user belongs to the 'drivers' collection.
     final uid = credential.user?.uid;
     if (uid != null) {
-      final customerDoc = await _firestore.collection('customers').doc(uid).get();
+      final customerDoc = await _firestore
+          .collection('customers')
+          .doc(uid)
+          .get();
       final driverDoc = await _firestore.collection('drivers').doc(uid).get();
 
       if (!driverDoc.exists) {
@@ -314,14 +325,18 @@ class DriverAuthRepository {
 
     // 1. Try the Cloud Function first (mirrors createDriverProfileCallable pattern)
     try {
-      final callable = _functions.httpsCallable('createCustomerProfileCallable');
+      final callable = _functions.httpsCallable(
+        'createCustomerProfileCallable',
+      );
       await callable.call<Map<String, dynamic>>({
         'fullName': fullName,
         'phone': phone,
         if (profilePhotoUrl != null) 'photoUrl': profilePhotoUrl,
       });
     } catch (e) {
-      debugPrint('Cloud Function createCustomerProfileCallable failed: $e — falling back to Firestore');
+      debugPrint(
+        'Cloud Function createCustomerProfileCallable failed: $e — falling back to Firestore',
+      );
       // 2. Fallback: write directly to Firestore using merge to preserve fields like fcmToken
       await customerRef.set({
         'uid': user.uid,
@@ -331,7 +346,8 @@ class DriverAuthRepository {
         'profileCompleted': true,
         'fullName': fullName ?? '',
         if (phone != null && phone.isNotEmpty) 'phone': phone,
-        if (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty) 'photoUrl': profilePhotoUrl,
+        if (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty)
+          'photoUrl': profilePhotoUrl,
         'walletBalance': 0.0,
         'referralCode': '',
         'referralEarnings': 0.0,

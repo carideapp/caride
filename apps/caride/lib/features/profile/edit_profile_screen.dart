@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:caride/core/utils/safe_image_picker.dart';
 import 'package:caride/features/profile/data/account_repository.dart';
 import 'package:design_system/design_system.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:navigation/navigation.dart';
@@ -21,6 +22,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   
   late TextEditingController _nameController;
+  late TextEditingController _emailController;
   late TextEditingController _phoneController;
 
   bool _loading = false;
@@ -33,6 +35,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController();
+    _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _loadProfile();
   }
@@ -40,8 +43,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _loadProfile() async {
     final profile = await _accountRepo.watchProfile().first;
     if (profile != null && mounted) {
+      String resolvedEmail = profile.email.trim();
+      if (resolvedEmail.isEmpty || resolvedEmail.endsWith('@phone.caride.com')) {
+        final authEmail = FirebaseAuth.instance.currentUser?.email?.trim() ?? '';
+        if (authEmail.isNotEmpty && !authEmail.endsWith('@phone.caride.com')) {
+          resolvedEmail = authEmail;
+        } else {
+          resolvedEmail = '';
+        }
+      }
+
       setState(() {
         _nameController.text = profile.fullName;
+        _emailController.text = resolvedEmail;
         _phoneController.text = profile.phone;
         _currentPhotoUrl = profile.photoUrl;
         _initialized = true;
@@ -52,6 +66,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -276,6 +291,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               if (val == null || val.trim().isEmpty) return 'Please enter your name';
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Email Address',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _emailController,
+                            readOnly: true,
+                            canRequestFocus: false,
+                            style: TextStyle(fontSize: 15, color: secondaryTextColor),
+                            decoration: InputDecoration(
+                              hintText: 'No email address registered',
+                              hintStyle: TextStyle(fontSize: 14, color: secondaryTextColor),
+                              filled: true,
+                              fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF3F4F6),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                              prefixIcon: Icon(Icons.email_outlined, color: secondaryTextColor, size: 20),
+                              suffixIcon: Icon(Icons.lock_outline_rounded, color: secondaryTextColor, size: 18),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+                            ),
                           ),
                           const SizedBox(height: 20),
                           Text(

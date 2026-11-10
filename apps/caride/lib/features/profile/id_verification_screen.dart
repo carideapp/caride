@@ -1,9 +1,23 @@
 import 'package:caride/core/auth/customer_auth_controller.dart';
+import 'package:caride/core/config/app_config_repository.dart';
 import 'package:caride/features/profile/data/account_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:navigation/navigation.dart';
+
+String _formatNairaAmount(double amount) {
+  final rounded = amount.round();
+  final digits = rounded.toString();
+  final buffer = StringBuffer();
+  for (int i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) {
+      buffer.write(',');
+    }
+    buffer.write(digits[i]);
+  }
+  return '₦${buffer.toString()}';
+}
 
 /// Customer ID Verification (NIN KYC) Screen.
 ///
@@ -20,9 +34,35 @@ class IdVerificationScreen extends StatefulWidget {
 
 class _IdVerificationScreenState extends State<IdVerificationScreen> {
   final AccountRepository _accountRepo = AccountRepository();
+  final AppConfigRepository _configRepo = AppConfigRepository();
 
-  void _openNinVerificationSheet(BuildContext context, AccountProfile? profile) {
+  Future<void> _handleVerifyWithNinTap(
+    BuildContext context,
+    AccountProfile? profile,
+    double ninAmount,
+  ) async {
     HapticFeedback.lightImpact();
+    final walletBalance = profile?.walletBalance ?? 0.0;
+
+    if (ninAmount > 0 && walletBalance < ninAmount) {
+      await _showInsufficientBalanceDialog(
+        context,
+        ninAmount: ninAmount,
+        walletBalance: walletBalance,
+      );
+      return;
+    }
+
+    if (ninAmount > 0) {
+      final confirmed = await _showNinChargeConfirmationDialog(
+        context,
+        ninAmount: ninAmount,
+        walletBalance: walletBalance,
+      );
+      if (confirmed != true || !context.mounted) return;
+    }
+
+    if (!context.mounted) return;
     showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -31,6 +71,233 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
       builder: (sheetCtx) => _NinEntryBottomSheet(
         accountRepo: _accountRepo,
         customerFullName: profile?.fullName ?? '',
+        ninAmount: ninAmount,
+      ),
+    );
+  }
+
+  Future<void> _showInsufficientBalanceDialog(
+    BuildContext context, {
+    required double ninAmount,
+    required double walletBalance,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor =
+        isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563);
+    final formattedFee = _formatNairaAmount(ninAmount);
+    final formattedBal = _formatNairaAmount(walletBalance);
+
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.account_balance_wallet_rounded,
+                color: AppColors.error,
+                size: 30,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Insufficient Balance',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: primaryTextColor,
+                letterSpacing: -0.4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Insufficient wallet balance. Your current balance is $formattedBal. Please top up $formattedFee to complete NIN verification.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w500,
+                color: secondaryTextColor,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                icon: const Icon(Icons.add_card_rounded, size: 20),
+                label: Text(
+                  'Top Up $formattedFee',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(sheetCtx).pop();
+                  context.push(CustomerRoutePaths.typeAmount);
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => Navigator.of(sheetCtx).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: secondaryTextColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<bool?> _showNinChargeConfirmationDialog(
+    BuildContext context, {
+    required double ninAmount,
+    required double walletBalance,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+    final secondaryTextColor =
+        isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563);
+    final formattedFee = _formatNairaAmount(ninAmount);
+    final formattedBal = _formatNairaAmount(walletBalance);
+
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppColors.brand.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.verified_user_rounded,
+                color: AppColors.brand,
+                size: 30,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'NIN Verification Fee',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: primaryTextColor,
+                letterSpacing: -0.4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '$formattedFee will be charged from your wallet for NIN verification. Your current wallet balance is $formattedBal.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w500,
+                color: secondaryTextColor,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                onPressed: () => Navigator.of(sheetCtx).pop(true),
+                child: Text(
+                  'Continue ($formattedFee)',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => Navigator.of(sheetCtx).pop(false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: secondaryTextColor,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -231,32 +498,45 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                             ],
                           ),
                         )
-                      : SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brand,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
+                      : StreamBuilder<double>(
+                          stream: _configRepo.watchNinAmount(),
+                          initialData: 0.0,
+                          builder: (context, feeSnap) {
+                            final ninAmount = feeSnap.data ?? 0.0;
+                            final buttonLabel = ninAmount > 0
+                                ? 'Verify with NIN (${_formatNairaAmount(ninAmount)})'
+                                : 'Verify with NIN';
+                            return SizedBox(
+                              width: double.infinity,
+                              height: 56,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brand,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(28),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.verified_user_rounded,
+                                  size: 20,
+                                ),
+                                label: Text(
+                                  buttonLabel,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                onPressed: () => _handleVerifyWithNinTap(
+                                  context,
+                                  profile,
+                                  ninAmount,
+                                ),
                               ),
-                            ),
-                            icon: const Icon(
-                              Icons.verified_user_rounded,
-                              size: 20,
-                            ),
-                            label: const Text(
-                              'Verify with NIN',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            onPressed: () =>
-                                _openNinVerificationSheet(context, profile),
-                          ),
+                            );
+                          },
                         ),
                 ),
               ],
@@ -674,10 +954,12 @@ class _NinEntryBottomSheet extends StatefulWidget {
   const _NinEntryBottomSheet({
     required this.accountRepo,
     required this.customerFullName,
+    this.ninAmount = 0.0,
   });
 
   final AccountRepository accountRepo;
   final String customerFullName;
+  final double ninAmount;
 
   @override
   State<_NinEntryBottomSheet> createState() => _NinEntryBottomSheetState();
@@ -977,9 +1259,11 @@ class _NinEntryBottomSheetState extends State<_NinEntryBottomSheet> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text(
-                        'Verify Identity',
-                        style: TextStyle(
+                    : Text(
+                        widget.ninAmount > 0
+                            ? 'Verify Identity (${_formatNairaAmount(widget.ninAmount)})'
+                            : 'Verify Identity',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),

@@ -16,6 +16,7 @@ import 'package:caride/core/services/app_update_service.dart';
 import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
 import 'package:caride/core/config/app_config_repository.dart';
 import 'package:caride/features/driver/widgets/driver_debt_prompt_bottom_sheet.dart';
+import 'package:caride/features/driver/profile/driver_vehicle_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_models/shared_models.dart';
 import 'package:shared_widgets/shared_widgets.dart';
@@ -182,7 +183,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           _walletBalance = profile.walletBalance;
           if (!profile.profileCompleted && !_promptedCompleteProfile) {
             _promptedCompleteProfile = true;
-            _showCompleteProfileDialog();
+            _showCompleteProfileBottomSheet();
           }
         }
       });
@@ -199,73 +200,125 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     });
   }
 
-  void _showCompleteProfileDialog() {
+  void _showCompleteProfileBottomSheet() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showDialog(
+      showModalBottomSheet<void>(
         context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: Colors.transparent,
-          contentPadding: EdgeInsets.zero,
-          content: GlassSurface(
-            radius: AppRadius.lg,
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandGlass,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.assignment_ind_outlined,
-                    color: AppColors.brand,
-                    size: 40,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  'Complete Your Profile',
-                  style: AppTextStyles.headlineSmall.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'To start accepting ride requests and earning with CaRide, please complete your driver registration profile details.',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyMedium,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SecondaryButton(
-                        label: 'Later',
-                        onPressed: () => Navigator.pop(dialogContext),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: PrimaryButton(
-                        label: 'Go to Profile',
-                        onPressed: () {
-                          Navigator.pop(dialogContext);
-                          // GoRouter redirects to driver profile page branch
-                          context.go(DriverRoutePaths.profile);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+        isScrollControlled: true,
+        useRootNavigator: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+          final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
+          final secondaryTextColor =
+              isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563);
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.85,
             ),
-          ),
-        ),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 12,
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 28,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Top Drag Handle
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4.5,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+
+                  // Circle Icon
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.brand.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.assignment_ind_outlined,
+                        color: AppColors.brand,
+                        size: 40,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Headline
+                  Text(
+                    'Complete Your Profile',
+                    style: AppTextStyles.headlineSmall.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: primaryTextColor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Subline
+                  Text(
+                    'To start accepting ride requests and earning with CaRide, please complete your driver registration profile details.',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: secondaryTextColor,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  // Go to Profile Button (Full Width, No Truncation)
+                  PrimaryButton(
+                    label: 'Go to Profile',
+                    fullWidth: true,
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DriverVehicleScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+
+                  // Later Button
+                  Center(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: Text(
+                        'Later',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
     });
   }

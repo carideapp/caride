@@ -48,8 +48,9 @@ class WalletTopUpConfig {
           .map((n) => n.toDouble())
           .where((v) => v > 0)
           .toList(growable: false);
-      quickAmountsNaira =
-          values.isEmpty ? WalletTopUpConfig.defaults.quickAmountsNaira : values;
+      quickAmountsNaira = values.isEmpty
+          ? WalletTopUpConfig.defaults.quickAmountsNaira
+          : values;
     } else {
       quickAmountsNaira = WalletTopUpConfig.defaults.quickAmountsNaira;
     }
@@ -63,18 +64,20 @@ class WalletTopUpConfig {
 
 class AppConfigRepository {
   AppConfigRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _customFirestore = firestore;
 
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _customFirestore;
+  FirebaseFirestore get _firestore =>
+      _customFirestore ?? FirebaseFirestore.instance;
 
   Stream<AppDefaults?> watchAppDefaults() {
-    return _firestore.collection('config').doc('appDefaults').snapshots().map(
-      (doc) {
-        final data = doc.data();
-        if (data == null) return null;
-        return AppDefaults.fromMap(data);
-      },
-    );
+    return _firestore.collection('config').doc('appDefaults').snapshots().map((
+      doc,
+    ) {
+      final data = doc.data();
+      if (data == null) return null;
+      return AppDefaults.fromMap(data);
+    });
   }
 
   static const List<String> fallbackCancelReasons = [
@@ -87,40 +90,50 @@ class AppConfigRepository {
   ];
 
   Stream<List<String>> watchCancelRideReasons() {
-    return _firestore.collection('config').doc('cancelRideReasons').snapshots().map(
-      (doc) {
-        final data = doc.data();
-        final reasons = data?['reasons'];
-        if (reasons is! List) return fallbackCancelReasons;
-        final list = reasons.whereType<String>().where((s) => s.trim().isNotEmpty).toList(growable: false);
-        return list.isEmpty ? fallbackCancelReasons : list;
-      },
-    );
+    return _firestore
+        .collection('config')
+        .doc('cancelRideReasons')
+        .snapshots()
+        .map((doc) {
+          final data = doc.data();
+          final reasons = data?['reasons'];
+          if (reasons is! List) return fallbackCancelReasons;
+          final list = reasons
+              .whereType<String>()
+              .where((s) => s.trim().isNotEmpty)
+              .toList(growable: false);
+          return list.isEmpty ? fallbackCancelReasons : list;
+        });
   }
 
   Stream<WalletTopUpConfig> watchWalletTopUpConfig() {
-    return _firestore.collection('config').doc('walletTopUp').snapshots().map(
-      (doc) {
-        final data = doc.data();
-        if (data == null) return WalletTopUpConfig.defaults;
-        return WalletTopUpConfig.fromMap(data);
-      },
-    );
+    return _firestore.collection('config').doc('walletTopUp').snapshots().map((
+      doc,
+    ) {
+      final data = doc.data();
+      if (data == null) return WalletTopUpConfig.defaults;
+      return WalletTopUpConfig.fromMap(data);
+    });
   }
 
   Stream<DriverSettingsConfig> watchDriverSettings() {
-    return _firestore.collection('config').doc('driverSettings').snapshots().map(
-      (doc) {
-        final data = doc.data();
-        if (data == null) return DriverSettingsConfig.defaults;
-        return DriverSettingsConfig.fromMap(data);
-      },
-    );
+    return _firestore
+        .collection('config')
+        .doc('driverSettings')
+        .snapshots()
+        .map((doc) {
+          final data = doc.data();
+          if (data == null) return DriverSettingsConfig.defaults;
+          return DriverSettingsConfig.fromMap(data);
+        });
   }
 
   Future<DriverSettingsConfig> getDriverSettings() async {
     try {
-      final doc = await _firestore.collection('config').doc('driverSettings').get();
+      final doc = await _firestore
+          .collection('config')
+          .doc('driverSettings')
+          .get();
       final data = doc.data();
       if (data == null) return DriverSettingsConfig.defaults;
       return DriverSettingsConfig.fromMap(data);
@@ -128,12 +141,51 @@ class AppConfigRepository {
       return DriverSettingsConfig.defaults;
     }
   }
+
+  /// Streams the configurable NIN verification fee (`NINamount` in Naira)
+  /// from `config/ninSettings`. Defaults to `0.0` if not configured.
+  Stream<double> watchNinAmount() {
+    return _firestore.collection('config').doc('ninSettings').snapshots().map((
+      doc,
+    ) {
+      final data = doc.data();
+      if (data == null) return 0.0;
+      return _parseNinAmount(data);
+    });
+  }
+
+  /// Fetches the configurable NIN verification fee (`NINamount` in Naira)
+  /// from `config/ninSettings`. Defaults to `0.0` if not configured.
+  Future<double> getNinAmount() async {
+    try {
+      final doc = await _firestore
+          .collection('config')
+          .doc('ninSettings')
+          .get();
+      final data = doc.data();
+      if (data == null) return 0.0;
+      return _parseNinAmount(data);
+    } catch (_) {
+      return 0.0;
+    }
+  }
+
+  static double _parseNinAmount(Map<String, dynamic> data) {
+    final raw = data['NINamount'] ?? data['ninAmount'] ?? data['feeNaira'];
+    if (raw is num) {
+      final v = raw.toDouble();
+      return v >= 0 ? v : 0.0;
+    }
+    if (raw is String) {
+      final v = double.tryParse(raw.trim());
+      if (v != null && v >= 0) return v;
+    }
+    return 0.0;
+  }
 }
 
 class DriverSettingsConfig {
-  const DriverSettingsConfig({
-    required this.maxNegativeBalanceNaira,
-  });
+  const DriverSettingsConfig({required this.maxNegativeBalanceNaira});
 
   final double maxNegativeBalanceNaira;
 
@@ -142,7 +194,8 @@ class DriverSettingsConfig {
   );
 
   factory DriverSettingsConfig.fromMap(Map<String, dynamic> data) {
-    final maxNeg = (data['maxNegativeBalanceNaira'] as num?)?.toDouble() ??
+    final maxNeg =
+        (data['maxNegativeBalanceNaira'] as num?)?.toDouble() ??
         DriverSettingsConfig.defaults.maxNegativeBalanceNaira;
     return DriverSettingsConfig(maxNegativeBalanceNaira: maxNeg);
   }

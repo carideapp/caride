@@ -1,15 +1,109 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/driver/models/driver_profile.dart';
 import 'package:caride/features/driver/auth/data/driver_profile_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 
+bool _isRealEmail(String? raw) {
+  if (raw == null) return false;
+  final trimmed = raw.trim().toLowerCase();
+  return trimmed.isNotEmpty &&
+      trimmed.contains('@') &&
+      !trimmed.endsWith('@phone.caride.com');
+}
+
 /// Redesigned Driver Profile Detail Screen with clean GlassAppBar, GlassSurface avatar container,
 /// GlassContainer field groups, and updated typography tokens.
-class DriverProfileDetailScreen extends StatelessWidget {
+class DriverProfileDetailScreen extends StatefulWidget {
   const DriverProfileDetailScreen({super.key});
+
+  @override
+  State<DriverProfileDetailScreen> createState() =>
+      _DriverProfileDetailScreenState();
+}
+
+class _DriverProfileDetailScreenState extends State<DriverProfileDetailScreen> {
+  String? _resolvedRealEmail;
+  bool _healingAttempted = false;
+
+  Future<void> _ensureAuthenticEmail(DriverProfile? profile) async {
+    if (_healingAttempted) return;
+    final uid = driverAuthController.currentUid;
+    if (uid == null) return;
+
+    final currentProfileEmail = profile?.email.trim() ?? '';
+    if (_isRealEmail(currentProfileEmail)) {
+      return;
+    }
+
+    _healingAttempted = true;
+    String? candidate;
+
+    // 1. Check FirebaseAuth currentUser email & providerData
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      if (_isRealEmail(user.email)) {
+        candidate = user.email!.trim();
+      } else {
+        for (final info in user.providerData) {
+          if (_isRealEmail(info.email)) {
+            candidate = info.email!.trim();
+            break;
+          }
+        }
+      }
+    }
+
+    final firestore = FirebaseFirestore.instance;
+
+    // 2. Check customers/{uid} or users/{uid}
+    if (!_isRealEmail(candidate)) {
+      try {
+        final custSnap = await firestore.collection('customers').doc(uid).get();
+        final custEmail = custSnap.data()?['email'] as String?;
+        if (_isRealEmail(custEmail)) {
+          candidate = custEmail!.trim();
+        }
+      } catch (_) {}
+    }
+
+    if (!_isRealEmail(candidate)) {
+      try {
+        final userSnap = await firestore.collection('users').doc(uid).get();
+        final userEmail = userSnap.data()?['email'] as String?;
+        if (_isRealEmail(userEmail)) {
+          candidate = userEmail!.trim();
+        }
+      } catch (_) {}
+    }
+
+    if (_isRealEmail(candidate)) {
+      if (mounted) {
+        setState(() {
+          _resolvedRealEmail = candidate;
+        });
+      }
+      // Update drivers/{uid}.email in Firestore so future reads are clean
+      try {
+        await firestore.collection('drivers').doc(uid).update({
+          'email': candidate,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    } else if (currentProfileEmail.endsWith('@phone.caride.com')) {
+      // Clear synthetic placeholder in Firestore so it doesn't persist
+      try {
+        await firestore.collection('drivers').doc(uid).update({
+          'email': '',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,16 +121,50 @@ class DriverProfileDetailScreen extends StatelessWidget {
       stream: DriverProfileRepository().streamDriverProfile(uid),
       builder: (context, snapshot) {
         final profile = snapshot.data;
-        return _ProfileDetailContent(profile: profile);
+        if (profile != null && !_isRealEmail(profile.email)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _ensureAuthenticEmail(profile);
+          });
+        }
+        return _ProfileDetailContent(
+          profile: profile,
+          resolvedEmailOverride: _resolvedRealEmail,
+        );
       },
     );
   }
 }
 
 class _ProfileDetailContent extends StatelessWidget {
-  const _ProfileDetailContent({this.profile});
+  const _ProfileDetailContent({
+    this.profile,
+    this.resolvedEmailOverride,
+  });
 
   final DriverProfile? profile;
+  final String? resolvedEmailOverride;
+
+  String _resolveDisplayEmail() {
+    if (_isRealEmail(profile?.email)) {
+      return profile!.email.trim();
+    }
+    if (_isRealEmail(resolvedEmailOverride)) {
+      return resolvedEmailOverride!.trim();
+    }
+    final authEmail = driverAuthController.currentEmail;
+    if (_isRealEmail(authEmail)) {
+      return authEmail!.trim();
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      for (final p in user.providerData) {
+        if (_isRealEmail(p.email)) {
+          return p.email!.trim();
+        }
+      }
+    }
+    return '';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +172,7 @@ class _ProfileDetailContent extends StatelessWidget {
 
     final photoUrl = profile?.profilePhotoUrl;
     final name = profile?.fullName ?? '';
-    final email = profile?.email ?? driverAuthController.currentEmail ?? '';
+    final email = _resolveDisplayEmail();
     final phone = profile?.phone ?? '';
 
     return Scaffold(

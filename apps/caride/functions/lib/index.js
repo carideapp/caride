@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendAnnouncementPush = exports.onChatMessageCreated = exports.takeWeeklyWalletSnapshot = exports.reconcileStuckRides = exports.adminRetryFailedPayout = exports.adminExecuteSettlementBatch = exports.adminCreateSettlementBatch = exports.adminProcessSinglePayout = exports.adminProcessWithdrawal = exports.onRideUpdatedDriverNotify = exports.onRideUpdatedCustomerNotify = exports.onRideCreatedCustomerNotify = exports.onRideStatusChanged = exports.rateCustomer = exports.cancelRideByCustomer = exports.respondToBid = exports.completeRide = exports.publishDriverLocation = exports.updateRideStatus = exports.createDriverBid = exports.submitDriverApplication = exports.onDriverRatingChanged = exports.notifyDriverApprovalStatus = exports.sendDriverWelcomeOnProfileCreate = exports.sendWelcomeEmailOnProfileCreate = exports.onVehicleReviewUpdated = exports.onVehicleReviewCreated = exports.onDriverDocumentUpdated = exports.onDriverDocumentCreated = exports.saveDriverBankAccount = exports.resolveTransactPayBankAccount = exports.listTransactPayBanks = exports.saveTransactPayCard = exports.transactPayWebhook = exports.createDedicatedVirtualAccount = exports.verifyTransactPayTransaction = exports.chargeTransactPayCard = exports.initializeTransactPayTransaction = exports.initializeBankTransfer = exports.initializeTierSettings = exports.deleteStaffAccount = exports.processStaffWithdrawal = exports.requestStaffWithdrawal = exports.updateStaffProfile = exports.createStaffAccount = exports.applyReferralCode = exports.createDriverProfileCallable = exports.verifyEmailOtp = exports.sendCustomPasswordResetEmail = exports.requestEmailOtp = void 0;
-exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
+exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
 exports.encryptTransactPayPayload = encryptTransactPayPayload;
 exports.transactpayRequest = transactpayRequest;
 exports.doesProfileNameMatchNimc = doesProfileNameMatchNimc;
@@ -6215,6 +6215,31 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
     if (!profileFullName || profileFullName.toLowerCase() === "caride user") {
         throw new https_1.HttpsError("failed-precondition", "Please update your full legal name in your profile before verifying your NIN.");
     }
+    // 0. Resolve NIN Verification Fee (`NINamount` in Naira) from `config/ninSettings` or `settings/kyc_config`
+    let ninAmount = 0;
+    try {
+        const ninSettingsSnap = await admin.firestore().collection("config").doc("ninSettings").get();
+        if (ninSettingsSnap.exists) {
+            const ninCfg = ninSettingsSnap.data() ?? {};
+            const rawFee = ninCfg.NINamount ?? ninCfg.ninAmount ?? ninCfg.feeNaira;
+            if (typeof rawFee === "number" && Number.isFinite(rawFee) && rawFee >= 0) {
+                ninAmount = rawFee;
+            }
+            else if (typeof rawFee === "string" && rawFee.trim() !== "") {
+                const parsed = Number(rawFee);
+                if (Number.isFinite(parsed) && parsed >= 0) {
+                    ninAmount = parsed;
+                }
+            }
+        }
+    }
+    catch (feeErr) {
+        logger.warn("Could not read config/ninSettings", { error: String(feeErr) });
+    }
+    const currentWalletBalance = Number(customerData.walletBalance ?? 0);
+    if (ninAmount > 0 && currentWalletBalance < ninAmount) {
+        throw new https_1.HttpsError("failed-precondition", `Insufficient wallet balance. NIN verification costs ₦${ninAmount.toLocaleString("en-NG")}. Please top up ₦${ninAmount.toLocaleString("en-NG")} to complete your NIN verification.`);
+    }
     // 1. Check 1-NIN-per-account registry using SHA-256 hash
     const ninHash = hashCode(`CARIDE_NIN_V1:${cleanNin}`);
     const ninRegistryRef = admin.firestore().collection("ninRegistry").doc(ninHash);
@@ -6227,6 +6252,7 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
     }
     // 2. Resolve Prembly API Credentials from Environment or Firestore `settings/kyc_config`
     let premblyApiKey = (process.env.PREMBLY_API_KEY ?? "").trim();
+    let premblyPublicKey = (process.env.PREMBLY_PUBLIC_KEY ?? "").trim();
     let premblyAppId = (process.env.PREMBLY_APP_ID ?? "").trim();
     let premblyEndpoint = (process.env.PREMBLY_NIN_ENDPOINT ?? "").trim();
     let kycEnabled = true;
@@ -6236,6 +6262,9 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
             const cfg = kycConfigSnap.data() ?? {};
             if (!premblyApiKey && typeof cfg.premblyApiKey === "string") {
                 premblyApiKey = cfg.premblyApiKey.trim();
+            }
+            if (!premblyPublicKey && typeof cfg.premblyPublicKey === "string") {
+                premblyPublicKey = cfg.premblyPublicKey.trim();
             }
             if (!premblyAppId && typeof cfg.premblyAppId === "string") {
                 premblyAppId = cfg.premblyAppId.trim();
@@ -6262,9 +6291,9 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
         });
         throw new https_1.HttpsError("unavailable", "Verification is currently unavailable at the moment, please try again later");
     }
-    // 3. Call Prembly NIN Verification API
+    // 3. Call Prembly NIN Verification API (Basic NIN without face matching)
     const targetUrl = premblyEndpoint ||
-        "https://api.prembly.com/api/v2/biometrics/merchant/data/verification/nin_wo_face";
+        "https://api.prembly.com/api/v1/verification/api/nin_basic/";
     const headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -6273,9 +6302,10 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
     if (premblyAppId) {
         headers["app-id"] = premblyAppId;
     }
-    const requestBody = isSixteenCharVnin
-        ? { number: cleanNin, number_nin: cleanNin }
-        : { number_nin: cleanNin, number: cleanNin };
+    const requestBody = {
+        number: cleanNin,
+        number_nin: cleanNin,
+    };
     let premblyJson = null;
     try {
         const controller = new AbortController();
@@ -6299,10 +6329,16 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
             throw new https_1.HttpsError("unavailable", "Verification is currently unavailable at the moment, please try again later");
         }
         if (response.status === 401 || response.status === 403) {
+            const detailMsg = String(premblyJson?.detail || premblyJson?.message || "").toLowerCase();
             logger.error("Prembly authentication or permission error", {
                 status: response.status,
                 premblyJson,
             });
+            if (detailMsg.includes("insufficient") ||
+                detailMsg.includes("wallet") ||
+                detailMsg.includes("balance")) {
+                throw new https_1.HttpsError("unavailable", "Verification is currently unavailable at the moment, please try again later");
+            }
             throw new https_1.HttpsError("unavailable", "Verification is currently unavailable at the moment, please try again later");
         }
         if (response.status >= 500) {
@@ -6323,15 +6359,28 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
     const verificationStatus = String(premblyJson?.verification?.status ?? "").toLowerCase();
     if (!statusBool && respCode !== "00" && verificationStatus !== "verified" && verificationStatus !== "success") {
         const detailMsg = String(premblyJson?.detail || premblyJson?.message || "").trim();
-        logger.info("Prembly NIN lookup did not find a valid record", {
+        const lowerDetail = detailMsg.toLowerCase();
+        logger.info("Prembly NIN lookup did not find a valid record or returned non-success", {
             uid: auth.uid,
             respCode,
             detailMsg,
         });
-        if (respCode === "01" || detailMsg.toLowerCase().includes("not found") || detailMsg.toLowerCase().includes("invalid")) {
+        if (lowerDetail.includes("insufficient") ||
+            lowerDetail.includes("wallet") ||
+            lowerDetail.includes("balance") ||
+            lowerDetail.includes("unverified") ||
+            lowerDetail.includes("compliance") ||
+            lowerDetail.includes("live access") ||
+            lowerDetail.includes("activate") ||
+            lowerDetail.includes("credential") ||
+            lowerDetail.includes("unauthorized") ||
+            respCode === "03") {
+            throw new https_1.HttpsError("unavailable", "Verification is currently unavailable at the moment, please try again later");
+        }
+        if (respCode === "01" || lowerDetail.includes("not found") || lowerDetail.includes("invalid")) {
             throw new https_1.HttpsError("not-found", "We could not find a valid NIMC record for this NIN. Please double-check the digits and try again.");
         }
-        throw new https_1.HttpsError("failed-precondition", detailMsg || "Unable to verify this NIN right now. Please check your details and try again.");
+        throw new https_1.HttpsError("unavailable", "Verification is currently unavailable at the moment, please try again later");
     }
     const ninRecord = premblyJson?.nin_data || premblyJson?.data || {};
     const nimcFirstName = String(ninRecord.firstname || ninRecord.firstName || ninRecord.first_name || "").trim();
@@ -6350,20 +6399,27 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
             nimcFirstName,
             nimcLastName,
         });
-        throw new https_1.HttpsError("failed-precondition", "The name on this NIN does not match your CaRide profile name. Please ensure your CaRide profile name matches your official First and Last Name on your NIN.");
+        throw new https_1.HttpsError("failed-precondition", "The name on this NIN does not match your CaRide profile name. Please update your CaRide profile name to match the exact name on your NIN, then try again.");
     }
     const maskedNin = `*******${cleanNin.slice(-4)}`;
     const verificationRef = String(premblyJson?.verification?.reference || premblyJson?.reference || `NIN-${Date.now()}`);
-    // 6. Atomic Transaction: Mark Customer Verified & Claim NIN in Registry
+    // 6. Atomic Transaction: Mark Customer Verified, Deduct NINamount Fee & Claim NIN in Registry
     await admin.firestore().runTransaction(async (tx) => {
-        const regCheck = await tx.get(ninRegistryRef);
+        const [regCheck, freshCustomerSnap] = await Promise.all([
+            tx.get(ninRegistryRef),
+            tx.get(customerRef),
+        ]);
         if (regCheck.exists) {
             const existingUid = regCheck.data()?.uid;
             if (existingUid && existingUid !== auth.uid) {
                 throw new https_1.HttpsError("already-exists", "This NIN is already linked to another verified CaRide account.");
             }
         }
-        tx.set(customerRef, {
+        const freshBalance = Number(freshCustomerSnap.data()?.walletBalance ?? 0);
+        if (ninAmount > 0 && freshBalance < ninAmount) {
+            throw new https_1.HttpsError("failed-precondition", `Insufficient wallet balance. NIN verification costs ₦${ninAmount.toLocaleString("en-NG")}. Please top up ₦${ninAmount.toLocaleString("en-NG")} to complete your NIN verification.`);
+        }
+        const customerUpdate = {
             isVerified: true,
             isNinVerified: true,
             verificationStatus: "verified",
@@ -6372,16 +6428,38 @@ exports.verifyCustomerNin = (0, https_1.onCall)({ region: REGION_PRIMARY, maxIns
             ninVerificationRef: verificationRef,
             ninVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        };
+        if (ninAmount > 0) {
+            customerUpdate.walletBalance = admin.firestore.FieldValue.increment(-ninAmount);
+        }
+        tx.set(customerRef, customerUpdate, { merge: true });
+        if (ninAmount > 0) {
+            const walletTxRef = admin.firestore().collection("walletTransactions").doc();
+            tx.set(walletTxRef, {
+                uid: auth.uid,
+                customerId: auth.uid,
+                type: "debit",
+                rawType: "nin_verification_fee",
+                amount: ninAmount,
+                amountNaira: ninAmount,
+                description: "NIN Identity Verification Fee",
+                status: "success",
+                reference: verificationRef,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
         tx.set(ninRegistryRef, {
             uid: auth.uid,
             maskedNin,
             verificationRef,
+            ninFeeCharged: ninAmount,
             verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         const notifData = {
             title: "Identity Verified!",
-            body: "Your NIN has been verified. You now have a Verified badge, wallet withdrawals, and Subsidy Wallet access!",
+            body: ninAmount > 0
+                ? `Your NIN has been verified (₦${ninAmount.toLocaleString("en-NG")} fee charged). You now have a Verified badge, wallet withdrawals, and Subsidy Wallet access!`
+                : "Your NIN has been verified. You now have a Verified badge, wallet withdrawals, and Subsidy Wallet access!",
             type: "kyc_verified",
             isRead: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -6473,5 +6551,172 @@ exports.adminToggleCustomerVerification = (0, https_1.onCall)({ region: REGION_P
         success: true,
         customerId: cleanCustomerId,
         verified,
+    };
+});
+/**
+ * Callable Cloud Function: Admin Sync & Repair Driver Placeholder Emails (`*@phone.caride.com`).
+ * Scans all drivers (or a single target driverUid) whose `email` is missing or ends with
+ * `@phone.caride.com`, attempts to resolve their authentic email from:
+ *  1. Firebase Auth UserRecord (`email` or `providerData` entries that are non-synthetic)
+ *  2. `customers/{uid}.email`
+ *  3. `users/{uid}.email`
+ *  4. Matching phone number in `customers` collection
+ * Updates `drivers/{uid}.email` (and clears synthetic `@phone.caride.com` strings if no real email exists yet).
+ */
+exports.adminSyncDriverEmails = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication required.");
+    }
+    const [adminSnap, staffSnap] = await Promise.all([
+        admin.firestore().collection("admins").doc(request.auth.uid).get(),
+        admin.firestore().collection("staff").doc(request.auth.uid).get(),
+    ]);
+    if (!adminSnap.exists && !staffSnap.exists) {
+        throw new https_1.HttpsError("permission-denied", "Unauthorized. Administrator or Staff access required.");
+    }
+    const { driverUid } = (request.data ?? {});
+    const isRealEmail = (raw) => {
+        const v = (raw ?? "").trim().toLowerCase();
+        return v.length > 0 && v.includes("@") && !v.endsWith("@phone.caride.com");
+    };
+    const normalizePhone = (raw) => {
+        const digits = String(raw ?? "").replace(/\D/g, "");
+        if (digits.startsWith("234") && digits.length === 13) {
+            return `0${digits.slice(3)}`;
+        }
+        if (digits.length === 10) {
+            return `0${digits}`;
+        }
+        return digits;
+    };
+    // Build a lookup map of customer emails by UID and by normalized phone
+    const customersSnap = await customersCollection.get();
+    const customerEmailByUid = new Map();
+    const customerEmailByPhone = new Map();
+    for (const cDoc of customersSnap.docs) {
+        const cData = cDoc.data();
+        const cEmail = String(cData.email ?? "").trim();
+        if (isRealEmail(cEmail)) {
+            customerEmailByUid.set(cDoc.id, cEmail);
+            const normPhone = normalizePhone(cData.phone);
+            if (normPhone) {
+                customerEmailByPhone.set(normPhone, cEmail);
+            }
+        }
+    }
+    // Target either a single driver or all drivers
+    let driverDocs = [];
+    if (driverUid && driverUid.trim()) {
+        const singleSnap = await driversCollection.doc(driverUid.trim()).get();
+        if (singleSnap.exists) {
+            driverDocs = [singleSnap];
+        }
+    }
+    else {
+        const allDriversSnap = await driversCollection.get();
+        driverDocs = allDriversSnap.docs;
+    }
+    let totalAffected = 0;
+    let updatedWithRealEmailCount = 0;
+    let clearedSyntheticCount = 0;
+    const updatedDrivers = [];
+    for (const dDoc of driverDocs) {
+        const uid = dDoc.id;
+        const dData = dDoc.data();
+        const currentEmail = String(dData.email ?? "").trim();
+        const isSynthetic = currentEmail.toLowerCase().endsWith("@phone.caride.com");
+        if (isRealEmail(currentEmail)) {
+            continue;
+        }
+        if (!isSynthetic && currentEmail === "") {
+            // Still try to see if we can populate their real email
+        }
+        if (isSynthetic || currentEmail === "") {
+            if (isSynthetic) {
+                totalAffected++;
+            }
+            let resolvedEmail = "";
+            // 1. Check customerEmailByUid
+            const fromCustUid = customerEmailByUid.get(uid);
+            if (isRealEmail(fromCustUid)) {
+                resolvedEmail = fromCustUid;
+            }
+            // 2. Check users/{uid}
+            if (!resolvedEmail) {
+                try {
+                    const uSnap = await admin.firestore().collection("users").doc(uid).get();
+                    const uEmail = String(uSnap.data()?.email ?? "").trim();
+                    if (isRealEmail(uEmail)) {
+                        resolvedEmail = uEmail;
+                    }
+                }
+                catch (_) { }
+            }
+            // 3. Check Firebase Auth UserRecord & providerData
+            if (!resolvedEmail) {
+                try {
+                    const authUser = await admin.auth().getUser(uid);
+                    if (isRealEmail(authUser.email)) {
+                        resolvedEmail = authUser.email.trim();
+                    }
+                    else {
+                        for (const p of authUser.providerData) {
+                            if (isRealEmail(p.email)) {
+                                resolvedEmail = p.email.trim();
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (_) { }
+            }
+            // 4. Check by phone number (from driver doc or extracted from synthetic email prefix)
+            if (!resolvedEmail) {
+                const phoneFromEmail = isSynthetic ? currentEmail.split("@")[0] : "";
+                const normDriverPhone = normalizePhone(dData.phone || phoneFromEmail);
+                if (normDriverPhone) {
+                    const fromCustPhone = customerEmailByPhone.get(normDriverPhone);
+                    if (isRealEmail(fromCustPhone)) {
+                        resolvedEmail = fromCustPhone;
+                    }
+                }
+            }
+            if (resolvedEmail) {
+                await driversCollection.doc(uid).update({
+                    email: resolvedEmail,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                updatedWithRealEmailCount++;
+                updatedDrivers.push({ uid, oldEmail: currentEmail, newEmail: resolvedEmail });
+            }
+            else if (isSynthetic) {
+                // Clear the synthetic `@phone.caride.com` email so it no longer shows a fake address
+                const phonePrefix = currentEmail.split("@")[0];
+                const existingPhone = String(dData.phone ?? "").trim();
+                const updatePayload = {
+                    email: "",
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                };
+                if (!existingPhone && /^\d{10,14}$/.test(phonePrefix)) {
+                    updatePayload.phone = phonePrefix;
+                }
+                await driversCollection.doc(uid).update(updatePayload);
+                clearedSyntheticCount++;
+                updatedDrivers.push({ uid, oldEmail: currentEmail, newEmail: "" });
+            }
+        }
+    }
+    logger.info("Admin synced driver emails", {
+        adminUid: request.auth.uid,
+        totalAffected,
+        updatedWithRealEmailCount,
+        clearedSyntheticCount,
+    });
+    return {
+        success: true,
+        totalAffected,
+        updatedCount: updatedWithRealEmailCount,
+        clearedCount: clearedSyntheticCount,
+        updatedDrivers: updatedDrivers.slice(0, 50),
     };
 });

@@ -53,8 +53,12 @@ class DriverAuthController extends ChangeNotifier {
     String? state,
     String? profilePhotoUrl,
   }) async {
-    _pendingReferralCode = referralCode?.trim().isEmpty == true ? null : referralCode?.trim().toUpperCase();
-    _pendingFullName = fullName?.trim().isEmpty == true ? null : fullName?.trim();
+    _pendingReferralCode = referralCode?.trim().isEmpty == true
+        ? null
+        : referralCode?.trim().toUpperCase();
+    _pendingFullName = fullName?.trim().isEmpty == true
+        ? null
+        : fullName?.trim();
     if (email.trim().isNotEmpty) _tempEmail = email.trim();
     if (password != null) _tempPassword = password;
     if (username != null) _tempUsername = username;
@@ -81,7 +85,9 @@ class DriverAuthController extends ChangeNotifier {
             channel: 'sms',
           );
         } catch (smsError) {
-          debugPrint('[DriverAuthController] SMS OTP failed ($smsError). Trying email fallback...');
+          debugPrint(
+            '[DriverAuthController] SMS OTP failed ($smsError). Trying email fallback...',
+          );
           final targetEmail = _tempEmail;
           if (targetEmail != null && targetEmail.isNotEmpty) {
             _pendingChallenge = await _repository.requestEmailOtp(
@@ -313,7 +319,9 @@ class DriverAuthController extends ChangeNotifier {
 
   /// Restores pending driver OTP session from storage if it exists and has not expired.
   Future<bool> restorePendingSession() async {
-    final session = await PendingOtpSessionService.instance.loadSession(roleFilter: 'driver');
+    final session = await PendingOtpSessionService.instance.loadSession(
+      roleFilter: 'driver',
+    );
     if (session != null) {
       _pendingChallenge = session.challenge;
       _pendingReferralCode = session.referralCode;
@@ -346,9 +354,13 @@ class DriverAuthController extends ChangeNotifier {
         );
 
         // 2. Sign in or create Firebase Auth user with phone-based synthetic email
-        final cleanPhone = challenge.phone ?? TermiiService.formatToLocal11Digits(challenge.email);
+        final cleanPhone =
+            challenge.phone ??
+            TermiiService.formatToLocal11Digits(challenge.email);
         final syntheticEmail = '$cleanPhone@phone.caride.com';
-        final pwd = _tempPassword ?? 'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
+        final pwd =
+            _tempPassword ??
+            'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
 
         try {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -375,7 +387,12 @@ class DriverAuthController extends ChangeNotifier {
 
         // 3. Provision driver profile doc in Firestore
         await _repository.provisionDriverProfile(
-          email: (_tempEmail != null && _tempEmail!.isNotEmpty) ? _tempEmail! : syntheticEmail,
+          email:
+              (_tempEmail != null &&
+                  _tempEmail!.trim().isNotEmpty &&
+                  !_tempEmail!.trim().endsWith('@phone.caride.com'))
+              ? _tempEmail!.trim()
+              : '',
           referralCode: _pendingReferralCode,
           fullName: _pendingFullName,
           phone: cleanPhone,
@@ -416,7 +433,10 @@ class DriverAuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> signInWithEmailAndPassword(String emailOrPhone, String password) async {
+  Future<void> signInWithEmailAndPassword(
+    String emailOrPhone,
+    String password,
+  ) async {
     _setBusy(true);
     try {
       String resolved = emailOrPhone.trim();
@@ -427,10 +447,15 @@ class DriverAuthController extends ChangeNotifier {
       }
 
       try {
-        await _repository.signInWithEmailAndPassword(email: resolved, password: password);
+        await _repository.signInWithEmailAndPassword(
+          email: resolved,
+          password: password,
+        );
       } catch (authError) {
         // If user entered a real email, check if driver account was created via phone OTP
-        if (!isPhone && resolved.contains('@') && !resolved.endsWith('@phone.caride.com')) {
+        if (!isPhone &&
+            resolved.contains('@') &&
+            !resolved.endsWith('@phone.caride.com')) {
           final cleanInputEmail = resolved.toLowerCase();
           final firestore = FirebaseFirestore.instance;
 
@@ -453,7 +478,8 @@ class DriverAuthController extends ChangeNotifier {
                   .limit(1)
                   .get();
               if (customerSnap.docs.isNotEmpty) {
-                matchedPhone = customerSnap.docs.first.data()['phone'] as String?;
+                matchedPhone =
+                    customerSnap.docs.first.data()['phone'] as String?;
               }
             }
 
@@ -470,11 +496,16 @@ class DriverAuthController extends ChangeNotifier {
           } catch (_) {}
 
           if (matchedPhone != null && matchedPhone.isNotEmpty) {
-            final formattedPhone = TermiiService.formatToLocal11Digits(matchedPhone);
+            final formattedPhone = TermiiService.formatToLocal11Digits(
+              matchedPhone,
+            );
             final syntheticEmail = '$formattedPhone@phone.caride.com';
 
             // Sign in using the phone-based synthetic account
-            await _repository.signInWithEmailAndPassword(email: syntheticEmail, password: password);
+            await _repository.signInWithEmailAndPassword(
+              email: syntheticEmail,
+              password: password,
+            );
 
             // Attempt to link real email credential
             try {
@@ -536,7 +567,6 @@ class DriverAuthController extends ChangeNotifier {
       _setBusy(false);
     }
   }
-
 
   /// Provisions a customer profile for an existing driver account.
   /// Uses the driver's existing profile data (email, fullName, phone) and
