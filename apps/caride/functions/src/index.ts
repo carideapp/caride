@@ -5924,6 +5924,17 @@ export const processCustomerWithdrawal = onCall(TRANSACTPAY_SINGLE_INSTANCE_OPTI
   }
 
   const customer = customerSnap.data()!;
+  const isVerified =
+    customer.isVerified === true ||
+    customer.isNinVerified === true ||
+    customer.verificationStatus === "verified";
+  if (!isVerified) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Identity verification (NIN) is required before withdrawing from your wallet."
+    );
+  }
+
   const walletBalance = (customer.walletBalance as number) ?? 0;
   const pinHash = customer.securityPinHash as string | undefined;
 
@@ -7380,6 +7391,491 @@ export const adminAdjustWalletBalance = onCall(
     };
   }
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CUSTOMER NIN IDENTITY VERIFICATION (PREMBLY / IDENTITYPASS) & ADMIN OVERRIDE
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Helper: Normalizes a full name or name part into clean lowercase alphabetic tokens.
+ */
+function extractNameTokens(nameStr: string): string[] {
+  return nameStr
+    .toLowerCase()
+    .replace(/[^a-z\s-]/g, " ")
+    .split(/[\s-]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
+/**
+ * Helper: Verifies if the customer's CaRide profile name matches the NIMC First & Last Name
+ * (case-insensitive).
+ */
+export function doesProfileNameMatchNimc(
+  profileFullName: string,
+  nimcFirstName: string,
+  nimcLastName: string,
+  nimcMiddleName = ""
+): boolean {
+  const profileTokens = extractNameTokens(profileFullName);
+  if (profileTokens.length === 0) return false;
+
+  const firstTokens = extractNameTokens(nimcFirstName);
+  const lastTokens = extractNameTokens(nimcLastName);
+  const middleTokens = extractNameTokens(nimcMiddleName);
+  const allNimcTokens = Array.from(new Set([...firstTokens, ...lastTokens, ...middleTokens]));
+
+  if (allNimcTokens.length === 0) return false;
+
+  // Check if at least one token from NIMC First Name AND one token from NIMC Last Name appear in profileTokens
+  const hasFirstMatch =
+    firstTokens.length === 0 ||
+    firstTokens.some((ft) => profileTokens.some((pt) => pt === ft || (pt.length >= 4 && ft.startsWith(pt)) || (ft.length >= 4 && pt.startsWith(ft))));
+  const hasLastMatch =
+    lastTokens.length === 0 ||
+    lastTokens.some((lt) => profileTokens.some((pt) => pt === lt || (pt.length >= 4 && lt.startsWith(pt)) || (lt.length >= 4 && pt.startsWith(lt))));
+
+  if (hasFirstMatch && hasLastMatch && (firstTokens.length > 0 || lastTokens.length > 0)) {
+    return true;
+  }
+
+  // Fallback: if user registered with 2+ tokens and at least 2 distinct NIMC tokens match
+  const matchedCount = profileTokens.filter((pt) =>
+    allNimcTokens.some((nt) => nt === pt)
+  ).length;
+  const requiredMatches = Math.min(2, profileTokens.length, allNimcTokens.length);
+  return requiredMatches > 0 && matchedCount >= requiredMatches;
+}
+
+/**
+ * Callable Cloud Function: Verify Customer NIN via Prembly (Identitypass) API.
+ * - Gracefully returns "Verification is currently unavailable at the moment, please try again later"
+ *   when Prembly production keys are not yet configured in Cloud Functions / Firestore settings.
+ * - Prevents duplicate NIN usage across multiple customer accounts via SHA-256 `ninRegistry`.
+ * - Performs case-insensitive First & Last Name verification against the customer's CaRide profile.
+ */
+export const verifyCustomerNin = onCall(
+  { region: REGION_PRIMARY, maxInstances: 10 },
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Please sign in to verify your identity.");
+    }
+
+    const { nin } = (request.data ?? {}) as { nin?: string };
+    const cleanNin = String(nin ?? "").trim().replace(/[\s-]/g, "").toUpperCase();
+
+    const isElevenDigitNin = /^\d{11}$/.test(cleanNin);
+    const isSixteenCharVnin = /^[A-Z0-9]{16}$/.test(cleanNin);
+
+    if (!cleanNin || (!isElevenDigitNin && !isSixteenCharVnin)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Please enter a valid 11-digit National Identification Number (NIN) or 16-character Virtual NIN (vNIN)."
+      );
+    }
+
+    const customerRef = customersCollection.doc(auth.uid);
+    const customerSnap = await customerRef.get();
+    if (!customerSnap.exists) {
+      throw new HttpsError(
+        "not-found",
+        "Customer profile not found. Please complete your profile setup first."
+      );
+    }
+
+    const customerData = customerSnap.data() ?? {};
+    if (
+      customerData.isVerified === true ||
+      customerData.isNinVerified === true ||
+      customerData.verificationStatus === "verified"
+    ) {
+      return {
+        success: true,
+        verified: true,
+        alreadyVerified: true,
+        message: "You're verified!",
+      };
+    }
+
+    const profileFullName = String(customerData.fullName ?? "").trim();
+    if (!profileFullName || profileFullName.toLowerCase() === "caride user") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Please update your full legal name in your profile before verifying your NIN."
+      );
+    }
+
+    // 1. Check 1-NIN-per-account registry using SHA-256 hash
+    const ninHash = hashCode(`CARIDE_NIN_V1:${cleanNin}`);
+    const ninRegistryRef = admin.firestore().collection("ninRegistry").doc(ninHash);
+    const existingNinSnap = await ninRegistryRef.get();
+    if (existingNinSnap.exists) {
+      const existingOwnerUid = existingNinSnap.data()?.uid as string | undefined;
+      if (existingOwnerUid && existingOwnerUid !== auth.uid) {
+        throw new HttpsError(
+          "already-exists",
+          "This NIN is already linked to another verified CaRide account."
+        );
+      }
+    }
+
+    // 2. Resolve Prembly API Credentials from Environment or Firestore `settings/kyc_config`
+    let premblyApiKey = (process.env.PREMBLY_API_KEY ?? "").trim();
+    let premblyAppId = (process.env.PREMBLY_APP_ID ?? "").trim();
+    let premblyEndpoint = (process.env.PREMBLY_NIN_ENDPOINT ?? "").trim();
+    let kycEnabled = true;
+
+    try {
+      const kycConfigSnap = await admin.firestore().collection("settings").doc("kyc_config").get();
+      if (kycConfigSnap.exists) {
+        const cfg = kycConfigSnap.data() ?? {};
+        if (!premblyApiKey && typeof cfg.premblyApiKey === "string") {
+          premblyApiKey = cfg.premblyApiKey.trim();
+        }
+        if (!premblyAppId && typeof cfg.premblyAppId === "string") {
+          premblyAppId = cfg.premblyAppId.trim();
+        }
+        if (!premblyEndpoint && typeof cfg.premblyNinEndpoint === "string") {
+          premblyEndpoint = cfg.premblyNinEndpoint.trim();
+        }
+        if (cfg.enabled === false) {
+          kycEnabled = false;
+        }
+      }
+    } catch (cfgErr) {
+      logger.warn("Could not read settings/kyc_config fallback", { error: String(cfgErr) });
+    }
+
+    const isPlaceholderKey =
+      !premblyApiKey ||
+      premblyApiKey.toLowerCase().includes("your_") ||
+      premblyApiKey.toLowerCase().includes("placeholder") ||
+      premblyApiKey === "pending";
+
+    if (!kycEnabled || isPlaceholderKey) {
+      logger.info("Prembly API key not configured yet; returning graceful unavailable notice", {
+        uid: auth.uid,
+        kycEnabled,
+      });
+      throw new HttpsError(
+        "unavailable",
+        "Verification is currently unavailable at the moment, please try again later"
+      );
+    }
+
+    // 3. Call Prembly NIN Verification API
+    const targetUrl =
+      premblyEndpoint ||
+      "https://api.prembly.com/api/v2/biometrics/merchant/data/verification/nin_wo_face";
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "x-api-key": premblyApiKey,
+    };
+    if (premblyAppId) {
+      headers["app-id"] = premblyAppId;
+    }
+
+    const requestBody = isSixteenCharVnin
+      ? { number: cleanNin, number_nin: cleanNin }
+      : { number_nin: cleanNin, number: cleanNin };
+
+    let premblyJson: any = null;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const rawText = await response.text();
+      try {
+        premblyJson = JSON.parse(rawText);
+      } catch (_) {
+        logger.error("Prembly returned non-JSON response", {
+          status: response.status,
+          bodyPreview: rawText.slice(0, 300),
+        });
+        throw new HttpsError(
+          "unavailable",
+          "Verification is currently unavailable at the moment, please try again later"
+        );
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        logger.error("Prembly authentication or permission error", {
+          status: response.status,
+          premblyJson,
+        });
+        throw new HttpsError(
+          "unavailable",
+          "Verification is currently unavailable at the moment, please try again later"
+        );
+      }
+
+      if (response.status >= 500) {
+        logger.error("Prembly server error", { status: response.status, premblyJson });
+        throw new HttpsError(
+          "unavailable",
+          "NIMC verification service is temporarily busy. Please try again in a few minutes."
+        );
+      }
+    } catch (err) {
+      if (err instanceof HttpsError) {
+        throw err;
+      }
+      logger.error("Network error calling Prembly NIN API", { error: String(err) });
+      throw new HttpsError(
+        "unavailable",
+        "Verification is currently unavailable at the moment, please try again later"
+      );
+    }
+
+    // 4. Evaluate Prembly Verification Response
+    const respCode = String(premblyJson?.response_code ?? "");
+    const statusBool = premblyJson?.status === true;
+    const verificationStatus = String(premblyJson?.verification?.status ?? "").toLowerCase();
+
+    if (!statusBool && respCode !== "00" && verificationStatus !== "verified" && verificationStatus !== "success") {
+      const detailMsg = String(premblyJson?.detail || premblyJson?.message || "").trim();
+      logger.info("Prembly NIN lookup did not find a valid record", {
+        uid: auth.uid,
+        respCode,
+        detailMsg,
+      });
+      if (respCode === "01" || detailMsg.toLowerCase().includes("not found") || detailMsg.toLowerCase().includes("invalid")) {
+        throw new HttpsError(
+          "not-found",
+          "We could not find a valid NIMC record for this NIN. Please double-check the digits and try again."
+        );
+      }
+      throw new HttpsError(
+        "failed-precondition",
+        detailMsg || "Unable to verify this NIN right now. Please check your details and try again."
+      );
+    }
+
+    const ninRecord = premblyJson?.nin_data || premblyJson?.data || {};
+    const nimcFirstName = String(
+      ninRecord.firstname || ninRecord.firstName || ninRecord.first_name || ""
+    ).trim();
+    const nimcLastName = String(
+      ninRecord.surname || ninRecord.lastname || ninRecord.lastName || ninRecord.last_name || ""
+    ).trim();
+    const nimcMiddleName = String(
+      ninRecord.middlename || ninRecord.middleName || ninRecord.middle_name || ""
+    ).trim();
+
+    if (!nimcFirstName && !nimcLastName) {
+      logger.warn("Prembly returned success but empty name fields", { uid: auth.uid, ninRecord });
+      throw new HttpsError(
+        "not-found",
+        "NIMC record returned incomplete identity details. Please try again."
+      );
+    }
+
+    // 5. Case-Insensitive First & Last Name Matching
+    const isNameMatch = doesProfileNameMatchNimc(
+      profileFullName,
+      nimcFirstName,
+      nimcLastName,
+      nimcMiddleName
+    );
+
+    if (!isNameMatch) {
+      logger.info("Customer NIN name mismatch", {
+        uid: auth.uid,
+        profileFullName,
+        nimcFirstName,
+        nimcLastName,
+      });
+      throw new HttpsError(
+        "failed-precondition",
+        "The name on this NIN does not match your CaRide profile name. Please ensure your CaRide profile name matches your official First and Last Name on your NIN."
+      );
+    }
+
+    const maskedNin = `*******${cleanNin.slice(-4)}`;
+    const verificationRef = String(
+      premblyJson?.verification?.reference || premblyJson?.reference || `NIN-${Date.now()}`
+    );
+
+    // 6. Atomic Transaction: Mark Customer Verified & Claim NIN in Registry
+    await admin.firestore().runTransaction(async (tx) => {
+      const regCheck = await tx.get(ninRegistryRef);
+      if (regCheck.exists) {
+        const existingUid = regCheck.data()?.uid as string | undefined;
+        if (existingUid && existingUid !== auth.uid) {
+          throw new HttpsError(
+            "already-exists",
+            "This NIN is already linked to another verified CaRide account."
+          );
+        }
+      }
+
+      tx.set(
+        customerRef,
+        {
+          isVerified: true,
+          isNinVerified: true,
+          verificationStatus: "verified",
+          maskedNin,
+          ninHash,
+          ninVerificationRef: verificationRef,
+          ninVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      tx.set(ninRegistryRef, {
+        uid: auth.uid,
+        maskedNin,
+        verificationRef,
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      const notifData = {
+        title: "Identity Verified!",
+        body: "Your NIN has been verified. You now have a Verified badge, wallet withdrawals, and Subsidy Wallet access!",
+        type: "kyc_verified",
+        isRead: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      const custNotifRef = customerRef.collection("notifications").doc();
+      tx.set(custNotifRef, notifData);
+
+      const userNotifRef = admin
+        .firestore()
+        .collection("users")
+        .doc(auth.uid)
+        .collection("notifications")
+        .doc();
+      tx.set(userNotifRef, notifData);
+    });
+
+    try {
+      await sendPushToCustomer(
+        auth.uid,
+        "Identity Verified!",
+        "Your NIN has been verified. You now have a Verified badge, wallet withdrawals, and Subsidy Wallet access!",
+        { type: "kyc_verified" }
+      );
+    } catch (pushErr) {
+      logger.warn("Failed to send NIN verification push notification", { error: String(pushErr) });
+    }
+
+    logger.info("Customer NIN verified successfully via Prembly", {
+      uid: auth.uid,
+      maskedNin,
+      verificationRef,
+    });
+
+    return {
+      success: true,
+      verified: true,
+      maskedNin,
+      message: "You're verified!",
+    };
+  }
+);
+
+/**
+ * Callable Cloud Function: Admin Manual Verify / Unverify Customer Account.
+ * Allows authorized admins in the Admin Dashboard to manually verify or revoke
+ * a customer's verification status.
+ */
+export const adminToggleCustomerVerification = onCall(
+  { region: REGION_PRIMARY, maxInstances: 10 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const [adminSnap, staffSnap] = await Promise.all([
+      admin.firestore().collection("admins").doc(request.auth.uid).get(),
+      admin.firestore().collection("staff").doc(request.auth.uid).get(),
+    ]);
+
+    if (!adminSnap.exists && !staffSnap.exists) {
+      throw new HttpsError(
+        "permission-denied",
+        "Unauthorized. Administrator or Staff access required."
+      );
+    }
+
+    const { customerId, verified, reason } = (request.data ?? {}) as {
+      customerId?: string;
+      verified?: boolean;
+      reason?: string;
+    };
+
+    const cleanCustomerId = String(customerId ?? "").trim();
+    if (!cleanCustomerId || typeof verified !== "boolean") {
+      throw new HttpsError(
+        "invalid-argument",
+        "customerId and verified (boolean) are required."
+      );
+    }
+
+    const customerRef = customersCollection.doc(cleanCustomerId);
+    const customerSnap = await customerRef.get();
+    if (!customerSnap.exists) {
+      throw new HttpsError("not-found", "Customer profile not found.");
+    }
+
+    const cleanReason = String(reason ?? "").trim();
+
+    await customerRef.set(
+      {
+        isVerified: verified,
+        isNinVerified: verified,
+        verificationStatus: verified ? "verified" : "unverified",
+        ninVerifiedAt: verified ? admin.firestore.FieldValue.serverTimestamp() : null,
+        verifiedByAdminUid: request.auth.uid,
+        verificationAdminNote: cleanReason || (verified ? "Verified by Admin" : "Unverified by Admin"),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const notifTitle = verified ? "Identity Verified!" : "Verification Status Updated";
+    const notifBody = verified
+      ? "Your CaRide account has been verified! You can now withdraw from your wallet and use your Subsidy Wallet."
+      : `Your account verification status was updated by support.${cleanReason ? ` Reason: ${cleanReason}` : ""}`;
+
+    try {
+      await customerRef.collection("notifications").add({
+        title: notifTitle,
+        body: notifBody,
+        type: verified ? "kyc_verified" : "kyc_unverified",
+        isRead: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      await sendPushToCustomer(cleanCustomerId, notifTitle, notifBody, {
+        type: verified ? "kyc_verified" : "kyc_unverified",
+      });
+    } catch (err) {
+      logger.warn("Failed to notify customer of admin verification toggle", { error: String(err) });
+    }
+
+    return {
+      success: true,
+      customerId: cleanCustomerId,
+      verified,
+    };
+  }
+);
+
 
 
 

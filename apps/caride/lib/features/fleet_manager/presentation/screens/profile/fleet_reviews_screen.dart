@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -657,10 +658,12 @@ class _FleetReviewsScreenState extends State<FleetReviewsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      review.customerName.isNotEmpty
+                    CustomerNameWithBadge(
+                      name: review.customerName.isNotEmpty
                           ? review.customerName
                           : 'Valued Customer',
+                      customerUid: review.customerId,
+                      iconSize: 15,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:caride/features/driver/chat/data/driver_chat_repository.dart';
 import 'package:caride/core/driver/widgets/customer_avatar.dart';
 import 'package:flutter/material.dart';
@@ -81,7 +82,9 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
           content: const Text('Customer phone number is not available.'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       );
       return;
@@ -100,25 +103,31 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6B7280);
     final cardBg = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
-    final inputFill =
-        isDark ? AppColors.darkBackground : const Color(0xFFF3F4F6);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
+    final inputFill = isDark
+        ? AppColors.darkBackground
+        : const Color(0xFFF3F4F6);
     final myUid = driverAuthController.currentUid ?? '';
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : const Color(0xFFF9FAFB),
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : const Color(0xFFF9FAFB),
       body: SafeArea(
         child: Column(
           children: [
             // ── Top Bar Header (Flat, Circular Back Button, Customer Info) ──
             Container(
               padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0, vertical: 10.0),
+                horizontal: 16.0,
+                vertical: 10.0,
+              ),
               decoration: BoxDecoration(
                 color: cardBg,
                 border: Border(bottom: BorderSide(color: borderColor)),
@@ -127,17 +136,16 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
                 future: _rideId.isEmpty
                     ? Future.value(null)
                     : FirebaseFirestore.instance
-                        .collection('rides')
-                        .doc(_rideId)
-                        .get(),
+                          .collection('rides')
+                          .doc(_rideId)
+                          .get(),
                 builder: (context, rideSnap) {
                   final rideData = rideSnap.data?.data();
-                  final customerUid =
-                      rideData?['customerUid'] as String? ?? '';
+                  final customerUid = rideData?['customerUid'] as String? ?? '';
                   final customerPhone =
-                      (rideData?['customerPhone'] ??
-                              rideData?['phone']) as String? ??
-                          '';
+                      (rideData?['customerPhone'] ?? rideData?['phone'])
+                          as String? ??
+                      '';
 
                   return Row(
                     children: [
@@ -176,16 +184,16 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.customerName,
+                            CustomerNameWithBadge(
+                              name: widget.customerName,
+                              customerUid: customerUid,
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
                                 color: primaryTextColor,
                                 letterSpacing: -0.2,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              badgeSize: 16,
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -211,8 +219,7 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
                             height: 40,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color:
-                                  AppColors.brand.withValues(alpha: 0.1),
+                              color: AppColors.brand.withValues(alpha: 0.1),
                             ),
                             child: const Icon(
                               Icons.phone_rounded,
@@ -288,8 +295,9 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
                         if (msgs.isEmpty) {
                           return Center(
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 36.0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 36.0,
+                              ),
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -297,8 +305,9 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
                                     width: 72,
                                     height: 72,
                                     decoration: BoxDecoration(
-                                      color:
-                                          AppColors.brand.withValues(alpha: 0.1),
+                                      color: AppColors.brand.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -382,10 +391,7 @@ class _DriverConversationScreenState extends State<DriverConversationScreen> {
                         controller: _textController,
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => _send(),
-                        style: TextStyle(
-                          color: primaryTextColor,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: primaryTextColor, fontSize: 14),
                         decoration: InputDecoration(
                           hintText: 'Send a message...',
                           hintStyle: TextStyle(

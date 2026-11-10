@@ -26,6 +26,7 @@ import 'package:caride/features/profile/webview_screen.dart';
 import 'package:caride/features/profile/view_payment_method_screen.dart';
 import 'package:caride/features/profile/add_new_payment_screen.dart';
 import 'package:caride/features/profile/account_security_screen.dart';
+import 'package:caride/features/profile/id_verification_screen.dart';
 import 'package:caride/features/profile/linked_accounts_screen.dart';
 import 'package:caride/features/profile/data_analytics_screen.dart';
 import 'package:caride/features/profile/data_usage_screen.dart';
@@ -118,6 +119,7 @@ CustomerRouteDelegates buildCustomerRouteDelegates() {
     viewPaymentMethods: (_) => const ViewPaymentMethodScreen(),
     addNewPayment: (_) => const AddNewPaymentScreen(),
     accountSecurity: (_) => const AccountSecurityScreen(),
+    idVerification: (_) => const IdVerificationScreen(),
     linkedAccounts: (_) => const LinkedAccountsScreen(),
     dataAnalytics: (_) => const DataAnalyticsScreen(),
     dataUsage: (_) => const DataUsageScreen(),

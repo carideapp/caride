@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -45,7 +46,10 @@ class _FleetBookingsScreenState extends State<FleetBookingsScreen>
           children: [
             // Top Bar Title
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 12.0,
+              ),
               child: Center(
                 child: Text(
                   'Rental Orders',
@@ -64,9 +68,17 @@ class _FleetBookingsScreenState extends State<FleetBookingsScreen>
               indicatorColor: AppColors.brand,
               indicatorWeight: 3,
               labelColor: AppColors.brand,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              unselectedLabelColor: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+              unselectedLabelColor: isDark
+                  ? AppColors.textSecondaryDark
+                  : const Color(0xFF6B7280),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
               tabs: const [
                 Tab(text: 'Pending'),
                 Tab(text: 'Active'),
@@ -83,22 +95,28 @@ class _FleetBookingsScreenState extends State<FleetBookingsScreen>
                   final bookings = fleetManagerController.bookings;
 
                   final pending = bookings
-                      .where((b) =>
-                          b.status == RentalBookingStatus.pendingApproval ||
-                          b.status == RentalBookingStatus.awaitingPayment)
+                      .where(
+                        (b) =>
+                            b.status == RentalBookingStatus.pendingApproval ||
+                            b.status == RentalBookingStatus.awaitingPayment,
+                      )
                       .toList();
                   final active = bookings
-                      .where((b) =>
-                          b.status == RentalBookingStatus.confirmed ||
-                          b.status == RentalBookingStatus.inProgress)
+                      .where(
+                        (b) =>
+                            b.status == RentalBookingStatus.confirmed ||
+                            b.status == RentalBookingStatus.inProgress,
+                      )
                       .toList();
                   final completed = bookings
                       .where((b) => b.status == RentalBookingStatus.completed)
                       .toList();
                   final cancelled = bookings
-                      .where((b) =>
-                          b.status == RentalBookingStatus.cancelled ||
-                          b.status == RentalBookingStatus.rejected)
+                      .where(
+                        (b) =>
+                            b.status == RentalBookingStatus.cancelled ||
+                            b.status == RentalBookingStatus.rejected,
+                      )
                       .toList();
 
                   return TabBarView(
@@ -133,10 +151,7 @@ class _FleetBookingsScreenState extends State<FleetBookingsScreen>
 }
 
 class _BookingsListView extends StatelessWidget {
-  const _BookingsListView({
-    required this.bookings,
-    required this.emptyMessage,
-  });
+  const _BookingsListView({required this.bookings, required this.emptyMessage});
 
   final List<RentalBooking> bookings;
   final String emptyMessage;
@@ -167,7 +182,9 @@ class _BookingsListView extends StatelessWidget {
               emptyMessage,
               style: TextStyle(
                 fontSize: 14,
-                color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : const Color(0xFF6B7280),
               ),
             ),
           ],
@@ -176,7 +193,12 @@ class _BookingsListView extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 14.0, bottom: 96.0),
+      padding: const EdgeInsets.only(
+        left: 20.0,
+        right: 20.0,
+        top: 14.0,
+        bottom: 96.0,
+      ),
       itemCount: bookings.length,
       itemBuilder: (context, index) {
         final booking = bookings[index];
@@ -239,24 +261,36 @@ class _BookingTile extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 16,
-                          color: isDark ? Colors.white : const Color(0xFF111827),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF111827),
                           letterSpacing: -0.2,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.person_outline, size: 14, color: AppColors.brand),
+                          const Icon(
+                            Icons.person_outline,
+                            size: 14,
+                            color: AppColors.brand,
+                          ),
                           const SizedBox(width: 4),
                           Flexible(
-                            child: Text(
-                              booking.customerName.isNotEmpty ? booking.customerName : 'Customer',
+                            child: CustomerNameWithBadge(
+                              name: booking.customerName.isNotEmpty
+                                  ? booking.customerName
+                                  : 'Customer',
+                              customerUid: booking.customerId,
+                              iconSize: 13,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : const Color(0xFF6B7280),
                               ),
                             ),
                           ),
@@ -266,7 +300,9 @@ class _BookingTile extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : const Color(0xFF6B7280),
                             ),
                           ),
                         ],
@@ -293,7 +329,10 @@ class _BookingTile extends StatelessWidget {
                         height: 18,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.brand, width: 2.5),
+                          border: Border.all(
+                            color: AppColors.brand,
+                            width: 2.5,
+                          ),
                         ),
                         child: Center(
                           child: Container(
@@ -310,14 +349,19 @@ class _BookingTile extends StatelessWidget {
                         width: 2,
                         height: 28,
                         margin: const EdgeInsets.symmetric(vertical: 2),
-                        color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                        color: isDark
+                            ? Colors.white24
+                            : const Color(0xFFE5E7EB),
                       ),
                       Container(
                         width: 18,
                         height: 18,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF6B7280), width: 2.5),
+                          border: Border.all(
+                            color: const Color(0xFF6B7280),
+                            width: 2.5,
+                          ),
                         ),
                         child: Center(
                           child: Container(
@@ -342,7 +386,9 @@ class _BookingTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : const Color(0xFF6B7280),
                             letterSpacing: 0.2,
                           ),
                         ),
@@ -356,7 +402,9 @@ class _BookingTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : const Color(0xFF111827),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF111827),
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -365,7 +413,9 @@ class _BookingTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : const Color(0xFF6B7280),
                             letterSpacing: 0.2,
                           ),
                         ),
@@ -379,7 +429,9 @@ class _BookingTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : const Color(0xFF111827),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF111827),
                           ),
                         ),
                       ],
@@ -423,7 +475,9 @@ class _BookingTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: isDark ? AppColors.textSecondaryDark : const Color(0xFF15803D),
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : const Color(0xFF15803D),
                     ),
                   ),
                 ],
@@ -446,10 +500,8 @@ class _BookingTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(28),
                   ),
                 ),
-                onPressed: () => context.push(
-                  FleetRoutePaths.bookingDetail,
-                  extra: booking,
-                ),
+                onPressed: () =>
+                    context.push(FleetRoutePaths.bookingDetail, extra: booking),
                 child: const Text(
                   'View Details',
                   style: TextStyle(

@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,10 +11,7 @@ import 'package:shared_widgets/shared_widgets.dart';
 /// matching the exact structure and design aesthetics of ratings_screen.dart
 /// and adhering to AGENTS.md rules (Lottie zip decoding, CaRide brand green, pill geometry).
 class DriverFleetRatingsScreen extends StatefulWidget {
-  const DriverFleetRatingsScreen({
-    super.key,
-    required this.fleet,
-  });
+  const DriverFleetRatingsScreen({super.key, required this.fleet});
 
   final FleetProfile fleet;
 
@@ -27,8 +25,9 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final uid = user.uid;
-    final docRef =
-        FirebaseFirestore.instance.collection('rental_reviews').doc(review.id);
+    final docRef = FirebaseFirestore.instance
+        .collection('rental_reviews')
+        .doc(review.id);
     final isLiked = review.likedByUids.contains(uid);
 
     try {
@@ -63,15 +62,18 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final backgroundColor =
-        isDark ? AppColors.darkBackground : AppColors.lightBackground;
+    final backgroundColor = isDark
+        ? AppColors.darkBackground
+        : AppColors.lightBackground;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final fleet = widget.fleet;
-    final targetFleetId =
-        fleet.fleetId.isNotEmpty ? fleet.fleetId : fleet.ownerUid;
+    final targetFleetId = fleet.fleetId.isNotEmpty
+        ? fleet.fleetId
+        : fleet.ownerUid;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -81,7 +83,11 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
             // ── Top Navigation Bar Header ─────────────────────────────────────
             Padding(
               padding: const EdgeInsets.only(
-                  left: 20, right: 20, top: 14, bottom: 8),
+                left: 20,
+                right: 20,
+                top: 14,
+                bottom: 8,
+              ),
               child: Row(
                 children: [
                   GestureDetector(
@@ -127,7 +133,7 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
                 builder: (context, snapshot) {
                   final isWaiting =
                       snapshot.connectionState == ConnectionState.waiting &&
-                          !snapshot.hasData;
+                      !snapshot.hasData;
 
                   if (snapshot.hasError) {
                     return Center(
@@ -154,8 +160,9 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
                   for (final r in reviews) {
                     sum += r.rating;
                   }
-                  final averageRating =
-                      reviews.isEmpty ? (fleet.rating > 0 ? fleet.rating : 0.0) : sum / reviews.length;
+                  final averageRating = reviews.isEmpty
+                      ? (fleet.rating > 0 ? fleet.rating : 0.0)
+                      : sum / reviews.length;
 
                   return ResponsiveContainer(
                     child: isWaiting
@@ -167,7 +174,10 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
                             ),
                             children: [
                               _buildOverallCard(
-                                  context, averageRating, reviews.length),
+                                context,
+                                averageRating,
+                                reviews.length,
+                              ),
                               const SizedBox(height: AppSpacing.lg),
                               if (reviews.isEmpty)
                                 _buildEmptyState(context, fleet.businessName)
@@ -177,12 +187,15 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
                                     horizontal: AppSpacing.xs,
                                   ),
                                   child: _buildReviewsHeader(
-                                      context, reviews.length),
+                                    context,
+                                    reviews.length,
+                                  ),
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
                                 ...reviews.map((r) {
-                                  final isLiked =
-                                      r.likedByUids.contains(currentUid);
+                                  final isLiked = r.likedByUids.contains(
+                                    currentUid,
+                                  );
                                   return _FleetReviewCard(
                                     review: r,
                                     isLiked: isLiked,
@@ -212,11 +225,13 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE9EAF0);
 
-    final displayRating =
-        averageRating > 0 ? averageRating.toStringAsFixed(1) : '0';
+    final displayRating = averageRating > 0
+        ? averageRating.toStringAsFixed(1)
+        : '0';
     final fullStars = averageRating.floor();
     final hasHalf = (averageRating - fullStars) >= 0.5;
 
@@ -284,8 +299,9 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
                     Text(
                       '/5',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color:
-                            isDark ? Colors.grey[500] : const Color(0xFF8A90A6),
+                        color: isDark
+                            ? Colors.grey[500]
+                            : const Color(0xFF8A90A6),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -352,8 +368,9 @@ class _DriverFleetRatingsScreenState extends State<DriverFleetRatingsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE9EAF0);
     final bName = businessName.isNotEmpty ? businessName : 'this fleet';
 
     return Container(
@@ -410,11 +427,13 @@ class _FleetReviewCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE9EAF0);
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : const Color(0xFF6E7191);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6E7191);
 
     final initial = review.customerName.isNotEmpty
         ? review.customerName[0].toUpperCase()
@@ -466,10 +485,12 @@ class _FleetReviewCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        review.customerName.isNotEmpty
+                      CustomerNameWithBadge(
+                        name: review.customerName.isNotEmpty
                             ? review.customerName
                             : 'Valued Customer',
+                        customerUid: review.customerId,
+                        iconSize: 15,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: primaryTextColor,
@@ -552,10 +573,7 @@ class _FleetReviewCard extends StatelessWidget {
                 const SizedBox(width: 24),
                 Text(
                   formatDate(review.createdAt),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: secondaryTextColor,
-                  ),
+                  style: TextStyle(fontSize: 12.5, color: secondaryTextColor),
                 ),
               ],
             ),
@@ -634,8 +652,11 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                         5,
                         (i) => Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Icon(Icons.star_rounded,
-                              color: baseShimmerColor, size: 28),
+                          child: Icon(
+                            Icons.star_rounded,
+                            color: baseShimmerColor,
+                            size: 28,
+                          ),
                         ),
                       ),
                     ),
@@ -670,7 +691,9 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                       color: isDark ? AppColors.darkSurface : Colors.white,
                       borderRadius: BorderRadius.circular(AppRadius.xl),
                       border: Border.all(
-                        color: isDark ? Colors.white10 : const Color(0xFFE9EAF0),
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFE9EAF0),
                       ),
                     ),
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -687,15 +710,22 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Container(
-                                  width: 100, height: 14, color: baseShimmerColor),
+                                width: 100,
+                                height: 14,
+                                color: baseShimmerColor,
+                              ),
                               const SizedBox(height: 6),
                               Container(
-                                  width: 60, height: 10, color: baseShimmerColor),
+                                width: 60,
+                                height: 10,
+                                color: baseShimmerColor,
+                              ),
                               const SizedBox(height: 12),
                               Container(
-                                  width: double.infinity,
-                                  height: 14,
-                                  color: baseShimmerColor),
+                                width: double.infinity,
+                                height: 14,
+                                color: baseShimmerColor,
+                              ),
                             ],
                           ),
                         ),
@@ -703,8 +733,11 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                         Row(
                           children: List.generate(
                             5,
-                            (i) => Icon(Icons.star_rounded,
-                                color: baseShimmerColor, size: 14),
+                            (i) => Icon(
+                              Icons.star_rounded,
+                              color: baseShimmerColor,
+                              size: 14,
+                            ),
                           ),
                         ),
                       ],

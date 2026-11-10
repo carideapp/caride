@@ -63,6 +63,17 @@ service cloud.firestore {
       allow read, write: if false; // Cloud Functions only
     }
 
+    // ─── NIN Registry (Customer & Driver KYC Deduplication) ────
+    match /ninRegistry/{ninHash} {
+      allow read, write: if false; // Cloud Functions only
+    }
+
+    // ─── Platform & KYC Settings ───────────────────────────────
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isStaff();
+    }
+
     // ─── Config & System Settings (any signed-in user can read) ───────────────────
     match /config/{configId} {
       allow read: if true;

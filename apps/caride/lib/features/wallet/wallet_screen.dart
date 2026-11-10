@@ -1,5 +1,6 @@
 import 'package:caride/core/services/cashback_service.dart';
 import 'package:caride/features/profile/data/account_repository.dart';
+import 'package:caride/features/profile/id_verification_screen.dart';
 import 'package:caride/features/wallet/data/wallet_transaction_repository.dart';
 import 'package:caride/features/wallet/wallet_transaction_details_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -265,14 +266,31 @@ class WalletScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 12),
 
-                                // User Name
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white70,
-                                  ),
+                                // User Name + Verified Badge
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white70,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (profile?.isVerified == true) ...[
+                                      const SizedBox(width: 6),
+                                      const Icon(
+                                        Icons.verified_rounded,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                                 if (profile != null &&
                                     profile.creditBalance > 0) ...[
@@ -352,36 +370,53 @@ class WalletScreen extends StatelessWidget {
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: isDark
-                                        ? AppColors.darkSurface
-                                        : Colors.white,
-                                    foregroundColor: primaryTextColor,
-                                    elevation: 0,
-                                    minimumSize: const Size(0, 54),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 15,
+                                child: Opacity(
+                                  opacity:
+                                      (profile?.isVerified == true) ? 1.0 : 0.65,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isDark
+                                          ? AppColors.darkSurface
+                                          : Colors.white,
+                                      foregroundColor: primaryTextColor,
+                                      elevation: 0,
+                                      minimumSize: const Size(0, 54),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 15,
+                                      ),
+                                      side: BorderSide(color: borderColor),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(28),
+                                      ),
                                     ),
-                                    side: BorderSide(color: borderColor),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(28),
+                                    icon: Icon(
+                                      (profile?.isVerified == true)
+                                          ? Icons.arrow_upward_rounded
+                                          : Icons.lock_outline_rounded,
+                                      size: 18,
                                     ),
-                                  ),
-                                  icon: const Icon(
-                                    Icons.arrow_upward_rounded,
-                                    size: 18,
-                                  ),
-                                  label: const Text(
-                                    'Withdraw',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
+                                    label: const Text(
+                                      'Withdraw',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
                                     ),
+                                    onPressed: () {
+                                      if (profile?.isVerified == true) {
+                                        context.push(
+                                          CustomerRoutePaths.withdraw,
+                                        );
+                                      } else {
+                                        IdVerificationPromptBottomSheet.show(
+                                          context,
+                                          noticeMessage:
+                                              'Only verified users can withdraw from their wallet and use the Subsidy Wallet when verified.',
+                                        );
+                                      }
+                                    },
                                   ),
-                                  onPressed: () =>
-                                      context.push(CustomerRoutePaths.withdraw),
                                 ),
                               ),
                             ],

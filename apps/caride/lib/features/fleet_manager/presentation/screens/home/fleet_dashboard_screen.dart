@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -1401,8 +1402,10 @@ class _BookingCard extends StatelessWidget {
             children: [
               const Icon(Icons.person_outline, size: 16, color: AppColors.brand),
               const SizedBox(width: 6),
-              Text(
-                booking.customerName,
+              CustomerNameWithBadge(
+                name: booking.customerName,
+                customerUid: booking.customerId,
+                iconSize: 13,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 12,

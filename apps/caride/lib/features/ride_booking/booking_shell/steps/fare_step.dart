@@ -1,8 +1,8 @@
 import 'package:caride/features/profile/data/account_repository.dart';
+import 'package:caride/features/profile/id_verification_screen.dart';
 import 'package:caride/features/ride_booking/booking_shell/booking_shell_controller.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/payment_methods_bottom_sheet.dart';
 import 'package:caride/features/ride_booking/booking_shell/widgets/promos_bottom_sheet.dart';
-import 'package:caride/features/ride_booking/data/ride_pricing_repository.dart';
 import 'package:caride/features/wallet/widgets/dedicated_account_bottom_sheet.dart';
 import 'package:caride/features/wallet/widgets/pending_bank_transfer_widgets.dart';
 import 'package:design_system/design_system.dart';
@@ -235,32 +235,6 @@ class _FareStepState extends State<FareStep> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              if (c.activeStatePricingOverride != null &&
-                                  c.operatingState != null &&
-                                  c.operatingState!.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brand.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    c.activeStatePricingOverride!.mode ==
-                                            VehiclePricingMode.percentage
-                                        ? '${c.operatingState} rate (${c.activeStatePricingOverride!.adjustmentPercent >= 0 ? '+' : ''}${c.activeStatePricingOverride!.adjustmentPercent.round()}%) applied'
-                                        : '${c.operatingState} custom rate applied',
-                                    style: AppTextStyles.labelSmall.copyWith(
-                                      color: AppColors.brand,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -404,6 +378,7 @@ class _FareStepState extends State<FareStep> {
                 stream: AccountRepository().watchProfile(),
                 builder: (context, profileSnap) {
                   final profile = profileSnap.data;
+                  final isUserVerified = profile?.isVerified == true;
                   final creditBalance = profile?.creditBalance ?? 0.0;
                   final maxCoverageDiscount =
                       (offer * 0.10); // 10% default max fare coverage
@@ -415,61 +390,90 @@ class _FareStepState extends State<FareStep> {
                     double.infinity,
                   );
 
-                  return GlassContainer(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF10B981,
-                            ).withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
+                  if (!isUserVerified && c.useCreditWallet) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      c.setUseCreditWallet(false);
+                    });
+                  }
+
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    onTap: () {
+                      if (!isUserVerified) {
+                        IdVerificationPromptBottomSheet.show(
+                          context,
+                          noticeMessage:
+                              'Only verified users can use the Subsidy Wallet when verified.',
+                        );
+                      } else {
+                        c.setUseCreditWallet(!c.useCreditWallet);
+                      }
+                    },
+                    child: GlassContainer(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF10B981,
+                              ).withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.stars_rounded,
+                              color: Color(0xFF10B981),
+                              size: 20,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.stars_rounded,
-                            color: Color(0xFF10B981),
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Use Subsidy Wallet (Avail: ₦${creditBalance.toStringAsFixed(0)})',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
-                                  fontWeight: FontWeight.w500,
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Use Subsidy Wallet (Avail: ₦${creditBalance.toStringAsFixed(0)})',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                c.useCreditWallet
-                                    ? '-₦${calculatedDiscount.toStringAsFixed(0)} Discount (You Pay ₦${estPayable.toStringAsFixed(0)})'
-                                    : 'Cover up to 10% of fare',
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: c.useCreditWallet
-                                      ? const Color(0xFF10B981)
-                                      : null,
+                                const SizedBox(height: 2),
+                                Text(
+                                  c.useCreditWallet && isUserVerified
+                                      ? '-₦${calculatedDiscount.toStringAsFixed(0)} Discount (You Pay ₦${estPayable.toStringAsFixed(0)})'
+                                      : 'Cover up to 10% of fare',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: c.useCreditWallet && isUserVerified
+                                        ? const Color(0xFF10B981)
+                                        : null,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        Switch(
-                          value: c.useCreditWallet,
-                          activeThumbColor: const Color(0xFF10B981),
-                          onChanged: (val) {
-                            c.setUseCreditWallet(val);
-                          },
-                        ),
-                      ],
+                          Switch(
+                            value: isUserVerified && c.useCreditWallet,
+                            activeThumbColor: const Color(0xFF10B981),
+                            onChanged: (val) {
+                              if (!isUserVerified) {
+                                c.setUseCreditWallet(false);
+                                IdVerificationPromptBottomSheet.show(
+                                  context,
+                                  noticeMessage:
+                                      'Only verified users can use the Subsidy Wallet when verified.',
+                                );
+                                return;
+                              }
+                              c.setUseCreditWallet(val);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:caride/features/chat/data/chat_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,7 +27,8 @@ class FleetConversationScreen extends StatefulWidget {
   final String? bookingId;
 
   @override
-  State<FleetConversationScreen> createState() => _FleetConversationScreenState();
+  State<FleetConversationScreen> createState() =>
+      _FleetConversationScreenState();
 }
 
 class _FleetConversationScreenState extends State<FleetConversationScreen> {
@@ -56,10 +58,7 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
     _messageController.clear();
 
     try {
-      await _repository.sendMessage(
-        rideId: widget.threadId,
-        text: text,
-      );
+      await _repository.sendMessage(rideId: widget.threadId, text: text);
       _scrollToBottom();
     } catch (e) {
       debugPrint('[FleetConversationScreen] Send error: $e');
@@ -88,7 +87,9 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
           content: const Text('Customer phone number is not available.'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       );
       return;
@@ -103,25 +104,33 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6B7280);
     final cardBg = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
-    final inputFill =
-        isDark ? AppColors.darkBackground : const Color(0xFFF3F4F6);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
+    final inputFill = isDark
+        ? AppColors.darkBackground
+        : const Color(0xFFF3F4F6);
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
 
     final customerPhone = widget.customerPhone?.trim() ?? '';
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : const Color(0xFFF9FAFB),
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : const Color(0xFFF9FAFB),
       body: SafeArea(
         child: Column(
           children: [
             // ── Top Bar Header (Flat, Circular Back Button, Customer Info, Call Action) ──
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 10.0,
+              ),
               decoration: BoxDecoration(
                 color: cardBg,
                 border: Border(bottom: BorderSide(color: borderColor)),
@@ -154,7 +163,10 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
                     backgroundColor: AppColors.brand.withValues(alpha: 0.12),
                     child: Text(
                       widget.customerName.trim().isNotEmpty
-                          ? widget.customerName.trim().substring(0, 1).toUpperCase()
+                          ? widget.customerName
+                                .trim()
+                                .substring(0, 1)
+                                .toUpperCase()
                           : 'C',
                       style: const TextStyle(
                         fontSize: 16,
@@ -170,8 +182,10 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.customerName,
+                        CustomerNameWithBadge(
+                          name: widget.customerName,
+                          customerUid: widget.customerUid,
+                          iconSize: 16,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -183,7 +197,8 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          widget.vehicleTitle != null && widget.vehicleTitle!.isNotEmpty
+                          widget.vehicleTitle != null &&
+                                  widget.vehicleTitle!.isNotEmpty
                               ? widget.vehicleTitle!
                               : 'Rental Customer',
                           style: TextStyle(
@@ -283,33 +298,46 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
 
                   return ListView.separated(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     itemCount: messages.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final msg = messages[index];
                       final isMe = msg.senderUid == currentUid;
-                      final timeStr = DateFormat('h:mm a').format(msg.createdAt);
+                      final timeStr = DateFormat(
+                        'h:mm a',
+                      ).format(msg.createdAt);
                       final maxWidth = MediaQuery.of(context).size.width * 0.75;
 
                       return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment: isMe
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
                         child: ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: maxWidth),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 11),
+                              horizontal: 16,
+                              vertical: 11,
+                            ),
                             decoration: BoxDecoration(
                               color: isMe
                                   ? AppColors.brand
-                                  : (isDark ? AppColors.darkSurface : Colors.white),
+                                  : (isDark
+                                        ? AppColors.darkSurface
+                                        : Colors.white),
                               borderRadius: BorderRadius.only(
                                 topLeft: const Radius.circular(18),
                                 topRight: const Radius.circular(18),
                                 bottomLeft: Radius.circular(isMe ? 18 : 4),
                                 bottomRight: Radius.circular(isMe ? 4 : 18),
                               ),
-                              border: isMe ? null : Border.all(color: borderColor),
+                              border: isMe
+                                  ? null
+                                  : Border.all(color: borderColor),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,7 +347,9 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
                                   msg.text,
                                   style: TextStyle(
                                     fontSize: 14.5,
-                                    color: isMe ? Colors.white : primaryTextColor,
+                                    color: isMe
+                                        ? Colors.white
+                                        : primaryTextColor,
                                     height: 1.35,
                                     fontWeight: FontWeight.w400,
                                   ),
@@ -331,7 +361,9 @@ class _FleetConversationScreenState extends State<FleetConversationScreen> {
                                     timeStr,
                                     style: TextStyle(
                                       fontSize: 10.5,
-                                      color: isMe ? Colors.white70 : secondaryTextColor,
+                                      color: isMe
+                                          ? Colors.white70
+                                          : secondaryTextColor,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),

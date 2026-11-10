@@ -7,6 +7,7 @@ class DriverRatingEntry {
     required this.rating,
     required this.customerName,
     required this.ratedAt,
+    this.customerUid,
     this.comment,
     this.dropoffLabel,
   });
@@ -15,6 +16,7 @@ class DriverRatingEntry {
   final int rating;
   final String customerName;
   final DateTime ratedAt;
+  final String? customerUid;
   final String? comment;
   final String? dropoffLabel;
 }
@@ -33,8 +35,8 @@ class DriverRatingsSummary {
 
 class DriverRatingsRepository {
   DriverRatingsRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -60,39 +62,43 @@ class DriverRatingsRepository {
         .orderBy('driverRating', descending: false)
         .snapshots()
         .map((snap) {
-      final entries = snap.docs.map((doc) {
-        final data = doc.data();
-        final rating = (data['driverRating'] as num?)?.toInt() ?? 0;
-        final customerName =
-            (data['customerName'] as String?)?.isNotEmpty == true
+          final entries = snap.docs.map((doc) {
+            final data = doc.data();
+            final rating = (data['driverRating'] as num?)?.toInt() ?? 0;
+            final customerName =
+                (data['customerName'] as String?)?.isNotEmpty == true
                 ? data['customerName'] as String
                 : 'Passenger';
-        return DriverRatingEntry(
-          rideId: doc.id,
-          rating: rating,
-          customerName: customerName,
-          ratedAt: (data['ratedAt'] as Timestamp?)?.toDate() ??
-              (data['updatedAt'] as Timestamp?)?.toDate() ??
-              DateTime.now(),
-          comment: data['driverRatingComment'] as String?,
-          dropoffLabel: data['dropoffLabel'] as String?,
-        );
-      }).toList();
+            return DriverRatingEntry(
+              rideId: doc.id,
+              rating: rating,
+              customerName: customerName,
+              customerUid:
+                  data['customerUid'] as String? ??
+                  data['customerId'] as String?,
+              ratedAt:
+                  (data['ratedAt'] as Timestamp?)?.toDate() ??
+                  (data['updatedAt'] as Timestamp?)?.toDate() ??
+                  DateTime.now(),
+              comment: data['driverRatingComment'] as String?,
+              dropoffLabel: data['dropoffLabel'] as String?,
+            );
+          }).toList();
 
-      // Sort by ratedAt descending (can't combine orderBy on different fields
-      // with inequality filter without composite index, so we sort client-side)
-      entries.sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
+          // Sort by ratedAt descending (can't combine orderBy on different fields
+          // with inequality filter without composite index, so we sort client-side)
+          entries.sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
 
-      final total = entries.length;
-      final average = total > 0
-          ? entries.map((e) => e.rating).reduce((a, b) => a + b) / total
-          : 0.0;
+          final total = entries.length;
+          final average = total > 0
+              ? entries.map((e) => e.rating).reduce((a, b) => a + b) / total
+              : 0.0;
 
-      return DriverRatingsSummary(
-        averageRating: double.parse(average.toStringAsFixed(1)),
-        totalRatings: total,
-        entries: entries,
-      );
-    });
+          return DriverRatingsSummary(
+            averageRating: double.parse(average.toStringAsFixed(1)),
+            totalRatings: total,
+            entries: entries,
+          );
+        });
   }
 }

@@ -1,4 +1,5 @@
 import 'package:caride/core/driver/widgets/customer_avatar.dart';
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:caride/features/driver/chat/data/driver_chat_repository.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
@@ -58,12 +59,13 @@ class _DriverChatScreenState extends State<DriverChatScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280);
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
-    final inputFill =
-        isDark ? AppColors.darkSurface : const Color(0xFFF9FAFB);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6B7280);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
+    final inputFill = isDark ? AppColors.darkSurface : const Color(0xFFF9FAFB);
     final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
@@ -73,7 +75,10 @@ class _DriverChatScreenState extends State<DriverChatScreen>
           children: [
             // ── Top Header Bar with Circular Back Button & Title ──
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 12.0,
+              ),
               child: Row(
                 children: [
                   if (canPop)
@@ -116,7 +121,10 @@ class _DriverChatScreenState extends State<DriverChatScreen>
 
             // ── Pill Search Field ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 6.0,
+              ),
               child: TextFormField(
                 controller: _searchController,
                 style: TextStyle(color: primaryTextColor, fontSize: 14),
@@ -148,8 +156,10 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                           ),
                         )
                       : null,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 13,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(28),
                     borderSide: BorderSide(color: borderColor),
@@ -160,8 +170,10 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(28),
-                    borderSide:
-                        const BorderSide(color: AppColors.brand, width: 1.5),
+                    borderSide: const BorderSide(
+                      color: AppColors.brand,
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -182,21 +194,27 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                   }
 
                   final allThreads = snapshot.data ?? [];
-                  final unreadThreads =
-                      allThreads.where((t) => t.unread > 0).toList();
-                  final totalUnread =
-                      allThreads.fold<int>(0, (sum, t) => sum + t.unread);
+                  final unreadThreads = allThreads
+                      .where((t) => t.unread > 0)
+                      .toList();
+                  final totalUnread = allThreads.fold<int>(
+                    0,
+                    (sum, t) => sum + t.unread,
+                  );
 
-                  final activeList =
-                      _selectedTabIndex == 0 ? allThreads : unreadThreads;
+                  final activeList = _selectedTabIndex == 0
+                      ? allThreads
+                      : unreadThreads;
 
                   final filtered = activeList.where((t) {
                     if (_searchQuery.isEmpty) return true;
                     final query = _searchQuery.toLowerCase();
-                    final nameMatch =
-                        t.customerName.toLowerCase().contains(query);
-                    final previewMatch =
-                        t.preview.toLowerCase().contains(query);
+                    final nameMatch = t.customerName.toLowerCase().contains(
+                      query,
+                    );
+                    final previewMatch = t.preview.toLowerCase().contains(
+                      query,
+                    );
                     return nameMatch || previewMatch;
                   }).toList();
 
@@ -206,7 +224,9 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                       // ── Pill Segment Tabs (All, Unread) ──────────────────
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20.0, vertical: 8.0),
+                          horizontal: 20.0,
+                          vertical: 8.0,
+                        ),
                         child: Container(
                           height: 44,
                           padding: const EdgeInsets.all(3),
@@ -246,15 +266,20 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                       const SizedBox(width: 6),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 1.5),
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: _selectedTabIndex == 0
-                                              ? Colors.white.withValues(alpha: 0.25)
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.25,
+                                                )
                                               : (isDark
-                                                  ? Colors.white12
-                                                  : Colors.black12),
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                                    ? Colors.white12
+                                                    : Colors.black12),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Text(
                                           '${allThreads.length}',
@@ -280,13 +305,18 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                       const SizedBox(width: 6),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 1.5),
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: _selectedTabIndex == 1
-                                              ? Colors.white.withValues(alpha: 0.25)
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.25,
+                                                )
                                               : AppColors.brand,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Text(
                                           '$totalUnread',
@@ -326,7 +356,8 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                             ? Center(
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 32.0),
+                                    horizontal: 32.0,
+                                  ),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -334,8 +365,9 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                         width: 76,
                                         height: 76,
                                         decoration: BoxDecoration(
-                                          color: AppColors.brand
-                                              .withValues(alpha: 0.1),
+                                          color: AppColors.brand.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                         child: const Icon(
@@ -395,7 +427,9 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 20.0, vertical: 14.0),
+                                        horizontal: 20.0,
+                                        vertical: 14.0,
+                                      ),
                                       child: Row(
                                         children: [
                                           // Customer Avatar
@@ -430,16 +464,16 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                                             .ellipsis,
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 5),
-                                                    const Icon(
-                                                      Icons.verified_rounded,
+                                                    CustomerVerifiedBadge(
+                                                      customerUid:
+                                                          thread.customerUid,
                                                       size: 16,
-                                                      color: AppColors.brand,
                                                     ),
                                                     const Spacer(),
                                                     Text(
                                                       _formatTimestamp(
-                                                          thread.timestamp),
+                                                        thread.timestamp,
+                                                      ),
                                                       style: TextStyle(
                                                         fontSize: 12,
                                                         color:
@@ -461,9 +495,11 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                                           fontSize: 13.5,
                                                           color: hasUnread
                                                               ? (isDark
-                                                                  ? Colors.white
-                                                                  : const Color(
-                                                                      0xFF1F2937))
+                                                                    ? Colors
+                                                                          .white
+                                                                    : const Color(
+                                                                        0xFF1F2937,
+                                                                      ))
                                                               : secondaryTextColor,
                                                           fontWeight: hasUnread
                                                               ? FontWeight.w600
@@ -478,32 +514,35 @@ class _DriverChatScreenState extends State<DriverChatScreen>
                                                       const SizedBox(width: 8),
                                                       Container(
                                                         padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 7,
-                                                                vertical: 2.5),
-                                                        decoration:
-                                                            BoxDecoration(
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 7,
+                                                              vertical: 2.5,
+                                                            ),
+                                                        decoration: BoxDecoration(
                                                           color:
                                                               AppColors.brand,
                                                           borderRadius:
-                                                              BorderRadius
-                                                                  .circular(12),
+                                                              BorderRadius.circular(
+                                                                12,
+                                                              ),
                                                         ),
                                                         constraints:
                                                             const BoxConstraints(
-                                                                minWidth: 20),
+                                                              minWidth: 20,
+                                                            ),
                                                         alignment:
                                                             Alignment.center,
                                                         child: Text(
                                                           '${thread.unread}',
                                                           style:
                                                               const TextStyle(
-                                                            color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 11,
-                                                          ),
+                                                                color: Colors
+                                                                    .white,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 11,
+                                                              ),
                                                         ),
                                                       ),
                                                     ],

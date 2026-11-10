@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_system/design_system.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,7 +12,8 @@ class DriverRentalBookingsScreen extends StatefulWidget {
   const DriverRentalBookingsScreen({super.key});
 
   @override
-  State<DriverRentalBookingsScreen> createState() => _DriverRentalBookingsScreenState();
+  State<DriverRentalBookingsScreen> createState() =>
+      _DriverRentalBookingsScreenState();
 }
 
 class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
@@ -38,14 +40,22 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
         .collection('rental_bookings')
         .snapshots()
         .map((snap) {
-      final list = snap.docs
-          .map((doc) => RentalBooking.fromMap(doc.data(), doc.id))
-          .where((b) => b.assignedDriverId != null && b.assignedDriverId!.isNotEmpty && (b.assignedDriverId == uid))
-          .toList();
-      list.sort((a, b) =>
-          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
-      return list;
-    });
+          final list = snap.docs
+              .map((doc) => RentalBooking.fromMap(doc.data(), doc.id))
+              .where(
+                (b) =>
+                    b.assignedDriverId != null &&
+                    b.assignedDriverId!.isNotEmpty &&
+                    (b.assignedDriverId == uid),
+              )
+              .toList();
+          list.sort(
+            (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+              a.createdAt ?? DateTime(0),
+            ),
+          );
+          return list;
+        });
   }
 
   @override
@@ -54,13 +64,18 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       body: SafeArea(
         child: Column(
           children: [
             // Top Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 10.0,
+              ),
               child: Row(
                 children: [
                   Container(
@@ -70,11 +85,17 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
                       color: isDark ? AppColors.darkSurface : Colors.white,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                        color: isDark
+                            ? AppColors.glassBorderDark
+                            : const Color(0xFFE5E7EB),
                       ),
                     ),
                     child: IconButton(
-                      icon: Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: primaryTextColor),
+                      icon: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                        color: primaryTextColor,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
@@ -95,16 +116,19 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
               child: StreamBuilder<List<RentalBooking>>(
                 stream: _streamDriverBookings(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return const BookingCardSkeleton(itemCount: 4);
                   }
 
                   final all = snapshot.data ?? [];
                   final active = all
-                      .where((b) =>
-                          b.status != RentalBookingStatus.completed &&
-                          b.status != RentalBookingStatus.cancelled &&
-                          b.status != RentalBookingStatus.rejected)
+                      .where(
+                        (b) =>
+                            b.status != RentalBookingStatus.completed &&
+                            b.status != RentalBookingStatus.cancelled &&
+                            b.status != RentalBookingStatus.rejected,
+                      )
                       .toList();
                   final completed = all
                       .where((b) => b.status == RentalBookingStatus.completed)
@@ -117,7 +141,9 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
                         decoration: BoxDecoration(
                           border: Border(
                             bottom: BorderSide(
-                              color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                              color: isDark
+                                  ? AppColors.glassBorderDark
+                                  : const Color(0xFFE5E7EB),
                               width: 1,
                             ),
                           ),
@@ -128,8 +154,13 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
                           indicatorWeight: 3,
                           indicatorSize: TabBarIndicatorSize.tab,
                           labelColor: AppColors.brand,
-                          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                          unselectedLabelColor: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                          unselectedLabelColor: isDark
+                              ? AppColors.textSecondaryDark
+                              : const Color(0xFF6B7280),
                           tabs: const [
                             Tab(text: 'Active'),
                             Tab(text: 'Completed'),
@@ -157,7 +188,11 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
     );
   }
 
-  Widget _buildList(List<RentalBooking> bookings, bool isDark, {required bool isEmptyActive}) {
+  Widget _buildList(
+    List<RentalBooking> bookings,
+    bool isDark, {
+    required bool isEmptyActive,
+  }) {
     if (bookings.isEmpty) {
       return Center(
         child: Padding(
@@ -172,7 +207,11 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
                   color: AppColors.brand.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.car_rental_rounded, size: 36, color: AppColors.brand),
+                child: const Icon(
+                  Icons.car_rental_rounded,
+                  size: 36,
+                  color: AppColors.brand,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -191,7 +230,9 @@ class _DriverRentalBookingsScreenState extends State<DriverRentalBookingsScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : const Color(0xFF6B7280),
                 ),
               ),
             ],
@@ -220,7 +261,9 @@ class _DriverBookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor = isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6B7280);
     final dateFormat = DateFormat('EEE, MMM dd • hh:mm a');
 
     return Container(
@@ -258,7 +301,11 @@ class _DriverBookingCard extends StatelessWidget {
                   children: [
                     Text(
                       booking.vehicleTitle,
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: primaryTextColor),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: primaryTextColor,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -273,18 +320,31 @@ class _DriverBookingCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Divider(height: 1, color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6)),
+          Divider(
+            height: 1,
+            color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6),
+          ),
           const SizedBox(height: 12),
 
           // Customer & Location
           Row(
             children: [
-              const Icon(Icons.person_outline_rounded, size: 16, color: AppColors.brand),
+              const Icon(
+                Icons.person_outline_rounded,
+                size: 16,
+                color: AppColors.brand,
+              ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  booking.customerName,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: primaryTextColor),
+                child: CustomerNameWithBadge(
+                  name: booking.customerName,
+                  customerUid: booking.customerId,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: primaryTextColor,
+                  ),
+                  badgeSize: 15,
                 ),
               ),
               if (booking.customerPhone.isNotEmpty)
@@ -298,7 +358,11 @@ class _DriverBookingCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF9CA3AF)),
+              const Icon(
+                Icons.location_on_outlined,
+                size: 16,
+                color: Color(0xFF9CA3AF),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -313,7 +377,11 @@ class _DriverBookingCard extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFF9CA3AF)),
+              const Icon(
+                Icons.access_time_rounded,
+                size: 16,
+                color: Color(0xFF9CA3AF),
+              ),
               const SizedBox(width: 8),
               Text(
                 dateFormat.format(booking.startDate),
@@ -332,7 +400,9 @@ class _DriverBookingCard extends StatelessWidget {
                   backgroundColor: AppColors.brand,
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
                 ),
                 onPressed: () {
                   context.push(DriverRoutePaths.rentalTrip, extra: booking);
@@ -340,10 +410,14 @@ class _DriverBookingCard extends StatelessWidget {
                 child: Text(
                   booking.rentalTripStatus == RentalTripStatus.inProgress
                       ? 'Resume Rental Trip'
-                      : (booking.rentalTripStatus == RentalTripStatus.headingToPickup
-                          ? 'Continue to Pickup'
-                          : 'Open Rental Trip'),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      : (booking.rentalTripStatus ==
+                                RentalTripStatus.headingToPickup
+                            ? 'Continue to Pickup'
+                            : 'Open Rental Trip'),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),

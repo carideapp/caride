@@ -156,13 +156,15 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
     final cardBg = isDark ? AppColors.darkSurface : Colors.white;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : const Color(0xFFF9FAFB),
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : const Color(0xFFF9FAFB),
       body: SafeArea(
         child: ListenableBuilder(
           listenable: customerAuthController,
@@ -170,15 +172,17 @@ class _AccountScreenState extends State<AccountScreen> {
             final profile = customerAuthController.currentProfile;
             final fullName = (profile?.fullName.trim().isNotEmpty ?? false)
                 ? profile!.fullName.trim()
-                : (FirebaseAuth.instance.currentUser?.displayName?.isNotEmpty ?? false
-                    ? FirebaseAuth.instance.currentUser!.displayName!
-                    : 'CaRide User');
+                : (FirebaseAuth.instance.currentUser?.displayName?.isNotEmpty ??
+                          false
+                      ? FirebaseAuth.instance.currentUser!.displayName!
+                      : 'CaRide User');
             final phone = (profile?.phone.trim().isNotEmpty ?? false)
                 ? profile!.phone.trim()
                 : (FirebaseAuth.instance.currentUser?.phoneNumber ??
-                    FirebaseAuth.instance.currentUser?.email ??
-                    '');
-            final photoUrl = profile?.photoUrl ??
+                      FirebaseAuth.instance.currentUser?.email ??
+                      '');
+            final photoUrl =
+                profile?.photoUrl ??
                 FirebaseAuth.instance.currentUser?.photoURL ??
                 '';
 
@@ -187,8 +191,12 @@ class _AccountScreenState extends State<AccountScreen> {
               children: [
                 // ── Header UI: Clean Bold Account Title ──
                 Padding(
-                  padding:
-                      const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+                  padding: const EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: 16,
+                    bottom: 8,
+                  ),
                   child: Text(
                     'Account',
                     style: TextStyle(
@@ -216,7 +224,9 @@ class _AccountScreenState extends State<AccountScreen> {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 16),
+                            horizontal: 18,
+                            vertical: 16,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.brand,
                             borderRadius: BorderRadius.circular(22),
@@ -238,10 +248,10 @@ class _AccountScreenState extends State<AccountScreen> {
                                           fit: BoxFit.cover,
                                           errorBuilder: (_, __, ___) =>
                                               const Icon(
-                                            Icons.person_rounded,
-                                            color: AppColors.brand,
-                                            size: 34,
-                                          ),
+                                                Icons.person_rounded,
+                                                color: AppColors.brand,
+                                                size: 34,
+                                              ),
                                         )
                                       : const Icon(
                                           Icons.person_rounded,
@@ -257,22 +267,43 @@ class _AccountScreenState extends State<AccountScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      fullName.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.3,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            fullName.toUpperCase(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.3,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (profile?.isVerified == true) ...[
+                                          const SizedBox(width: 6),
+                                          const Tooltip(
+                                            message: 'Verified Customer',
+                                            child: Icon(
+                                              Icons.verified_rounded,
+                                              color: Colors.white,
+                                              size: 19,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      phone.isNotEmpty ? phone : 'Add Phone Number',
+                                      phone.isNotEmpty
+                                          ? phone
+                                          : 'Add Phone Number',
                                       style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.90),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.90,
+                                        ),
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
                                       ),
@@ -292,8 +323,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                   color: Colors.white,
                                   size: 20,
                                 ),
-                                onPressed: () =>
-                                    context.push(CustomerRoutePaths.editProfile),
+                                onPressed: () => context.push(
+                                  CustomerRoutePaths.editProfile,
+                                ),
                               ),
                             ],
                           ),
@@ -323,8 +355,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 icon: Icons.credit_card_outlined,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () => context
-                                    .push(CustomerRoutePaths.viewPaymentMethods),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.viewPaymentMethods,
+                                ),
                               ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -350,12 +383,51 @@ class _AccountScreenState extends State<AccountScreen> {
                           child: Column(
                             children: [
                               _ProfileMenuItem(
+                                title: 'ID Verification',
+                                icon: Icons.verified_user_outlined,
+                                isDark: isDark,
+                                primaryTextColor: primaryTextColor,
+                                trailingBadge: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (profile?.isVerified == true)
+                                        ? AppColors.brand.withValues(
+                                            alpha: 0.14,
+                                          )
+                                        : const Color(
+                                            0xFFF59E0B,
+                                          ).withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    (profile?.isVerified == true)
+                                        ? 'Verified'
+                                        : 'Action Needed',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: (profile?.isVerified == true)
+                                          ? AppColors.brand
+                                          : const Color(0xFFD97706),
+                                    ),
+                                  ),
+                                ),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.idVerification,
+                                ),
+                              ),
+                              _buildDivider(isDark),
+                              _ProfileMenuItem(
                                 title: 'Saved Addresses',
                                 icon: Icons.location_on_outlined,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () => context
-                                    .push(CustomerRoutePaths.savedAddresses),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.savedAddresses,
+                                ),
                               ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -363,8 +435,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 icon: Icons.shield_outlined,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () => context
-                                    .push(CustomerRoutePaths.accountSecurity),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.accountSecurity,
+                                ),
                               ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -372,8 +445,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 icon: Icons.visibility_outlined,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () => context
-                                    .push(CustomerRoutePaths.appAppearance),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.appAppearance,
+                                ),
                               ),
                             ],
                           ),
@@ -403,8 +477,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 icon: Icons.location_searching_rounded,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () => context
-                                    .push(CustomerRoutePaths.monitorTripEntry),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.monitorTripEntry,
+                                ),
                               ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -412,8 +487,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 icon: Icons.bar_chart_rounded,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () => context
-                                    .push(CustomerRoutePaths.dataAnalytics),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.dataAnalytics,
+                                ),
                               ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -421,8 +497,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 icon: Icons.help_outline_rounded,
                                 isDark: isDark,
                                 primaryTextColor: primaryTextColor,
-                                onTap: () =>
-                                    context.push(CustomerRoutePaths.helpSupport),
+                                onTap: () => context.push(
+                                  CustomerRoutePaths.helpSupport,
+                                ),
                               ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -454,8 +531,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                   isDark: isDark,
                                   primaryTextColor: primaryTextColor,
                                   onTap: () async {
-                                    await customerAuthController
-                                        .switchRole('driver');
+                                    await customerAuthController.switchRole(
+                                      'driver',
+                                    );
                                     if (!context.mounted) return;
                                     context.go(DriverRoutePaths.home);
                                   },
@@ -466,8 +544,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                   icon: Icons.assignment_ind_outlined,
                                   isDark: isDark,
                                   primaryTextColor: primaryTextColor,
-                                  onTap: () => context
-                                      .push(CustomerRoutePaths.becomeDriver),
+                                  onTap: () => context.push(
+                                    CustomerRoutePaths.becomeDriver,
+                                  ),
                                 ),
                               _buildDivider(isDark),
                               _ProfileMenuItem(
@@ -476,8 +555,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                 isDark: isDark,
                                 primaryTextColor: AppColors.error,
                                 iconColor: AppColors.error,
-                                iconBgColor:
-                                    AppColors.error.withValues(alpha: 0.1),
+                                iconBgColor: AppColors.error.withValues(
+                                  alpha: 0.1,
+                                ),
                                 showChevron: false,
                                 onTap: () => _showLogoutBottomSheet(context),
                               ),
@@ -545,6 +625,7 @@ class _ProfileMenuItem extends StatelessWidget {
     required this.onTap,
     this.iconColor,
     this.iconBgColor,
+    this.trailingBadge,
     this.showChevron = true,
   });
 
@@ -555,11 +636,13 @@ class _ProfileMenuItem extends StatelessWidget {
   final VoidCallback onTap;
   final Color? iconColor;
   final Color? iconBgColor;
+  final Widget? trailingBadge;
   final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveIconBg = iconBgColor ??
+    final effectiveIconBg =
+        iconBgColor ??
         (isDark
             ? AppColors.brand.withValues(alpha: 0.18)
             : const Color(0xFFE8F5E9));
@@ -593,6 +676,10 @@ class _ProfileMenuItem extends StatelessWidget {
                 ),
               ),
             ),
+            if (trailingBadge != null) ...[
+              trailingBadge!,
+              const SizedBox(width: 8),
+            ],
             if (showChevron)
               const Icon(
                 Icons.chevron_right_rounded,

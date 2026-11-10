@@ -32,6 +32,7 @@ class CustomerRouteDelegates {
     required this.viewPaymentMethods,
     required this.addNewPayment,
     required this.accountSecurity,
+    this.idVerification,
     required this.linkedAccounts,
     required this.dataAnalytics,
     required this.dataUsage,
@@ -147,6 +148,7 @@ class CustomerRouteDelegates {
   final WidgetBuilder viewPaymentMethods;
   final WidgetBuilder addNewPayment;
   final WidgetBuilder accountSecurity;
+  final WidgetBuilder? idVerification;
   final WidgetBuilder linkedAccounts;
   final WidgetBuilder dataAnalytics;
   final WidgetBuilder dataUsage;

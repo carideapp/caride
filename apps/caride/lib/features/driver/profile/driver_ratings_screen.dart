@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
@@ -29,8 +30,9 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final backgroundColor =
-        isDark ? AppColors.darkBackground : AppColors.lightBackground;
+    final backgroundColor = isDark
+        ? AppColors.darkBackground
+        : AppColors.lightBackground;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -54,9 +56,11 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
         child: StreamBuilder<DriverRatingsSummary>(
           stream: _repo.streamRatingsSummary(),
           builder: (context, snapshot) {
-            final isWaiting = snapshot.connectionState == ConnectionState.waiting;
+            final isWaiting =
+                snapshot.connectionState == ConnectionState.waiting;
 
-            final summary = snapshot.data ??
+            final summary =
+                snapshot.data ??
                 const DriverRatingsSummary(
                   averageRating: 0,
                   totalRatings: 0,
@@ -84,10 +88,10 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
                             child: _buildReviewsHeader(context, summary),
                           ),
                           const SizedBox(height: AppSpacing.sm),
-                          ...summary.entries.map((e) => _ReviewCard(
-                                entry: e,
-                                formatDate: _formatDate,
-                              )),
+                          ...summary.entries.map(
+                            (e) =>
+                                _ReviewCard(entry: e, formatDate: _formatDate),
+                          ),
                         ],
                         const SizedBox(height: AppSpacing.xl),
                       ],
@@ -103,8 +107,9 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final borderColor =
-        isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : const Color(0xFFE9EAF0);
 
     final avg = summary.averageRating;
     final displayRating = avg > 0 ? avg.toStringAsFixed(1) : '0';
@@ -175,7 +180,9 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
                     Text(
                       '/5',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: isDark ? Colors.grey[500] : const Color(0xFF8A90A6),
+                        color: isDark
+                            ? Colors.grey[500]
+                            : const Color(0xFF8A90A6),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -214,7 +221,9 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
   }
 
   Widget _buildReviewsHeader(
-      BuildContext context, DriverRatingsSummary summary) {
+    BuildContext context,
+    DriverRatingsSummary summary,
+  ) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -243,8 +252,9 @@ class _DriverRatingsScreenState extends State<DriverRatingsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final borderColor =
-        isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : const Color(0xFFE9EAF0);
 
     return Container(
       decoration: BoxDecoration(
@@ -293,8 +303,9 @@ class _ReviewCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final borderColor =
-        isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : const Color(0xFFE9EAF0);
 
     final initial = entry.customerName.isNotEmpty
         ? entry.customerName[0].toUpperCase()
@@ -325,7 +336,9 @@ class _ReviewCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.1),
+                  backgroundColor: AppColors.primaryGreen.withValues(
+                    alpha: 0.1,
+                  ),
                   child: Text(
                     initial,
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -339,8 +352,10 @@ class _ReviewCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        entry.customerName,
+                      CustomerNameWithBadge(
+                        name: entry.customerName,
+                        customerUid: entry.customerUid,
+                        iconSize: 15,
                         style: theme.textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: isDark ? Colors.white : AppColors.slate900,
@@ -350,7 +365,9 @@ class _ReviewCard extends StatelessWidget {
                       Text(
                         formatDate(entry.ratedAt),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
+                          color: isDark
+                              ? Colors.grey[400]
+                              : const Color(0xFF6E7191),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -387,7 +404,9 @@ class _ReviewCard extends StatelessWidget {
                     child: Text(
                       'Ride to ${entry.dropoffLabel}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
+                        color: isDark
+                            ? Colors.grey[400]
+                            : const Color(0xFF6E7191),
                         fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
@@ -482,7 +501,11 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                         5,
                         (i) => Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Icon(Icons.star_rounded, color: baseShimmerColor, size: 28),
+                          child: Icon(
+                            Icons.star_rounded,
+                            color: baseShimmerColor,
+                            size: 28,
+                          ),
                         ),
                       ),
                     ),
@@ -517,7 +540,9 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                       color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                       borderRadius: BorderRadius.circular(AppRadius.xl),
                       border: Border.all(
-                        color: isDark ? Colors.white10 : const Color(0xFFE9EAF0),
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFE9EAF0),
                       ),
                     ),
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -533,11 +558,23 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(width: 100, height: 14, color: baseShimmerColor),
+                              Container(
+                                width: 100,
+                                height: 14,
+                                color: baseShimmerColor,
+                              ),
                               const SizedBox(height: 6),
-                              Container(width: 60, height: 10, color: baseShimmerColor),
+                              Container(
+                                width: 60,
+                                height: 10,
+                                color: baseShimmerColor,
+                              ),
                               const SizedBox(height: 12),
-                              Container(width: double.infinity, height: 14, color: baseShimmerColor),
+                              Container(
+                                width: double.infinity,
+                                height: 14,
+                                color: baseShimmerColor,
+                              ),
                             ],
                           ),
                         ),
@@ -545,7 +582,11 @@ class _RatingsSkeletonLoaderState extends State<_RatingsSkeletonLoader>
                         Row(
                           children: List.generate(
                             5,
-                            (i) => Icon(Icons.star_rounded, color: baseShimmerColor, size: 14),
+                            (i) => Icon(
+                              Icons.star_rounded,
+                              color: baseShimmerColor,
+                              size: 14,
+                            ),
                           ),
                         ),
                       ],

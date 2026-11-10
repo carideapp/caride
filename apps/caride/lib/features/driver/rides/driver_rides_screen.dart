@@ -20,16 +20,22 @@ class DriverRidesScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+        backgroundColor: isDark
+            ? AppColors.darkBackground
+            : AppColors.lightBackground,
         appBar: GlassAppBar(
           title: 'My Rides',
           automaticallyImplyLeading: false,
           bottom: TabBar(
             indicatorColor: AppColors.brand,
             labelColor: AppColors.brand,
-            unselectedLabelColor: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
+            unselectedLabelColor: isDark
+                ? AppColors.textTertiaryDark
+                : AppColors.textTertiaryLight,
             labelStyle: AppTextStyles.titleMedium.copyWith(fontSize: 14),
-            unselectedLabelStyle: AppTextStyles.bodyMedium.copyWith(fontSize: 14),
+            unselectedLabelStyle: AppTextStyles.bodyMedium.copyWith(
+              fontSize: 14,
+            ),
             tabs: const [
               Tab(text: 'Active'),
               Tab(text: 'History'),
@@ -155,7 +161,10 @@ class _RideCard extends StatelessWidget {
               StatusChip(
                 label: statusLabel,
                 tone: tone,
-                isActive: ride.status == 'rideStarted' || ride.status == 'driverEnRoute' || ride.status == 'driverArrived',
+                isActive:
+                    ride.status == 'rideStarted' ||
+                    ride.status == 'driverEnRoute' ||
+                    ride.status == 'driverArrived',
               ),
             ],
           ),
@@ -175,20 +184,49 @@ class _RideCard extends StatelessWidget {
                       .doc(ride.customerUid)
                       .get(),
                   builder: (context, userSnap) {
-                    final fullName = userSnap.data?.data()?['fullName'] as String? ?? 'Customer';
+                    final userData = userSnap.data?.data();
+                    final fullName =
+                        userData?['fullName'] as String? ?? 'Customer';
+                    final isCustomerVerified =
+                        (userData?['isVerified'] == true) ||
+                        (userData?['isNinVerified'] == true) ||
+                        ((userData?['verificationStatus'] as String?)
+                                ?.toLowerCase() ==
+                            'verified');
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          fullName,
-                          style: AppTextStyles.titleMedium,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                fullName,
+                                style: AppTextStyles.titleMedium,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isCustomerVerified) ...[
+                              const SizedBox(width: 5),
+                              const Icon(
+                                Icons.verified_rounded,
+                                size: 16,
+                                color: AppColors.brand,
+                              ),
+                            ],
+                          ],
                         ),
                         if (ride.createdAt != null) ...[
                           const SizedBox(height: 2),
                           Text(
-                            DateFormat('dd MMM, hh:mm a').format(ride.createdAt!),
+                            DateFormat(
+                              'dd MMM, hh:mm a',
+                            ).format(ride.createdAt!),
                             style: AppTextStyles.bodySmall.copyWith(
-                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
                             ),
                           ),
                         ],
@@ -215,9 +253,15 @@ class _RideCard extends StatelessWidget {
                   Container(
                     width: 2,
                     height: 32,
-                    color: isDark ? AppColors.glassBorderDark : AppColors.glassBorderLight,
+                    color: isDark
+                        ? AppColors.glassBorderDark
+                        : AppColors.glassBorderLight,
                   ),
-                  const Icon(Icons.location_on_rounded, size: 14, color: AppColors.error),
+                  const Icon(
+                    Icons.location_on_rounded,
+                    size: 14,
+                    color: AppColors.error,
+                  ),
                 ],
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -228,7 +272,9 @@ class _RideCard extends StatelessWidget {
                     Text(
                       'PICKUP',
                       style: AppTextStyles.caption.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
                         fontWeight: FontWeight.w800,
                         fontSize: 9,
                         letterSpacing: 1,
@@ -245,7 +291,9 @@ class _RideCard extends StatelessWidget {
                     Text(
                       'DROPOFF',
                       style: AppTextStyles.caption.copyWith(
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
                         fontWeight: FontWeight.w800,
                         fontSize: 9,
                         letterSpacing: 1,
@@ -266,11 +314,16 @@ class _RideCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           if (isActive)
             PrimaryButton(
-              label: (ride.status == 'driverEnRoute' || ride.status == 'driverArrived')
-                  ? (ride.status == 'driverArrived' ? 'At Pickup — Start Ride' : 'Go to Pickup')
+              label:
+                  (ride.status == 'driverEnRoute' ||
+                      ride.status == 'driverArrived')
+                  ? (ride.status == 'driverArrived'
+                        ? 'At Pickup — Start Ride'
+                        : 'Go to Pickup')
                   : 'View Active Ride',
               onPressed: () => context.push(
-                (ride.status == 'driverEnRoute' || ride.status == 'driverArrived')
+                (ride.status == 'driverEnRoute' ||
+                        ride.status == 'driverArrived')
                     ? DriverRoutePaths.tripPickup
                     : DriverRoutePaths.tripActive,
               ),
@@ -278,7 +331,8 @@ class _RideCard extends StatelessWidget {
           else
             SecondaryButton(
               label: 'View Details',
-              onPressed: () => context.push(DriverRoutePaths.rideDetail, extra: ride.id),
+              onPressed: () =>
+                  context.push(DriverRoutePaths.rideDetail, extra: ride.id),
               icon: Icons.receipt_long_outlined,
             ),
         ],

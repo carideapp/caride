@@ -202,6 +202,13 @@ CustomerRouterBundle createCustomerRouter({
                     builder: (context, state) => d.linkedAccounts(context),
                   ),
                   GoRoute(
+                    path: 'id-verification',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => d.idVerification != null
+                        ? d.idVerification!(context)
+                        : const SizedBox.shrink(),
+                  ),
+                  GoRoute(
                     path: 'data-analytics',
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (context, state) => d.dataAnalytics(context),

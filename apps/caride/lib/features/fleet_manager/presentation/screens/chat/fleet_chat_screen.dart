@@ -1,3 +1,4 @@
+import 'package:caride/core/widgets/customer_verified_badge.dart';
 import 'package:caride/features/chat/data/chat_repository.dart';
 import 'package:caride/features/fleet_manager/presentation/widgets/fleet_bottom_nav.dart';
 import 'package:design_system/design_system.dart';
@@ -58,12 +59,13 @@ class _FleetChatScreenState extends State<FleetChatScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor =
-        isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280);
-    final borderColor =
-        isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
-    final inputFill =
-        isDark ? AppColors.darkSurface : const Color(0xFFF9FAFB);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6B7280);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
+    final inputFill = isDark ? AppColors.darkSurface : const Color(0xFFF9FAFB);
     final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
@@ -75,7 +77,10 @@ class _FleetChatScreenState extends State<FleetChatScreen>
           children: [
             // ── Top Bar with Circular Back Button & Centered Title ──
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 12.0,
+              ),
               child: Row(
                 children: [
                   if (canPop)
@@ -118,7 +123,10 @@ class _FleetChatScreenState extends State<FleetChatScreen>
 
             // ── Pill Search Field ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 6.0,
+              ),
               child: TextFormField(
                 controller: _searchController,
                 style: TextStyle(color: primaryTextColor, fontSize: 14),
@@ -150,8 +158,10 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                           ),
                         )
                       : null,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 13,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(28),
                     borderSide: BorderSide(color: borderColor),
@@ -162,8 +172,10 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(28),
-                    borderSide:
-                        const BorderSide(color: AppColors.brand, width: 1.5),
+                    borderSide: const BorderSide(
+                      color: AppColors.brand,
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -187,28 +199,37 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                     return Center(
                       child: Text(
                         'Unable to load messages right now.',
-                        style: TextStyle(color: secondaryTextColor, fontSize: 14),
+                        style: TextStyle(
+                          color: secondaryTextColor,
+                          fontSize: 14,
+                        ),
                       ),
                     );
                   }
 
                   final allThreads = snapshot.data ?? [];
-                  final unreadThreads =
-                      allThreads.where((t) => t.unread > 0).toList();
-                  final totalUnread =
-                      allThreads.fold<int>(0, (sum, t) => sum + t.unread);
+                  final unreadThreads = allThreads
+                      .where((t) => t.unread > 0)
+                      .toList();
+                  final totalUnread = allThreads.fold<int>(
+                    0,
+                    (sum, t) => sum + t.unread,
+                  );
 
-                  final activeList =
-                      _selectedTabIndex == 0 ? allThreads : unreadThreads;
+                  final activeList = _selectedTabIndex == 0
+                      ? allThreads
+                      : unreadThreads;
 
                   final filtered = activeList.where((t) {
                     if (_searchQuery.isEmpty) return true;
                     final query = _searchQuery.toLowerCase();
                     final nameMatch = t.name.toLowerCase().contains(query);
-                    final vehicleMatch =
-                        (t.vehicleTitle ?? '').toLowerCase().contains(query);
-                    final previewMatch =
-                        t.preview.toLowerCase().contains(query);
+                    final vehicleMatch = (t.vehicleTitle ?? '')
+                        .toLowerCase()
+                        .contains(query);
+                    final previewMatch = t.preview.toLowerCase().contains(
+                      query,
+                    );
                     return nameMatch || vehicleMatch || previewMatch;
                   }).toList();
 
@@ -218,7 +239,9 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                       // ── Pill Segment Tabs (All, Unread) ──────────────────
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20.0, vertical: 8.0),
+                          horizontal: 20.0,
+                          vertical: 8.0,
+                        ),
                         child: Container(
                           height: 44,
                           padding: const EdgeInsets.all(3),
@@ -258,15 +281,20 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                       const SizedBox(width: 6),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 1.5),
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: _selectedTabIndex == 0
-                                              ? Colors.white.withValues(alpha: 0.25)
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.25,
+                                                )
                                               : (isDark
-                                                  ? Colors.white12
-                                                  : Colors.black12),
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                                    ? Colors.white12
+                                                    : Colors.black12),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Text(
                                           '${allThreads.length}',
@@ -292,13 +320,18 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                       const SizedBox(width: 6),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 1.5),
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: _selectedTabIndex == 1
-                                              ? Colors.white.withValues(alpha: 0.25)
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.25,
+                                                )
                                               : AppColors.brand,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Text(
                                           '$totalUnread',
@@ -338,7 +371,8 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                             ? Center(
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 32.0),
+                                    horizontal: 32.0,
+                                  ),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -346,8 +380,9 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                         width: 76,
                                         height: 76,
                                         decoration: BoxDecoration(
-                                          color: AppColors.brand
-                                              .withValues(alpha: 0.1),
+                                          color: AppColors.brand.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                         child: const Icon(
@@ -404,18 +439,21 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                         MaterialPageRoute(
                                           builder: (_) =>
                                               FleetConversationScreen(
-                                            threadId: thread.rideId,
-                                            customerName: thread.name,
-                                            customerUid: thread.driverUid,
-                                            vehicleTitle: thread.vehicleTitle,
-                                            bookingId: thread.bookingId,
-                                          ),
+                                                threadId: thread.rideId,
+                                                customerName: thread.name,
+                                                customerUid: thread.driverUid,
+                                                vehicleTitle:
+                                                    thread.vehicleTitle,
+                                                bookingId: thread.bookingId,
+                                              ),
                                         ),
                                       );
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 20.0, vertical: 14.0),
+                                        horizontal: 20.0,
+                                        vertical: 14.0,
+                                      ),
                                       child: Row(
                                         children: [
                                           // Circular Customer Avatar
@@ -428,11 +466,13 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                                 : null,
                                             child: photoUrl.isEmpty
                                                 ? Text(
-                                                    thread.name.trim().isNotEmpty
-                                                        ? thread.name
+                                                    thread.name
                                                             .trim()
-                                                            .substring(0, 1)
-                                                            .toUpperCase()
+                                                            .isNotEmpty
+                                                        ? thread.name
+                                                              .trim()
+                                                              .substring(0, 1)
+                                                              .toUpperCase()
                                                         : 'C',
                                                     style: const TextStyle(
                                                       fontSize: 17,
@@ -454,8 +494,11 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                                 Row(
                                                   children: [
                                                     Flexible(
-                                                      child: Text(
-                                                        thread.name,
+                                                      child: CustomerNameWithBadge(
+                                                        name: thread.name,
+                                                        customerUid:
+                                                            thread.driverUid,
+                                                        iconSize: 16,
                                                         style: TextStyle(
                                                           fontSize: 15.5,
                                                           fontWeight: hasUnread
@@ -469,16 +512,11 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                                             .ellipsis,
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 5),
-                                                    const Icon(
-                                                      Icons.verified_rounded,
-                                                      size: 16,
-                                                      color: AppColors.brand,
-                                                    ),
                                                     const Spacer(),
                                                     Text(
                                                       _formatTimestamp(
-                                                          thread.timestamp),
+                                                        thread.timestamp,
+                                                      ),
                                                       style: TextStyle(
                                                         fontSize: 12,
                                                         color:
@@ -500,9 +538,11 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                                           fontSize: 13.5,
                                                           color: hasUnread
                                                               ? (isDark
-                                                                  ? Colors.white
-                                                                  : const Color(
-                                                                      0xFF1F2937))
+                                                                    ? Colors
+                                                                          .white
+                                                                    : const Color(
+                                                                        0xFF1F2937,
+                                                                      ))
                                                               : secondaryTextColor,
                                                           fontWeight: hasUnread
                                                               ? FontWeight.w600
@@ -517,32 +557,35 @@ class _FleetChatScreenState extends State<FleetChatScreen>
                                                       const SizedBox(width: 8),
                                                       Container(
                                                         padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 7,
-                                                                vertical: 2.5),
-                                                        decoration:
-                                                            BoxDecoration(
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 7,
+                                                              vertical: 2.5,
+                                                            ),
+                                                        decoration: BoxDecoration(
                                                           color:
                                                               AppColors.brand,
                                                           borderRadius:
-                                                              BorderRadius
-                                                                  .circular(12),
+                                                              BorderRadius.circular(
+                                                                12,
+                                                              ),
                                                         ),
                                                         constraints:
                                                             const BoxConstraints(
-                                                                minWidth: 20),
+                                                              minWidth: 20,
+                                                            ),
                                                         alignment:
                                                             Alignment.center,
                                                         child: Text(
                                                           '${thread.unread}',
                                                           style:
                                                               const TextStyle(
-                                                            color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 11,
-                                                          ),
+                                                                color: Colors
+                                                                    .white,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 11,
+                                                              ),
                                                         ),
                                                       ),
                                                     ],

@@ -23,8 +23,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
 
   bool _isProcessing = false;
   String? _errorMessage;
-  final FirebaseFunctions _functions =
-      FirebaseFunctions.instanceFor(region: AppEnv.firebaseFunctionsRegion);
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: AppEnv.firebaseFunctionsRegion,
+  );
 
   @override
   void initState() {
@@ -48,7 +49,10 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
     if (error == null) return 'An unexpected error occurred. Please try again.';
     final str = error.toString().toLowerCase();
 
-    if (str.contains('invalid-pin') || str.contains('invalid pin') || str.contains('incorrect-pin') || str.contains('pin')) {
+    if (str.contains('invalid-pin') ||
+        str.contains('invalid pin') ||
+        str.contains('incorrect-pin') ||
+        str.contains('pin')) {
       return 'Invalid 4-digit PIN. Please ask the customer for the correct start PIN displayed in their CaRide app.';
     }
     if (str.contains('not-found') || str.contains('booking-not-found')) {
@@ -57,7 +61,10 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
     if (str.contains('unauthenticated') || str.contains('permission-denied')) {
       return 'Authentication session expired or unauthorized. Please sign in again.';
     }
-    if (str.contains('network') || str.contains('unavailable') || str.contains('socketexception') || str.contains('timeout')) {
+    if (str.contains('network') ||
+        str.contains('unavailable') ||
+        str.contains('socketexception') ||
+        str.contains('timeout')) {
       return 'Network connection failure. Please check your internet connection and try again.';
     }
     if (str.contains('already-exists') || str.contains('invalid-state')) {
@@ -116,7 +123,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
     }
     try {
       final encoded = Uri.encodeComponent(loc);
-      final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
+      final url = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$encoded',
+      );
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
@@ -139,14 +148,20 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
       if (!mounted) return;
       setState(() {
         _isProcessing = false;
-        _booking = _booking.copyWith(rentalTripStatus: RentalTripStatus.headingToPickup);
+        _booking = _booking.copyWith(
+          rentalTripStatus: RentalTripStatus.headingToPickup,
+        );
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Customer notified that you are heading to pickup!'),
+          content: const Text(
+            'Customer notified that you are heading to pickup!',
+          ),
           backgroundColor: AppColors.brand,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       );
     } catch (e) {
@@ -186,7 +201,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
           content: const Text('PIN verified! Rental ride has started.'),
           backgroundColor: AppColors.brand,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       );
     } catch (e) {
@@ -236,7 +253,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   color: AppColors.error.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: AppColors.error,
+                  size: 28,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -253,7 +274,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280),
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : const Color(0xFF6B7280),
                 ),
               ),
               const SizedBox(height: 24),
@@ -265,13 +288,18 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                     backgroundColor: AppColors.error,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
                   ),
                   onPressed: () async {
                     Navigator.pop(bottomSheetContext);
                     await _executeEndRide();
                   },
-                  child: const Text('Yes, End Rental Ride', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  child: const Text(
+                    'Yes, End Rental Ride',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -281,7 +309,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   onPressed: () => Navigator.pop(bottomSheetContext),
                   child: Text(
                     'Cancel',
-                    style: TextStyle(color: isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280)),
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : const Color(0xFF6B7280),
+                    ),
                   ),
                 ),
               ),
@@ -297,10 +329,7 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
     setState(() => _isProcessing = true);
     try {
       final callable = _functions.httpsCallable('updateRentalTripStatus');
-      await callable.call({
-        'bookingId': _booking.id,
-        'action': 'endRide',
-      });
+      await callable.call({'bookingId': _booking.id, 'action': 'endRide'});
       if (!mounted) return;
       setState(() {
         _isProcessing = false;
@@ -314,7 +343,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
           content: const Text('Rental ride completed successfully!'),
           backgroundColor: AppColors.brand,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       );
     } catch (e) {
@@ -328,20 +359,34 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-    final secondaryTextColor = isDark ? AppColors.textSecondaryDark : const Color(0xFF6B7280);
+    final secondaryTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : const Color(0xFF6B7280);
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('rental_bookings').doc(_booking.id).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('rental_bookings')
+          .doc(_booking.id)
+          .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data!.exists && snapshot.data!.data() != null) {
-          _booking = RentalBooking.fromMap(snapshot.data!.data()!, snapshot.data!.id);
+        if (snapshot.hasData &&
+            snapshot.data!.exists &&
+            snapshot.data!.data() != null) {
+          _booking = RentalBooking.fromMap(
+            snapshot.data!.data()!,
+            snapshot.data!.id,
+          );
         }
 
         final isCompleted = _booking.status == RentalBookingStatus.completed;
         final isInProgress = _booking.status == RentalBookingStatus.inProgress;
-        final isHeading = _booking.rentalTripStatus == RentalTripStatus.headingToPickup;
-        final isAssigned = _booking.rentalTripStatus == RentalTripStatus.assigned ||
-            (_booking.rentalTripStatus == null && !isInProgress && !isCompleted);
+        final isHeading =
+            _booking.rentalTripStatus == RentalTripStatus.headingToPickup;
+        final isAssigned =
+            _booking.rentalTripStatus == RentalTripStatus.assigned ||
+            (_booking.rentalTripStatus == null &&
+                !isInProgress &&
+                !isCompleted);
 
         // Step index: 0 = Assigned, 1 = En Route, 2 = In Progress, 3 = Completed
         int currentStep = 0;
@@ -353,16 +398,22 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
           currentStep = 1;
         }
 
-        final bookingShortId = '#CR-${_booking.id.length > 6 ? _booking.id.substring(0, 6).toUpperCase() : _booking.id.toUpperCase()}';
+        final bookingShortId =
+            '#CR-${_booking.id.length > 6 ? _booking.id.substring(0, 6).toUpperCase() : _booking.id.toUpperCase()}';
 
         return Scaffold(
-          backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+          backgroundColor: isDark
+              ? AppColors.darkBackground
+              : AppColors.lightBackground,
           body: SafeArea(
             child: Column(
               children: [
                 // ── Top Header Navigation Bar ──
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 10.0,
+                  ),
                   child: Row(
                     children: [
                       Container(
@@ -372,11 +423,17 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                           color: isDark ? AppColors.darkSurface : Colors.white,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                            color: isDark
+                                ? AppColors.glassBorderDark
+                                : const Color(0xFFE5E7EB),
                           ),
                         ),
                         child: IconButton(
-                          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: primaryTextColor),
+                          icon: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 18,
+                            color: primaryTextColor,
+                          ),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ),
@@ -395,7 +452,10 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
 
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -405,29 +465,42 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                             padding: const EdgeInsets.all(16),
                             margin: const EdgeInsets.only(bottom: 16),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
+                              color: isDark
+                                  ? const Color(0xFF450A0A)
+                                  : const Color(0xFFFEF2F2),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(color: AppColors.error),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 22),
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  color: AppColors.error,
+                                  size: 22,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Action Required',
-                                        style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.error, fontSize: 13),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.error,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         _errorMessage!,
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: isDark ? const Color(0xFFFECACA) : const Color(0xFF991B1B),
+                                          color: isDark
+                                              ? const Color(0xFFFECACA)
+                                              : const Color(0xFF991B1B),
                                         ),
                                       ),
                                     ],
@@ -435,7 +508,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                                 ),
                                 GestureDetector(
                                   onTap: _clearError,
-                                  child: const Icon(Icons.close_rounded, size: 18, color: AppColors.error),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                    color: AppColors.error,
+                                  ),
                                 ),
                               ],
                             ),
@@ -526,7 +603,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,12 +639,20 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                 children: [
                   Text(
                     'Booking ID',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: secondaryTextColor),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: secondaryTextColor,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     bookingShortId,
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primaryTextColor),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: primaryTextColor,
+                    ),
                   ),
                 ],
               ),
@@ -603,7 +690,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                             decoration: BoxDecoration(
                               color: isReached
                                   ? AppColors.brand
-                                  : (isDark ? Colors.white10 : const Color(0xFFF3F4F6)),
+                                  : (isDark
+                                        ? Colors.white10
+                                        : const Color(0xFFF3F4F6)),
                               shape: BoxShape.circle,
                               border: isCurrent
                                   ? Border.all(color: AppColors.brand, width: 2)
@@ -612,7 +701,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                             child: Icon(
                               icon,
                               size: 18,
-                              color: isReached ? Colors.white : secondaryTextColor,
+                              color: isReached
+                                  ? Colors.white
+                                  : secondaryTextColor,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -621,8 +712,12 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: isReached ? FontWeight.w700 : FontWeight.w500,
-                              color: isReached ? primaryTextColor : secondaryTextColor,
+                              fontWeight: isReached
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isReached
+                                  ? primaryTextColor
+                                  : secondaryTextColor,
                             ),
                           ),
                         ],
@@ -635,7 +730,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                         margin: const EdgeInsets.only(bottom: 18),
                         color: index < currentStep
                             ? AppColors.brand
-                            : (isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB)),
+                            : (isDark
+                                  ? AppColors.glassBorderDark
+                                  : const Color(0xFFE5E7EB)),
                       ),
                   ],
                 ),
@@ -646,11 +743,20 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
           // PIN Input Module when heading to pickup
           if (isHeading) ...[
             const SizedBox(height: 20),
-            Divider(height: 1, color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6)),
+            Divider(
+              height: 1,
+              color: isDark
+                  ? AppColors.glassBorderDark
+                  : const Color(0xFFF3F4F6),
+            ),
             const SizedBox(height: 16),
             Text(
               'Enter the 4-digit PIN from the customer',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: secondaryTextColor),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: secondaryTextColor,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -674,7 +780,10 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
               ),
             ),
           ],
@@ -688,34 +797,48 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: isCompleted
-                    ? (isDark ? AppColors.darkSurfaceVariant : const Color(0xFFE5E7EB))
+                    ? (isDark
+                          ? AppColors.darkSurfaceVariant
+                          : const Color(0xFFE5E7EB))
                     : (isInProgress ? AppColors.error : AppColors.brand),
                 foregroundColor: isCompleted
                     ? (isDark ? Colors.white : Colors.black87)
                     : Colors.white,
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
               ),
               onPressed: _isProcessing
                   ? null
                   : (isCompleted
-                      ? () => Navigator.pop(context)
-                      : (isInProgress
-                          ? _showEndRideConfirmation
-                          : (isHeading ? _startRideWithPin : _triggerHeadingToPickup))),
+                        ? () => Navigator.pop(context)
+                        : (isInProgress
+                              ? _showEndRideConfirmation
+                              : (isHeading
+                                    ? _startRideWithPin
+                                    : _triggerHeadingToPickup))),
               child: _isProcessing
                   ? const SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
                     )
                   : Text(
                       isCompleted
                           ? 'Back to Home'
                           : (isInProgress
-                              ? 'End Rental Ride'
-                              : (isHeading ? 'Verify PIN & Start Ride' : 'Heading to Pickup Location')),
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                ? 'End Rental Ride'
+                                : (isHeading
+                                      ? 'Verify PIN & Start Ride'
+                                      : 'Heading to Pickup Location')),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
             ),
           ),
@@ -734,7 +857,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+        ),
       ),
       child: Column(
         children: [
@@ -749,7 +874,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   color: AppColors.brand.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.store_rounded, color: AppColors.brand, size: 20),
+                child: const Icon(
+                  Icons.store_rounded,
+                  color: AppColors.brand,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -758,12 +887,20 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   children: [
                     Text(
                       'Pick Up',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryTextColor),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: secondaryTextColor,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       _booking.pickupLocation,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primaryTextColor),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: primaryTextColor,
+                      ),
                     ),
                   ],
                 ),
@@ -775,7 +912,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                     color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.directions_rounded, color: AppColors.brand, size: 20),
+                  child: const Icon(
+                    Icons.directions_rounded,
+                    color: AppColors.brand,
+                    size: 20,
+                  ),
                 ),
                 onPressed: () => _openDirections(_booking.pickupLocation),
               ),
@@ -790,7 +931,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
               child: Container(
                 width: 2,
                 height: 24,
-                color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+                color: isDark
+                    ? AppColors.glassBorderDark
+                    : const Color(0xFFE5E7EB),
               ),
             ),
           ),
@@ -806,7 +949,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   color: AppColors.brand.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.location_on_rounded, color: AppColors.brand, size: 20),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  color: AppColors.brand,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -815,14 +962,22 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   children: [
                     Text(
                       'Drop Off',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryTextColor),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: secondaryTextColor,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       _booking.dropoffLocation.isNotEmpty
                           ? _booking.dropoffLocation
                           : 'As directed by customer',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primaryTextColor),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: primaryTextColor,
+                      ),
                     ),
                   ],
                 ),
@@ -835,7 +990,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                       color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.directions_rounded, color: AppColors.brand, size: 20),
+                    child: const Icon(
+                      Icons.directions_rounded,
+                      color: AppColors.brand,
+                      size: 20,
+                    ),
                   ),
                   onPressed: () => _openDirections(_booking.dropoffLocation),
                 ),
@@ -855,41 +1014,65 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: customerUid.isNotEmpty
-          ? FirebaseFirestore.instance.collection('customers').doc(customerUid).snapshots()
+          ? FirebaseFirestore.instance
+                .collection('customers')
+                .doc(customerUid)
+                .snapshots()
           : null,
       builder: (context, custSnap) {
         final custData = custSnap.data?.data();
-        final photoUrl = (custData?['photoUrl'] as String?) ??
+        final photoUrl =
+            (custData?['photoUrl'] as String?) ??
             (custData?['profilePhotoUrl'] as String?) ??
             (custData?['photo'] as String?) ??
             _booking.customerPhoto ??
             '';
-        final fullName = (custData?['fullName'] as String?)?.trim() ??
+        final fullName =
+            (custData?['fullName'] as String?)?.trim() ??
             (custData?['name'] as String?)?.trim() ??
             _booking.customerName;
-        final phone = (custData?['phone'] as String?) ??
+        final phone =
+            (custData?['phone'] as String?) ??
             (custData?['phoneNumber'] as String?) ??
             _booking.customerPhone;
 
         final cleanPhoto = photoUrl.trim();
         final cleanPhone = phone.trim();
+        final isCustomerVerified =
+            (custData?['isVerified'] == true) ||
+            (custData?['isNinVerified'] == true) ||
+            ((custData?['verificationStatus'] as String?)?.toLowerCase() ==
+                'verified');
 
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkSurface : Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB)),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.glassBorderDark
+                  : const Color(0xFFE5E7EB),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Customer Info',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primaryTextColor),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: primaryTextColor,
+                ),
               ),
               const SizedBox(height: 14),
-              Divider(height: 1, color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6)),
+              Divider(
+                height: 1,
+                color: isDark
+                    ? AppColors.glassBorderDark
+                    : const Color(0xFFF3F4F6),
+              ),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -913,14 +1096,40 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          fullName,
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primaryTextColor),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                fullName,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: primaryTextColor,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isCustomerVerified) ...[
+                              const SizedBox(width: 5),
+                              const Icon(
+                                Icons.verified_rounded,
+                                size: 16,
+                                color: AppColors.brand,
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          cleanPhone.isNotEmpty ? cleanPhone : 'No phone number',
-                          style: TextStyle(fontSize: 13, color: secondaryTextColor),
+                          cleanPhone.isNotEmpty
+                              ? cleanPhone
+                              : 'No phone number',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: secondaryTextColor,
+                          ),
                         ),
                       ],
                     ),
@@ -933,7 +1142,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                           color: AppColors.brand.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.phone_rounded, color: AppColors.brand, size: 22),
+                        child: const Icon(
+                          Icons.phone_rounded,
+                          color: AppColors.brand,
+                          size: 22,
+                        ),
                       ),
                       onPressed: _callCustomer,
                     ),
@@ -970,7 +1183,9 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -980,16 +1195,27 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
             children: [
               Text(
                 'Rental Details',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primaryTextColor),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: primaryTextColor,
+                ),
               ),
               Text(
                 '${_booking.durationDays} Day(s)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryTextColor),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: secondaryTextColor,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Divider(height: 1, color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6)),
+          Divider(
+            height: 1,
+            color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6),
+          ),
           const SizedBox(height: 16),
 
           // Vehicle Row
@@ -1017,7 +1243,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
                   children: [
                     Text(
                       _booking.vehicleTitle,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: primaryTextColor),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: primaryTextColor,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1032,23 +1262,46 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Divider(height: 1, color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6)),
+          Divider(
+            height: 1,
+            color: isDark ? AppColors.glassBorderDark : const Color(0xFFF3F4F6),
+          ),
           const SizedBox(height: 14),
 
           // Schedule Rows
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Start Date', style: TextStyle(fontSize: 13, color: secondaryTextColor)),
-              Text(dateFormat.format(_booking.startDate), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: primaryTextColor)),
+              Text(
+                'Start Date',
+                style: TextStyle(fontSize: 13, color: secondaryTextColor),
+              ),
+              Text(
+                dateFormat.format(_booking.startDate),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextColor,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('End Date', style: TextStyle(fontSize: 13, color: secondaryTextColor)),
-              Text(dateFormat.format(_booking.endDate), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: primaryTextColor)),
+              Text(
+                'End Date',
+                style: TextStyle(fontSize: 13, color: secondaryTextColor),
+              ),
+              Text(
+                dateFormat.format(_booking.endDate),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextColor,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -1065,11 +1318,19 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
               children: [
                 const Text(
                   'Total Amount',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.brand),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brand,
+                  ),
                 ),
                 Text(
                   '${_booking.currency}${_booking.totalAmount.toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.brand),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.brand,
+                  ),
                 ),
               ],
             ),
@@ -1087,7 +1348,11 @@ class _DriverRentalTripScreenState extends State<DriverRentalTripScreen> {
         color: AppColors.brand.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Icon(Icons.directions_car_rounded, color: AppColors.brand, size: 24),
+      child: const Icon(
+        Icons.directions_car_rounded,
+        color: AppColors.brand,
+        size: 24,
+      ),
     );
   }
 }

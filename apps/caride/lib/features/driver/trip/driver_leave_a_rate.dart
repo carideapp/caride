@@ -48,7 +48,7 @@ class _DriverLeaveARateScreenState extends State<DriverLeaveARateScreen> {
             : _commentController.text.trim(),
       );
       if (!mounted) return;
-      
+
       await SuccessDialog.show(
         context,
         title: 'Thanks for your rating',
@@ -63,15 +63,20 @@ class _DriverLeaveARateScreenState extends State<DriverLeaveARateScreen> {
       if (!mounted) return;
       final raw = e.toString().toLowerCase();
       String message = 'Unable to submit rating. Please try again.';
-      if (raw.contains('network') || raw.contains('unavailable') || raw.contains('connection')) {
-        message = 'Network connection error. Please check your connection and tap Submit again.';
+      if (raw.contains('network') ||
+          raw.contains('unavailable') ||
+          raw.contains('connection')) {
+        message =
+            'Network connection error. Please check your connection and tap Submit again.';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
       );
     } finally {
@@ -86,7 +91,9 @@ class _DriverLeaveARateScreenState extends State<DriverLeaveARateScreen> {
     final customerUid = lastCompletedRide?.customerUid ?? '';
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: GlassAppBar(
         title: 'Rate Customer',
         automaticallyImplyLeading: false,
@@ -96,13 +103,19 @@ class _DriverLeaveARateScreenState extends State<DriverLeaveARateScreen> {
           child: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>?>(
             future: customerUid.isNotEmpty
                 ? FirebaseFirestore.instance
-                    .collection('customers')
-                    .doc(customerUid)
-                    .get()
+                      .collection('customers')
+                      .doc(customerUid)
+                      .get()
                 : Future<DocumentSnapshot<Map<String, dynamic>>?>.value(null),
             builder: (context, userSnap) {
               final userData = userSnap.data?.data();
               final fullName = userData?['fullName'] as String? ?? 'Customer';
+              final isCustomerVerified =
+                  (userData?['isVerified'] == true) ||
+                  (userData?['isNinVerified'] == true) ||
+                  ((userData?['verificationStatus'] as String?)
+                          ?.toLowerCase() ==
+                      'verified');
 
               return ListView(
                 padding: const EdgeInsets.symmetric(
@@ -126,94 +139,124 @@ class _DriverLeaveARateScreenState extends State<DriverLeaveARateScreen> {
                           : const CircleAvatar(
                               radius: 40,
                               backgroundColor: AppColors.brand,
-                              child: Icon(Icons.person, size: 40, color: Colors.white),
+                              child: Icon(
+                                Icons.person,
+                                size: 40,
+                                color: Colors.white,
+                              ),
                             ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Center(
-                    child: Text(
-                      'How was $fullName?',
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.headlineMedium.copyWith(
-                        fontWeight: FontWeight.w800,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'How was $fullName?',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.headlineMedium.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (isCustomerVerified) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: AppColors.brand,
+                            size: 22,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final isSelected = index < _rating;
+                      return IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => setState(() => _rating = index + 1),
+                        icon: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.xs,
+                          ),
+                          child: Icon(
+                            isSelected
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            size: 44,
+                            color: isSelected
+                                ? Colors.orangeAccent
+                                : (isDark
+                                      ? AppColors.textTertiaryDark
+                                      : AppColors.textTertiaryLight),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+
+                  GlassContainer(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: TextField(
+                      controller: _commentController,
+                      maxLines: 4,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment (optional)',
+                        hintStyle: AppTextStyles.bodyMedium.copyWith(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                        ),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
                       ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (index) {
-                  final isSelected = index < _rating;
-                  return IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => setState(() => _rating = index + 1),
-                    icon: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                      child: Icon(
-                        isSelected
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        size: 44,
-                        color: isSelected
-                            ? Colors.orangeAccent
-                            : (isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight),
+                  PrimaryButton(
+                    label: 'Submit Feedback',
+                    isLoading: _submitting,
+                    onPressed: _rating > 0 ? _submit : null,
+                  ),
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        DriverActiveRideState.instance.lastCompletedRide = null;
+                        context.go(DriverRoutePaths.home);
+                      },
+                      child: Text(
+                        'Skip',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  );
-                }),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-
-              GlassContainer(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: TextField(
-                  controller: _commentController,
-                  maxLines: 4,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                   ),
-                  decoration: InputDecoration(
-                    hintText: 'Add a comment (optional)',
-                    hintStyle: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                    ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-
-              PrimaryButton(
-                label: 'Submit Feedback',
-                isLoading: _submitting,
-                onPressed: _rating > 0 ? _submit : null,
-              ),
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    DriverActiveRideState.instance.lastCompletedRide = null;
-                    context.go(DriverRoutePaths.home);
-                  },
-                  child: Text(
-                    'Skip',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+                ],
+              );
+            },
+          ),
+        ),
       ),
-    ),
-  ),
-);
+    );
   }
 }

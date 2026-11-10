@@ -22,6 +22,10 @@ class AccountProfile {
     this.virtualAccountNumber,
     this.virtualAccountBankName,
     this.virtualAccountName,
+    this.isVerified = false,
+    this.isNinVerified = false,
+    this.maskedNin,
+    this.ninVerifiedAt,
   });
 
   final String fullName;
@@ -39,8 +43,23 @@ class AccountProfile {
   final String? virtualAccountNumber;
   final String? virtualAccountBankName;
   final String? virtualAccountName;
+  final bool isVerified;
+  final bool isNinVerified;
+  final String? maskedNin;
+  final DateTime? ninVerifiedAt;
 
   factory AccountProfile.fromMap(Map<String, dynamic> data) {
+    final bool verifiedFlag = (data['isVerified'] == true) ||
+        (data['isNinVerified'] == true) ||
+        ((data['verificationStatus'] as String?)?.toLowerCase() == 'verified');
+    final rawVerifiedAt = data['ninVerifiedAt'];
+    DateTime? parsedVerifiedAt;
+    if (rawVerifiedAt is Timestamp) {
+      parsedVerifiedAt = rawVerifiedAt.toDate();
+    } else if (rawVerifiedAt is String) {
+      parsedVerifiedAt = DateTime.tryParse(rawVerifiedAt);
+    }
+
     return AccountProfile(
       fullName: (data['fullName'] as String?) ?? '',
       email: (data['email'] as String?) ?? '',
@@ -57,6 +76,10 @@ class AccountProfile {
       virtualAccountNumber: data['virtualAccountNumber'] as String?,
       virtualAccountBankName: data['virtualAccountBankName'] as String?,
       virtualAccountName: data['virtualAccountName'] as String?,
+      isVerified: verifiedFlag,
+      isNinVerified: (data['isNinVerified'] == true) || verifiedFlag,
+      maskedNin: data['maskedNin'] as String?,
+      ninVerifiedAt: parsedVerifiedAt,
     );
   }
 }
@@ -328,5 +351,70 @@ class AccountRepository {
       'creditAmountChargePercent': 10.0,
       'isPromotionActive': true,
     };
+  }
+
+  /// Verifies the customer's 11-digit National Identification Number (NIN) or 16-char vNIN
+  /// via the `verifyCustomerNin` Firebase Cloud Function (Prembly / Identitypass).
+  Future<String> verifyCustomerNin(String nin) async {
+    final uid = _uid;
+    if (uid == null) {
+      throw Exception('Please sign in to verify your identity.');
+    }
+
+    final cleanNin = nin.trim().replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+    final isElevenDigit = RegExp(r'^\d{11}$').hasMatch(cleanNin);
+    final isSixteenCharVnin = RegExp(r'^[A-Z0-9]{16}$').hasMatch(cleanNin);
+
+    if (!isElevenDigit && !isSixteenCharVnin) {
+      throw Exception(
+        'Please enter a valid 11-digit National Identification Number (NIN).',
+      );
+    }
+
+    try {
+      final functions = FirebaseFunctions.instanceFor(region: 'us-east1');
+      final callable = functions.httpsCallable('verifyCustomerNin');
+      final result = await callable.call<Map<String, dynamic>>({
+        'nin': cleanNin,
+      });
+      final data = result.data;
+      return (data['message'] as String?) ?? "You're verified!";
+    } on FirebaseFunctionsException catch (e) {
+      final code = e.code.toLowerCase();
+      final msg = (e.message ?? '').trim();
+      if (code == 'unavailable' ||
+          code == 'not-found' && msg.isEmpty ||
+          code == 'unimplemented' ||
+          code == 'internal') {
+        if (msg.isNotEmpty &&
+            !msg.toLowerCase().contains('internal') &&
+            !msg.toLowerCase().contains('function')) {
+          throw Exception(msg);
+        }
+        throw Exception(
+          'Verification is currently unavailable at the moment, please try again later',
+        );
+      }
+      if (msg.isNotEmpty) {
+        throw Exception(msg);
+      }
+      throw Exception(
+        'Verification is currently unavailable at the moment, please try again later',
+      );
+    } catch (e) {
+      final raw = e.toString().replaceFirst('Exception: ', '').trim();
+      if (raw.toLowerCase().contains('socket') ||
+          raw.toLowerCase().contains('network') ||
+          raw.toLowerCase().contains('unavailable')) {
+        throw Exception(
+          'Verification is currently unavailable at the moment, please try again later',
+        );
+      }
+      throw Exception(
+        raw.isNotEmpty
+            ? raw
+            : 'Verification is currently unavailable at the moment, please try again later',
+      );
+    }
   }
 }

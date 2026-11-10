@@ -28,6 +28,7 @@ abstract final class CustomerRoutePaths {
   static const viewPaymentMethods = '/profile/payment-methods';
   static const addNewPayment = '/profile/payment-methods/add';
   static const accountSecurity = '/profile/security';
+  static const idVerification = '/profile/id-verification';
   static const linkedAccounts = '/profile/linked-accounts';
   static const dataAnalytics = '/profile/data-analytics';
   static const dataUsage = '/profile/data-analytics/data-usage';
