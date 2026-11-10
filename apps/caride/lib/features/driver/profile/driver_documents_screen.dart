@@ -1,4 +1,5 @@
 import 'package:design_system/design_system.dart';
+import 'package:caride/core/config/app_config_repository.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/driver/models/driver_document.dart';
 import 'package:caride/core/driver/models/driver_profile.dart';
@@ -25,6 +26,7 @@ class DriverDocumentsScreen extends StatefulWidget {
 class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
   final _documentRepo = DriverDocumentRepository();
   final _profileRepo = DriverProfileRepository();
+  final _configRepo = AppConfigRepository();
 
   @override
   Widget build(BuildContext context) {
@@ -87,41 +89,76 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
                     );
                   }
 
-                  final requiredDocs = requiredDocumentsForVehicleType(
-                    vehicle.vehicleType,
-                    operatingState: driverProfile?.state,
-                  );
+                  return StreamBuilder<DriverSettingsConfig>(
+                    stream: _configRepo.watchDriverSettings(),
+                    initialData: DriverSettingsConfig.defaults,
+                    builder: (context, configSnap) {
+                      final docToggles =
+                          configSnap.data?.requiredDocuments ??
+                          DriverSettingsConfig.defaults.requiredDocuments;
+                      final requireBackPhoto =
+                          docToggles['vehicle_photo_back'] == true;
 
-              return StreamBuilder<List<DriverDocument>>(
-                stream: _documentRepo.streamDocuments(uid),
-                builder: (context, docsSnapshot) {
-                  final docs = docsSnapshot.data ?? [];
-                  final docMap = {for (final d in docs) d.documentType: d};
+                      final requiredDocs = requiredDocumentsForVehicleType(
+                        vehicle.vehicleType,
+                        operatingState: driverProfile?.state,
+                        toggleOverrides: docToggles,
+                      );
 
-                  // Helper: for vehicle_photo tile, both front+back must be approved
-                  bool isVehiclePhotoApproved() {
-                    final front = docMap['vehicle_photo_front'];
-                    final back = docMap['vehicle_photo_back'];
-                    return front?.isApproved == true && back?.isApproved == true;
-                  }
+                      return StreamBuilder<List<DriverDocument>>(
+                        stream: _documentRepo.streamDocuments(uid),
+                        builder: (context, docsSnapshot) {
+                          final docs = docsSnapshot.data ?? [];
+                          final docMap = {for (final d in docs) d.documentType: d};
 
-                  String? vehiclePhotoStatus() {
-                    final front = docMap['vehicle_photo_front'];
-                    final back = docMap['vehicle_photo_back'];
-                    if (front == null && back == null) return null;
-                    if (front?.isApproved == true && back?.isApproved == true) return 'approved';
-                    if (front?.status == 'rejected' || back?.status == 'rejected') return 'rejected';
-                    if (front != null || back != null) return 'pending';
-                    return null;
-                  }
+                          // Helper: for vehicle_photo tile, front must be approved (and back if toggled ON)
+                          bool isVehiclePhotoApproved() {
+                            final front =
+                                docMap['vehicle_photo_front'] ??
+                                docMap['vehicle_photo'];
+                            final back = docMap['vehicle_photo_back'];
+                            if (!requireBackPhoto) {
+                              return front?.isApproved == true;
+                            }
+                            return front?.isApproved == true &&
+                                back?.isApproved == true;
+                          }
 
-                  final approvedCount = requiredDocs.where((item) {
-                    if (item.type == 'vehicle_photo') return isVehiclePhotoApproved();
-                    return docMap[item.type]?.isApproved == true;
-                  }).length;
+                          String? vehiclePhotoStatus() {
+                            final front =
+                                docMap['vehicle_photo_front'] ??
+                                docMap['vehicle_photo'];
+                            final back = docMap['vehicle_photo_back'];
+                            if (!requireBackPhoto) {
+                              if (front == null) return null;
+                              if (front.isApproved) return 'approved';
+                              if (front.status == 'rejected') return 'rejected';
+                              return 'pending';
+                            }
+                            if (front == null && back == null) return null;
+                            if (front?.isApproved == true &&
+                                back?.isApproved == true) {
+                              return 'approved';
+                            }
+                            if (front?.status == 'rejected' ||
+                                back?.status == 'rejected') {
+                              return 'rejected';
+                            }
+                            if (front != null || back != null) return 'pending';
+                            return null;
+                          }
 
-                  final completionRatio = requiredDocs.isEmpty ? 0.0 : approvedCount / requiredDocs.length;
-                  final percentage = (completionRatio * 100).round();
+                          final approvedCount = requiredDocs.where((item) {
+                            if (item.type == 'vehicle_photo') {
+                              return isVehiclePhotoApproved();
+                            }
+                            return docMap[item.type]?.isApproved == true;
+                          }).length;
+
+                          final completionRatio = requiredDocs.isEmpty
+                              ? 0.0
+                              : approvedCount / requiredDocs.length;
+                          final percentage = (completionRatio * 100).round();
 
                   return ListView(
                     padding: const EdgeInsets.symmetric(
@@ -233,6 +270,7 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
                                   definition: definition,
                                   doc: doc,
                                   overrideStatus: vehicleStatus,
+                                  requireBackPhoto: requireBackPhoto,
                                 ),
                                 if (!isLast)
                                   Divider(
@@ -250,13 +288,15 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
                   );
                 },
               );
+                    },
+                  );
+                },
+              );
             },
-          );
-        },
+          ),
+        ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 
@@ -265,12 +305,14 @@ class _DocumentTile extends StatelessWidget {
     required this.definition,
     this.doc,
     this.overrideStatus,
+    this.requireBackPhoto = false,
   });
 
   final DriverDocumentDefinition definition;
   final DriverDocument? doc;
   /// When non-null, this status is used instead of doc?.status.
   final String? overrideStatus;
+  final bool requireBackPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -307,11 +349,25 @@ class _DocumentTile extends StatelessWidget {
               ),
             );
           } else if (definition.type == 'vehicle_photo') {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const DriverVehiclePhotoScreen(),
-              ),
-            );
+            if (requireBackPhoto) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DriverVehiclePhotoScreen(),
+                ),
+              );
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DriverGenericDocumentUploadScreen(
+                    documentType: 'vehicle_photo_front',
+                    title: 'Vehicle Photo (Showing Plate Number)',
+                    instruction:
+                        'Take a clear front/3-quarter exterior photo of your vehicle showing the license plate clearly.',
+                    correctAsset: 'lib/assets/vehicle_photo_front_correct.png',
+                  ),
+                ),
+              );
+            }
           } else if (definition.type == 'vehicle_registration') {
             Navigator.of(context).push(
               MaterialPageRoute<void>(

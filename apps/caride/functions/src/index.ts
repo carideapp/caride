@@ -135,28 +135,18 @@ const STANDARD_DRIVER_DOCUMENT_TYPES = [
   "national_id",
   "drivers_license",
   "profile_photo",
-  "proof_of_address",
-  "guarantor_info",
   "vehicle_registration",
-  "proof_of_ownership",
   "proof_of_insurance",
-  "road_worthiness",
   "vehicle_photo_front",
-  "vehicle_photo_back",
 ] as const;
 const COURIER_DRIVER_DOCUMENT_TYPES = [
   "national_id",
   "drivers_license",
   "profile_photo",
   "rider_permit",
-  "proof_of_address",
-  "guarantor_info",
   "vehicle_registration",
-  "proof_of_ownership",
   "proof_of_insurance",
-  "road_worthiness",
   "vehicle_photo_front",
-  "vehicle_photo_back",
 ] as const;
 
 const DOCUMENT_LABELS: Record<string, string> = {
@@ -266,10 +256,28 @@ function normalizeVehicleType(vehicleType?: string): string {
   }
 }
 
-function requiredDriverDocumentsForVehicleType(vehicleType?: string): readonly string[] {
-  return normalizeVehicleType(vehicleType) === VEHICLE_TYPE_COURIER ?
-    COURIER_DRIVER_DOCUMENT_TYPES :
-    STANDARD_DRIVER_DOCUMENT_TYPES;
+function requiredDriverDocumentsForVehicleType(
+  vehicleType?: string,
+  toggleOverrides?: Record<string, boolean>
+): string[] {
+  const base: string[] =
+    normalizeVehicleType(vehicleType) === VEHICLE_TYPE_COURIER
+      ? [...COURIER_DRIVER_DOCUMENT_TYPES]
+      : [...STANDARD_DRIVER_DOCUMENT_TYPES];
+  const toggles = toggleOverrides ?? {};
+  for (const key of [
+    "proof_of_address",
+    "guarantor_info",
+    "proof_of_ownership",
+    "road_worthiness",
+    "vehicle_photo_back",
+    "lasdri_card",
+  ]) {
+    if (toggles[key] === true && !base.includes(key)) {
+      base.push(key);
+    }
+  }
+  return base;
 }
 
 function maskAccountNumber(accountNumber: string): string {
@@ -303,11 +311,13 @@ async function syncDriverApprovalStatus(uid: string): Promise<string> {
   const approvedVehicleRef = driverRef.collection("vehicle").doc("info");
   const vehicleReviewRef = driverRef.collection("vehicle").doc("review");
 
-  const [docsSnap, approvedVehicleSnap, vehicleReviewSnap] = await Promise.all([
+  const [docsSnap, approvedVehicleSnap, vehicleReviewSnap, driverSettingsSnap] = await Promise.all([
     docsRef.get(),
     approvedVehicleRef.get(),
     vehicleReviewRef.get(),
+    admin.firestore().collection("config").doc("driverSettings").get(),
   ]);
+  const docToggles = (driverSettingsSnap.data()?.requiredDocuments as Record<string, boolean> | undefined) ?? {};
 
   const approvedVehicle = approvedVehicleSnap.exists ?
     (approvedVehicleSnap.data() as VehicleInfoRecord) :
@@ -318,7 +328,7 @@ async function syncDriverApprovalStatus(uid: string): Promise<string> {
   const currentVehicleType = normalizeVehicleType(
     vehicleReview?.newValues?.vehicleType ?? approvedVehicle?.vehicleType
   );
-  const requiredDocTypes = requiredDriverDocumentsForVehicleType(currentVehicleType);
+  const requiredDocTypes = requiredDriverDocumentsForVehicleType(currentVehicleType, docToggles);
   const documentRows = new Map<string, {status?: string; rejectionReason?: string | null}>();
   docsSnap.docs.forEach((doc) => {
     documentRows.set(doc.id, {

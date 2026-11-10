@@ -89,28 +89,18 @@ const STANDARD_DRIVER_DOCUMENT_TYPES = [
     "national_id",
     "drivers_license",
     "profile_photo",
-    "proof_of_address",
-    "guarantor_info",
     "vehicle_registration",
-    "proof_of_ownership",
     "proof_of_insurance",
-    "road_worthiness",
     "vehicle_photo_front",
-    "vehicle_photo_back",
 ];
 const COURIER_DRIVER_DOCUMENT_TYPES = [
     "national_id",
     "drivers_license",
     "profile_photo",
     "rider_permit",
-    "proof_of_address",
-    "guarantor_info",
     "vehicle_registration",
-    "proof_of_ownership",
     "proof_of_insurance",
-    "road_worthiness",
     "vehicle_photo_front",
-    "vehicle_photo_back",
 ];
 const DOCUMENT_LABELS = {
     national_id: "National ID",
@@ -205,10 +195,24 @@ function normalizeVehicleType(vehicleType) {
             return VEHICLE_TYPE_REGULAR;
     }
 }
-function requiredDriverDocumentsForVehicleType(vehicleType) {
-    return normalizeVehicleType(vehicleType) === VEHICLE_TYPE_COURIER ?
-        COURIER_DRIVER_DOCUMENT_TYPES :
-        STANDARD_DRIVER_DOCUMENT_TYPES;
+function requiredDriverDocumentsForVehicleType(vehicleType, toggleOverrides) {
+    const base = normalizeVehicleType(vehicleType) === VEHICLE_TYPE_COURIER
+        ? [...COURIER_DRIVER_DOCUMENT_TYPES]
+        : [...STANDARD_DRIVER_DOCUMENT_TYPES];
+    const toggles = toggleOverrides ?? {};
+    for (const key of [
+        "proof_of_address",
+        "guarantor_info",
+        "proof_of_ownership",
+        "road_worthiness",
+        "vehicle_photo_back",
+        "lasdri_card",
+    ]) {
+        if (toggles[key] === true && !base.includes(key)) {
+            base.push(key);
+        }
+    }
+    return base;
 }
 function maskAccountNumber(accountNumber) {
     const trimmed = accountNumber.trim();
@@ -233,11 +237,13 @@ async function syncDriverApprovalStatus(uid) {
     const docsRef = driverRef.collection("documents");
     const approvedVehicleRef = driverRef.collection("vehicle").doc("info");
     const vehicleReviewRef = driverRef.collection("vehicle").doc("review");
-    const [docsSnap, approvedVehicleSnap, vehicleReviewSnap] = await Promise.all([
+    const [docsSnap, approvedVehicleSnap, vehicleReviewSnap, driverSettingsSnap] = await Promise.all([
         docsRef.get(),
         approvedVehicleRef.get(),
         vehicleReviewRef.get(),
+        admin.firestore().collection("config").doc("driverSettings").get(),
     ]);
+    const docToggles = driverSettingsSnap.data()?.requiredDocuments ?? {};
     const approvedVehicle = approvedVehicleSnap.exists ?
         approvedVehicleSnap.data() :
         null;
@@ -245,7 +251,7 @@ async function syncDriverApprovalStatus(uid) {
         vehicleReviewSnap.data() :
         null;
     const currentVehicleType = normalizeVehicleType(vehicleReview?.newValues?.vehicleType ?? approvedVehicle?.vehicleType);
-    const requiredDocTypes = requiredDriverDocumentsForVehicleType(currentVehicleType);
+    const requiredDocTypes = requiredDriverDocumentsForVehicleType(currentVehicleType, docToggles);
     const documentRows = new Map();
     docsSnap.docs.forEach((doc) => {
         documentRows.set(doc.id, {

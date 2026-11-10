@@ -20,12 +20,8 @@ const List<String> standardDriverDocumentTypes = <String>[
   'national_id',
   'drivers_license',
   'profile_photo',
-  'proof_of_address',
-  'guarantor_info',
   'vehicle_registration',
-  'proof_of_ownership',
   'proof_of_insurance',
-  'road_worthiness',
   'vehicle_photo',
 ];
 
@@ -34,49 +30,48 @@ const List<String> courierDriverDocumentTypes = <String>[
   'drivers_license',
   'profile_photo',
   'rider_permit',
-  'proof_of_address',
-  'guarantor_info',
   'vehicle_registration',
-  'proof_of_ownership',
   'proof_of_insurance',
-  'road_worthiness',
   'vehicle_photo',
 ];
 
 /// Commercial Tricycle (Keke) requirements in Nigeria:
 /// FRSC Class A Driver's Licence (for 3-wheelers/motorcycles) / Rider's Permit,
-/// Vehicle Registration, Road Worthiness, Commercial Third Party Insurance,
-/// Proof of Ownership, Exterior Vehicle Photos, NIN, Guarantor, Address.
+/// Vehicle Registration, Commercial Third Party Insurance, Exterior Vehicle Photos, NIN.
 const List<String> kekeDriverDocumentTypes = <String>[
   'national_id',
   'drivers_license',
   'rider_permit',
   'profile_photo',
-  'proof_of_address',
-  'guarantor_info',
   'vehicle_registration',
-  'proof_of_ownership',
   'proof_of_insurance',
-  'road_worthiness',
   'vehicle_photo',
 ];
 
 /// Commercial Motorcycle (Bike) requirements in Nigeria:
-/// FRSC Class A Driver's Licence / Rider's Permit, Commercial Road Worthiness,
-/// Vehicle Registration, Proof of Ownership, Third Party Insurance, Vehicle Photos, NIN, Guarantor.
+/// FRSC Class A Driver's Licence / Rider's Permit,
+/// Vehicle Registration, Third Party Insurance, Vehicle Photos, NIN.
 const List<String> motorcycleDriverDocumentTypes = <String>[
   'national_id',
   'drivers_license',
   'rider_permit',
   'profile_photo',
-  'proof_of_address',
-  'guarantor_info',
   'vehicle_registration',
-  'proof_of_ownership',
   'proof_of_insurance',
-  'road_worthiness',
   'vehicle_photo',
 ];
+
+/// Optional / Admin-Toggleable Driver Document Types.
+/// By default these are OFF (hidden & optional in the mobile app).
+/// When toggled ON by Admin in `config/driverSettings.requiredDocuments`,
+/// they become visible and required in the mobile app and backend.
+const Map<String, bool> defaultToggleableDocumentRequirements = <String, bool>{
+  'proof_of_address': false,
+  'guarantor_info': false,
+  'proof_of_ownership': false,
+  'road_worthiness': false,
+  'lasdri_card': false,
+};
 
 class DriverDocumentDefinition {
   const DriverDocumentDefinition({
@@ -152,6 +147,7 @@ String vehicleTypeAsset(String? vehicleType) {
 List<DriverDocumentDefinition> requiredDocumentsForVehicleType(
   String? vehicleType, {
   String? operatingState,
+  Map<String, bool>? toggleOverrides,
 }) {
   final normalized = normalizeVehicleType(vehicleType);
   final List<String> baseTypes = switch (normalized) {
@@ -161,13 +157,34 @@ List<DriverDocumentDefinition> requiredDocumentsForVehicleType(
     _ => [...standardDriverDocumentTypes],
   };
 
-  // State-specific regulations:
-  // Lagos State requires LASDRI recertification card for commercial drivers/riders
+  final toggles = <String, bool>{
+    ...defaultToggleableDocumentRequirements,
+    if (toggleOverrides != null) ...toggleOverrides,
+  };
+
+  // Append any optional documents that Admin has toggled ON
+  for (final docKey in <String>[
+    'proof_of_address',
+    'guarantor_info',
+    'proof_of_ownership',
+    'road_worthiness',
+  ]) {
+    if (toggles[docKey] == true && !baseTypes.contains(docKey)) {
+      baseTypes.add(docKey);
+    }
+  }
+
+  // State-specific or Admin-toggled LASDRI card:
+  // Only shown when Admin toggles `lasdri_card` ON (for Lagos or all states if enabled)
   final state = operatingState?.trim().toLowerCase();
-  if (state == 'lagos') {
+  if (toggles['lasdri_card'] == true &&
+      (state == 'lagos' || state == null || state.isEmpty)) {
     if (!baseTypes.contains('lasdri_card')) {
       baseTypes.add('lasdri_card');
     }
+  } else if (toggles['lasdri_card'] == true &&
+      !baseTypes.contains('lasdri_card')) {
+    baseTypes.add('lasdri_card');
   }
 
   return baseTypes.map(documentDefinitionForType).toList(growable: false);
@@ -258,7 +275,8 @@ DriverDocumentDefinition documentDefinitionForType(String type) {
       type: 'lasdri_card',
       label: 'LASDRI Card',
       icon: Icons.card_membership_outlined,
-      description: 'Lagos State Drivers Institute recertification card (Lagos operators).',
+      description:
+          'Lagos State Drivers Institute recertification card (Lagos operators).',
     ),
     _ => DriverDocumentDefinition(
       type: type,
@@ -267,4 +285,3 @@ DriverDocumentDefinition documentDefinitionForType(String type) {
     ),
   };
 }
-

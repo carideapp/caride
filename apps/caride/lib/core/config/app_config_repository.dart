@@ -185,9 +185,20 @@ class AppConfigRepository {
 }
 
 class DriverSettingsConfig {
-  const DriverSettingsConfig({required this.maxNegativeBalanceNaira});
+  const DriverSettingsConfig({
+    required this.maxNegativeBalanceNaira,
+    this.requiredDocuments = const <String, bool>{
+      'proof_of_address': false,
+      'guarantor_info': false,
+      'proof_of_ownership': false,
+      'road_worthiness': false,
+      'lasdri_card': false,
+      'vehicle_photo_back': false,
+    },
+  });
 
   final double maxNegativeBalanceNaira;
+  final Map<String, bool> requiredDocuments;
 
   static const DriverSettingsConfig defaults = DriverSettingsConfig(
     maxNegativeBalanceNaira: 3000.0,
@@ -197,6 +208,22 @@ class DriverSettingsConfig {
     final maxNeg =
         (data['maxNegativeBalanceNaira'] as num?)?.toDouble() ??
         DriverSettingsConfig.defaults.maxNegativeBalanceNaira;
-    return DriverSettingsConfig(maxNegativeBalanceNaira: maxNeg);
+
+    final reqDocs = <String, bool>{
+      ...DriverSettingsConfig.defaults.requiredDocuments,
+    };
+    final rawReqDocs = data['requiredDocuments'];
+    if (rawReqDocs is Map) {
+      rawReqDocs.forEach((key, value) {
+        if (key is String && value is bool) {
+          reqDocs[key] = value;
+        }
+      });
+    }
+
+    return DriverSettingsConfig(
+      maxNegativeBalanceNaira: maxNeg,
+      requiredDocuments: reqDocs,
+    );
   }
 }
