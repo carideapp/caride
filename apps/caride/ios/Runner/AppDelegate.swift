@@ -3,6 +3,20 @@ import Flutter
 import GoogleMaps
 import UIKit
 
+@available(iOS 16.1, *)
+struct RideActivityAttributes: ActivityAttributes {
+  public struct ContentState: Codable, Hashable {
+    var status: String
+    var etaMinutes: Int
+  }
+
+  var rideId: String
+  var pickup: String
+  var dropoff: String
+  var driverName: String
+  var vehicleInfo: String
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var currentActivityId: String?
