@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - caride
     paths:
       - 'apps/caride/**'
       - '.github/workflows/build_ios.yml'
