@@ -3,7 +3,7 @@ import Flutter
 import GoogleMaps
 import UIKit
 
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct RideActivityAttributes: ActivityAttributes {
   public struct ContentState: Codable, Hashable {
     var status: String
@@ -42,7 +42,7 @@ struct RideActivityAttributes: ActivityAttributes {
   }
 
   private func handleLiveActivityCall(call: FlutterMethodCall, result: @escaping FlutterResult) {
-    guard #available(iOS 16.1, *) else {
+    guard #available(iOS 16.2, *) else {
       result(nil)
       return
     }
