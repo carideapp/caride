@@ -1,9 +1,9 @@
 name: caride
-description: "CaRide - Premium ride-hailing and courier service application."
+description: "Premium ride-hailing and courier service application."
 
 publish_to: 'none' 
 
-version: 1.0.9+37
+version: 1.0.10+38
 
 environment:
   sdk: ^3.9.0

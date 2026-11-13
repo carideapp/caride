@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +7,7 @@ import 'package:design_system/design_system.dart';
 import 'package:navigation/navigation.dart';
 import 'package:caride/core/utils/disk_cache_manager.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
+import 'package:caride/core/driver/services/driver_floating_overlay_service.dart';
 import 'package:caride/core/driver/models/ride_model.dart';
 import 'package:caride/core/driver/utils/maps_launcher.dart';
 import 'package:caride/features/driver/auth/data/driver_profile_repository.dart';
@@ -72,7 +74,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
       if (snap.docs.isEmpty) return;
 
-      final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snap.docs);
+      final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
+        snap.docs,
+      );
       docs.sort((a, b) {
         final aTime = a.data()['createdAt'] as Timestamp?;
         final bTime = b.data()['createdAt'] as Timestamp?;
@@ -96,80 +100,92 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final dismissedPopups = prefs.getStringList('dismissed_popup_announcements') ?? [];
+      final dismissedPopups =
+          prefs.getStringList('dismissed_popup_announcements') ?? [];
       if (dismissedPopups.contains(popupId)) {
         return;
       }
 
       // Mark as dismissed immediately when we show it so it doesn't reappear on barrier tap dismissal
-      await prefs.setStringList(
-        'dismissed_popup_announcements',
-        [...dismissedPopups, popupId],
-      );
+      await prefs.setStringList('dismissed_popup_announcements', [
+        ...dismissedPopups,
+        popupId,
+      ]);
 
       if (!mounted) return;
-      unawaited(showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                AspectRatio(
-                  aspectRatio: 4 / 3,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: DiskCachedImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      loadingWidget: Container(
-                        color: Colors.black12,
-                        child: const Center(
-                          child: CircularProgressIndicator(color: AppColors.brand),
+      unawaited(
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: DiskCachedImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        loadingWidget: Container(
+                          color: Colors.black12,
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.brand,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  top: -12,
-                  right: -12,
-                  child: GestureDetector(
-                    onTap: () async {
-                      final currentDismissed = prefs.getStringList('dismissed_popup_announcements') ?? [];
-                      if (!currentDismissed.contains(popupId)) {
-                        await prefs.setStringList(
-                          'dismissed_popup_announcements',
-                          [...currentDismissed, popupId],
-                        );
-                      }
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: Colors.black87,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white,
-                        size: 20,
+                  Positioned(
+                    top: -12,
+                    right: -12,
+                    child: GestureDetector(
+                      onTap: () async {
+                        final currentDismissed =
+                            prefs.getStringList(
+                              'dismissed_popup_announcements',
+                            ) ??
+                            [];
+                        if (!currentDismissed.contains(popupId)) {
+                          await prefs.setStringList(
+                            'dismissed_popup_announcements',
+                            [...currentDismissed, popupId],
+                          );
+                        }
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Colors.black87,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      ));
+                ],
+              ),
+            );
+          },
+        ),
+      );
     } catch (e) {
       debugPrint('Error checking popup announcements: $e');
     }
@@ -178,7 +194,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void _listenToProfile() {
     final uid = driverAuthController.currentUid;
     if (uid != null) {
-      _profileSubscription = _profileRepo.streamDriverProfile(uid).listen((profile) {
+      _profileSubscription = _profileRepo.streamDriverProfile(uid).listen((
+        profile,
+      ) {
         if (profile != null) {
           _walletBalance = profile.walletBalance;
           if (!profile.profileCompleted && !_promptedCompleteProfile) {
@@ -191,7 +209,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   void _listenToDriverSettings() {
-    _driverSettingsSub = AppConfigRepository().watchDriverSettings().listen((settings) {
+    _driverSettingsSub = AppConfigRepository().watchDriverSettings().listen((
+      settings,
+    ) {
       if (mounted) {
         setState(() {
           _maxNegativeBalance = settings.maxNegativeBalanceNaira;
@@ -210,9 +230,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
           final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
-          final primaryTextColor = isDark ? Colors.white : const Color(0xFF111827);
-          final secondaryTextColor =
-              isDark ? AppColors.textSecondaryDark : const Color(0xFF4B5563);
+          final primaryTextColor = isDark
+              ? Colors.white
+              : const Color(0xFF111827);
+          final secondaryTextColor = isDark
+              ? AppColors.textSecondaryDark
+              : const Color(0xFF4B5563);
 
           return Container(
             constraints: BoxConstraints(
@@ -220,7 +243,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkSurface : Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
             ),
             padding: EdgeInsets.only(
               left: 24,
@@ -240,7 +265,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       height: 4.5,
                       margin: const EdgeInsets.only(bottom: 20),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                        color: isDark
+                            ? Colors.white24
+                            : const Color(0xFFE5E7EB),
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
@@ -340,7 +367,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final isGoingToPickup = ride.status == 'driverEnRoute';
     final destinationLat = isGoingToPickup ? ride.pickupLat : ride.dropoffLat;
     final destinationLng = isGoingToPickup ? ride.pickupLng : ride.dropoffLng;
-    final destinationLabel = isGoingToPickup ? ride.pickupLabel : ride.dropoffLabel;
+    final destinationLabel = isGoingToPickup
+        ? ride.pickupLabel
+        : ride.dropoffLabel;
 
     final currentPosition = _presenceController.currentPosition;
     final originLat = currentPosition?.latitude;
@@ -362,15 +391,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         .where('assignedDriverId', isEqualTo: uid)
         .snapshots()
         .map((snap) {
-      for (final doc in snap.docs) {
-        final b = RentalBooking.fromMap(doc.data(), doc.id);
-        if (b.status == RentalBookingStatus.confirmed ||
-            b.status == RentalBookingStatus.inProgress) {
-          return b;
-        }
-      }
-      return null;
-    });
+          for (final doc in snap.docs) {
+            final b = RentalBooking.fromMap(doc.data(), doc.id);
+            if (b.status == RentalBookingStatus.confirmed ||
+                b.status == RentalBookingStatus.inProgress) {
+              return b;
+            }
+          }
+          return null;
+        });
   }
 
   @override
@@ -381,13 +410,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final presenceError = _presenceController.errorMessage;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       body: Stack(
         children: [
           // ── Plain Background ──
           Positioned.fill(
             child: Container(
-              color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+              color: isDark
+                  ? AppColors.darkBackground
+                  : AppColors.lightBackground,
             ),
           ),
 
@@ -408,7 +441,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     StreamBuilder(
                       stream: _profileRepo.streamDriverProfile(uid),
                       builder: (context, snapshot) {
-                        final profilePhotoUrl = snapshot.data?.profilePhotoUrl ?? '';
+                        final profilePhotoUrl =
+                            snapshot.data?.profilePhotoUrl ?? '';
                         if (profilePhotoUrl.isNotEmpty) {
                           return Container(
                             width: 40,
@@ -460,7 +494,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         Text(
                           'Welcome back,',
                           style: AppTextStyles.caption.copyWith(
-                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
                           ),
                         ),
                         if (uid != null)
@@ -471,7 +507,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               return Text(
                                 name,
                                 style: AppTextStyles.titleMedium.copyWith(
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight,
                                 ),
                               );
                             },
@@ -480,7 +518,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           Text(
                             'Driver',
                             style: AppTextStyles.titleMedium.copyWith(
-                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
                             ),
                           ),
                       ],
@@ -488,7 +528,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   ),
                   StatusChip(
                     label: isOnline ? 'Online' : 'Offline',
-                    tone: isOnline ? StatusChipTone.success : StatusChipTone.neutral,
+                    tone: isOnline
+                        ? StatusChipTone.success
+                        : StatusChipTone.neutral,
                     isActive: isOnline,
                   ),
                 ],
@@ -502,7 +544,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             child: GlassSurface(
               radius: AppRadius.xxxl,
               blurSigma: AppGlass.blurHeavy,
-              margin: const EdgeInsets.only(bottom: AppSpacing.navBarHeight + AppSpacing.md, left: AppSpacing.sm, right: AppSpacing.sm),
+              margin: const EdgeInsets.only(
+                bottom: AppSpacing.navBarHeight + AppSpacing.md,
+                left: AppSpacing.sm,
+                right: AppSpacing.sm,
+              ),
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -515,8 +561,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       final booking = snapshot.data;
                       if (booking == null) return const SizedBox.shrink();
 
-                      final isStarted = booking.status == RentalBookingStatus.inProgress;
-                      final isEnRoute = booking.rentalTripStatus == RentalTripStatus.headingToPickup;
+                      final isStarted =
+                          booking.status == RentalBookingStatus.inProgress;
+                      final isEnRoute =
+                          booking.rentalTripStatus ==
+                          RentalTripStatus.headingToPickup;
 
                       String tripPhaseLabel;
                       if (isStarted) {
@@ -531,10 +580,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         margin: const EdgeInsets.only(bottom: AppSpacing.md),
                         padding: const EdgeInsets.all(AppSpacing.md),
                         decoration: BoxDecoration(
-                          color: isDark ? AppColors.darkSurfaceRaised : Colors.white,
+                          color: isDark
+                              ? AppColors.darkSurfaceRaised
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(AppRadius.lg),
                           border: Border.all(
-                            color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE5E7EB),
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : const Color(0xFFE5E7EB),
                           ),
                         ),
                         child: Column(
@@ -543,10 +596,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.brand.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                                    color: AppColors.brand.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.pill,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -569,7 +629,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 ),
                                 const Spacer(),
                                 GestureDetector(
-                                  onTap: () => context.push(DriverRoutePaths.rentalBookings),
+                                  onTap: () => context.push(
+                                    DriverRoutePaths.rentalBookings,
+                                  ),
                                   child: Text(
                                     'View All',
                                     style: AppTextStyles.caption.copyWith(
@@ -585,7 +647,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               '${booking.vehicleTitle} • ${booking.customerName}',
                               style: AppTextStyles.bodyMedium.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -596,14 +660,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 Icon(
                                   Icons.location_on_rounded,
                                   size: 14,
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     booking.pickupLocation,
                                     style: AppTextStyles.bodySmall.copyWith(
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : AppColors.textSecondaryLight,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -615,11 +683,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             PrimaryButton(
                               label: isStarted
                                   ? 'Manage Rental Trip'
-                                  : (isEnRoute ? 'View Rental Trip' : 'Open Rental Trip'),
+                                  : (isEnRoute
+                                        ? 'View Rental Trip'
+                                        : 'Open Rental Trip'),
                               icon: Icons.directions_car_rounded,
                               showShadow: false,
                               onPressed: () {
-                                context.push(DriverRoutePaths.rentalTrip, extra: booking);
+                                context.push(
+                                  DriverRoutePaths.rentalTrip,
+                                  extra: booking,
+                                );
                               },
                               height: 44,
                             ),
@@ -634,10 +707,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     stream: _rideRepo.streamAssignedRide(),
                     builder: (context, snapshot) {
                       final ride = snapshot.data;
-                      final showCancelled = ride != null &&
+                      final showCancelled =
+                          ride != null &&
                           ride.status == 'cancelled' &&
                           ride.id != _dismissedCancelledRideId;
-                      final showRide = isOnline && ride != null && ride.status != 'cancelled';
+                      final showRide =
+                          isOnline &&
+                          ride != null &&
+                          ride.status != 'cancelled';
 
                       if (showCancelled) {
                         return Container(
@@ -646,26 +723,34 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           decoration: BoxDecoration(
                             color: AppColors.errorSubtle,
                             borderRadius: BorderRadius.circular(AppRadius.lg),
-                            border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: AppColors.error.withValues(alpha: 0.2),
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 'Ride Cancelled',
-                                style: AppTextStyles.titleMedium.copyWith(color: AppColors.error),
+                                style: AppTextStyles.titleMedium.copyWith(
+                                  color: AppColors.error,
+                                ),
                               ),
                               Text(
                                 'The customer cancelled this ride.',
                                 style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                 ),
                               ),
                               const SizedBox(height: AppSpacing.sm),
                               DangerButton(
                                 label: 'Dismiss',
                                 onPressed: () {
-                                  setState(() => _dismissedCancelledRideId = ride.id);
+                                  setState(
+                                    () => _dismissedCancelledRideId = ride.id,
+                                  );
                                 },
                                 height: 40,
                               ),
@@ -675,14 +760,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       }
 
                       if (showRide) {
-                        final isPickupPhase = ride.status == 'driverEnRoute' || ride.status == 'driverArrived';
+                        final isPickupPhase =
+                            ride.status == 'driverEnRoute' ||
+                            ride.status == 'driverArrived';
                         return Container(
                           margin: const EdgeInsets.only(bottom: AppSpacing.md),
                           padding: const EdgeInsets.all(AppSpacing.md),
                           decoration: BoxDecoration(
                             color: AppColors.brandGlass,
                             borderRadius: BorderRadius.circular(AppRadius.lg),
-                            border: Border.all(color: AppColors.brandGlassBorder),
+                            border: Border.all(
+                              color: AppColors.brandGlassBorder,
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,13 +779,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               Text(
                                 ride.status == 'driverArrived'
                                     ? 'Arrived at Pickup'
-                                    : (ride.status == 'driverEnRoute' ? 'Heading to Pickup' : 'Ride in Progress'),
-                                style: AppTextStyles.titleMedium.copyWith(color: AppColors.brand),
+                                    : (ride.status == 'driverEnRoute'
+                                          ? 'Heading to Pickup'
+                                          : 'Ride in Progress'),
+                                style: AppTextStyles.titleMedium.copyWith(
+                                  color: AppColors.brand,
+                                ),
                               ),
                               Text(
-                                isPickupPhase ? ride.pickupLabel : ride.dropoffLabel,
+                                isPickupPhase
+                                    ? ride.pickupLabel
+                                    : ride.dropoffLabel,
                                 style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -705,7 +802,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               PrimaryButton(
                                 label: ride.status == 'driverArrived'
                                     ? 'Start Ride'
-                                    : (ride.status == 'driverEnRoute' ? 'Go to Pickup' : 'Get Directions'),
+                                    : (ride.status == 'driverEnRoute'
+                                          ? 'Go to Pickup'
+                                          : 'Get Directions'),
                                 icon: ride.status == 'driverArrived'
                                     ? Icons.play_arrow_rounded
                                     : Icons.navigation_rounded,
@@ -760,7 +859,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               const SizedBox(width: AppSpacing.sm),
                               Expanded(
                                 child: _StatItem(
-                                  value: (tierStats?.averageRating ?? 0).toStringAsFixed(1),
+                                  value: (tierStats?.averageRating ?? 0)
+                                      .toStringAsFixed(1),
                                   label: 'Rating',
                                   icon: Icons.star_border_rounded,
                                   color: Colors.orange,
@@ -782,12 +882,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         Container(
                           padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: isOnline ? AppColors.brandGlass : AppColors.glassBackgroundDark,
+                            color: isOnline
+                                ? AppColors.brandGlass
+                                : AppColors.glassBackgroundDark,
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             isOnline ? Icons.wifi : Icons.wifi_off,
-                            color: isOnline ? AppColors.brand : (isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight),
+                            color: isOnline
+                                ? AppColors.brand
+                                : (isDark
+                                      ? AppColors.textTertiaryDark
+                                      : AppColors.textTertiaryLight),
                             size: 20,
                           ),
                         ),
@@ -800,7 +906,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               Text(
                                 "You're ${isOnline ? 'Online' : 'Offline'}",
                                 style: AppTextStyles.titleMedium.copyWith(
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight,
                                 ),
                               ),
                               Text(
@@ -809,7 +917,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         ? 'Sharing location for ride requests.'
                                         : 'Go online to receive rides.'),
                                 style: AppTextStyles.caption.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                 ),
                               ),
                             ],
@@ -821,7 +931,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           onChanged: _presenceController.isBusy
                               ? null
                               : (value) async {
-                                  if (value && _walletBalance <= -_maxNegativeBalance) {
+                                  if (value &&
+                                      _walletBalance <= -_maxNegativeBalance) {
                                     await DriverDebtPromptBottomSheet.show(
                                       context,
                                       currentBalance: _walletBalance,
@@ -829,7 +940,57 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     );
                                     return;
                                   }
-                                  await _presenceController.setOnline(value);
+                                  if (value && Platform.isAndroid) {
+                                    final overlayService =
+                                        DriverFloatingOverlayService.instance;
+                                    var hasOverlay = await overlayService
+                                        .hasOverlayPermission();
+                                    if (!hasOverlay && mounted) {
+                                      final action = await showDialog<String>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text(
+                                            'Enable Floating Driver Icon',
+                                          ),
+                                          content: const Text(
+                                            'To see incoming ride offers while using Google Maps or other apps, allow CaRide to "Display over other apps".\n\nFor best reliability, also set CaRide battery usage to "Unrestricted" in Android settings.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop('skip'),
+                                              child: const Text('Not Now'),
+                                            ),
+                                            FilledButton(
+                                              onPressed: () => Navigator.of(
+                                                ctx,
+                                              ).pop('enable'),
+                                              child: const Text('Enable Now'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (action == 'enable') {
+                                        await overlayService
+                                            .requestOverlayPermission();
+                                        return;
+                                      }
+                                    }
+                                    await _presenceController.setOnline(value);
+                                    hasOverlay = await overlayService
+                                        .hasOverlayPermission();
+                                    if (hasOverlay &&
+                                        _presenceController.isOnline) {
+                                      await overlayService.start();
+                                    }
+                                  } else {
+                                    await _presenceController.setOnline(value);
+                                    if (!value && Platform.isAndroid) {
+                                      await DriverFloatingOverlayService
+                                          .instance
+                                          .stop();
+                                    }
+                                  }
                                 },
                         ),
                       ],
@@ -865,7 +1026,10 @@ class _StatItem extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GlassContainer(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md, horizontal: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        vertical: AppSpacing.md,
+        horizontal: AppSpacing.sm,
+      ),
       child: Column(
         children: [
           Icon(icon, color: color, size: 20),
@@ -873,14 +1037,18 @@ class _StatItem extends StatelessWidget {
           Text(
             value,
             style: AppTextStyles.titleMedium.copyWith(
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
               fontWeight: FontWeight.w700,
             ),
           ),
           Text(
             label,
             style: AppTextStyles.caption.copyWith(
-              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
               fontSize: 10,
             ),
           ),
@@ -975,7 +1143,9 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
 
         return GlassContainer(
           radius: 12,
-          borderColor: isDark ? AppColors.glassBorderDark : AppColors.glassBorderLight,
+          borderColor: isDark
+              ? AppColors.glassBorderDark
+              : AppColors.glassBorderLight,
           padding: EdgeInsets.zero,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(11),
@@ -1004,7 +1174,9 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
                         loadingWidget: Container(
                           color: isDark ? Colors.white10 : Colors.black12,
                           child: const Center(
-                            child: CircularProgressIndicator(color: AppColors.brand),
+                            child: CircularProgressIndicator(
+                              color: AppColors.brand,
+                            ),
                           ),
                         ),
                       ),
@@ -1015,14 +1187,17 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
                           top: AppSpacing.md,
                           child: Row(
                             children: List.generate(docs.length, (dotIndex) {
-                              final isActive = dotIndex == (_currentPage % docs.length);
+                              final isActive =
+                                  dotIndex == (_currentPage % docs.length);
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
                                 margin: const EdgeInsets.only(left: 4),
                                 width: isActive ? 12 : 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: isActive ? AppColors.brand : Colors.white60,
+                                  color: isActive
+                                      ? AppColors.brand
+                                      : Colors.white60,
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               );
@@ -1040,4 +1215,3 @@ class _BannerAdsCarouselState extends State<_BannerAdsCarousel> {
     );
   }
 }
-
