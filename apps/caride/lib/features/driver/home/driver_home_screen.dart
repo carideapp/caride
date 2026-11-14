@@ -20,6 +20,7 @@ import 'package:caride/core/config/app_config_repository.dart';
 import 'package:caride/features/driver/widgets/driver_debt_prompt_bottom_sheet.dart';
 import 'package:caride/features/driver/profile/driver_vehicle_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_models/shared_models.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 
@@ -939,6 +940,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       maxNegativeBalance: _maxNegativeBalance,
                                     );
                                     return;
+                                  }
+                                  if (value) {
+                                    var locPerm =
+                                        await Geolocator.checkPermission();
+                                    if (locPerm == LocationPermission.denied) {
+                                      locPerm =
+                                          await Geolocator.requestPermission();
+                                    }
+                                    if (locPerm == LocationPermission.denied ||
+                                        locPerm ==
+                                            LocationPermission.deniedForever) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: const Text(
+                                              'Please allow "While in use" location permission to go online.',
+                                            ),
+                                            action: locPerm ==
+                                                    LocationPermission
+                                                        .deniedForever
+                                                ? SnackBarAction(
+                                                    label: 'Settings',
+                                                    onPressed: Geolocator
+                                                        .openAppSettings,
+                                                  )
+                                                : null,
+                                          ),
+                                        );
+                                      }
+                                      return;
+                                    }
                                   }
                                   if (value && Platform.isAndroid) {
                                     final overlayService =

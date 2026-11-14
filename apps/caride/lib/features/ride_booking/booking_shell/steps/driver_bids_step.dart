@@ -9,6 +9,7 @@ import 'package:caride/features/ride_booking/booking_shell/widgets/passenger_upd
 import 'package:caride/features/ride_booking/booking_shell/widgets/stacked_driver_avatars.dart';
 import 'package:caride/features/ride_booking/data/ride_repository.dart';
 import 'package:design_system/design_system.dart';
+import 'package:caride/features/wallet/widgets/dedicated_account_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_widgets/shared_widgets.dart';
@@ -75,10 +76,38 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
   void _openUpdateOfferSheet() {
     final ride = widget.controller.ride;
     if (ride == null) return;
+    final isWallet = ride.paymentMethod.trim().toLowerCase() == 'wallet';
     PassengerUpdateOfferBottomSheet.show(
       context: context,
       currentOffer: ride.customerOffer,
       onConfirm: (newOffer) async {
+        if (isWallet && newOffer > _walletBalance) {
+          if (!mounted) return;
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Insufficient Wallet Balance'),
+              content: Text(
+                'Your wallet balance (${NgnFormat.whole(_walletBalance)}) is less than ${NgnFormat.whole(newOffer)}. Top up your wallet or switch to Cash.',
+                style: const TextStyle(color: AppColors.error),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Close'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    DedicatedAccountBottomSheet.show(context);
+                  },
+                  child: const Text('Top Up'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
         await widget.controller.updateRideOffer(newOffer);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -186,6 +186,7 @@ class _FareStepState extends State<FareStep> {
       animation: c,
       builder: (context, _) {
         final offer = c.offerNaira;
+        final minFare = (offer * 0.80).roundToDouble();
         final isWallet = _paymentMethod == 'wallet';
         final isInsufficient = isWallet && _walletBalance < offer;
 
@@ -205,7 +206,9 @@ class _FareStepState extends State<FareStep> {
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: () => c.decrementOffer(step: _step),
+                      onPressed: offer <= minFare
+                          ? null
+                          : () => c.decrementOffer(step: _step),
                       icon: const Icon(Icons.remove_rounded),
                     ),
                     Expanded(

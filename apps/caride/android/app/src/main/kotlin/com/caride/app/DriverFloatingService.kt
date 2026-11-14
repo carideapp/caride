@@ -14,8 +14,12 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -52,6 +56,9 @@ class DriverFloatingService : Service() {
     private var badgeView: TextView? = null
     private var bannerView: TextView? = null
     private var pulseAnimator: ObjectAnimator? = null
+    private var activeRingtone: Ringtone? = null
+    private val ringtoneHandler = Handler(Looper.getMainLooper())
+    private val stopRingtoneRunnable = Runnable { stopRingtone() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -123,7 +130,7 @@ class DriverFloatingService : Service() {
         }
 
         val logoImage = ImageView(this).apply {
-            setImageResource(R.drawable.caride_driver_logo)
+            setImageResource(R.drawable.caride_floating_icon)
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = circleBg
             setPadding(dp(6), dp(6), dp(6), dp(6))
@@ -267,9 +274,33 @@ class DriverFloatingService : Service() {
                 start()
             }
         }
+        playRingtone()
+    }
+
+    private fun playRingtone() {
+        stopRingtone()
+        try {
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            activeRingtone = RingtoneManager.getRingtone(applicationContext, uri)?.apply {
+                play()
+            }
+            ringtoneHandler.postDelayed(stopRingtoneRunnable, 20_000L)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun stopRingtone() {
+        ringtoneHandler.removeCallbacks(stopRingtoneRunnable)
+        try {
+            activeRingtone?.stop()
+        } catch (_: Exception) {
+        }
+        activeRingtone = null
     }
 
     private fun clearOfferAlert() {
+        stopRingtone()
         pulseAnimator?.cancel()
         pulseAnimator = null
         rootView?.apply {
@@ -290,6 +321,7 @@ class DriverFloatingService : Service() {
     }
 
     private fun removeOverlay() {
+        stopRingtone()
         pulseAnimator?.cancel()
         pulseAnimator = null
         rootView?.let {

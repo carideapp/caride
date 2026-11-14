@@ -9,11 +9,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:caride/core/driver/services/driver_floating_overlay_service.dart';
 import 'customer_notification_router.dart';
 
 @pragma('vm:entry-point')
 Future<void> customerFirebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  final type = (message.data['type'] ?? '').toString().toLowerCase();
+  if (type == 'ride_offer' || type == 'ride_request' || type == 'new_ride') {
+    final title = message.notification?.title ??
+        (message.data['title']?.toString() ?? 'New Ride Offer');
+    await DriverFloatingOverlayService.instance.notifyRideOffer(
+      title: title,
+      count: 1,
+    );
+  }
 }
 
 class CustomerNotificationsController {
