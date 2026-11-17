@@ -29,10 +29,12 @@ class _FareStepState extends State<FareStep> {
   String? _selectedCardId;
   String? _selectedAuthCode;
   double _walletBalance = 0.0;
+  late final double _minFare;
 
   @override
   void initState() {
     super.initState();
+    _minFare = (widget.controller.offerNaira * 0.80).roundToDouble();
     _fetchInitialBalance();
   }
 
@@ -82,59 +84,81 @@ class _FareStepState extends State<FareStep> {
   Future<void> _editOffer() async {
     final initial = widget.controller.offerNaira.round().toString();
     final ctrl = TextEditingController(text: initial);
+    String? errorText;
 
     final v = await showDialog<double>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Colors.transparent,
-          contentPadding: EdgeInsets.zero,
-          content: GlassSurface(
-            radius: AppRadius.lg,
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Set your offer',
-                  style: AppTextStyles.titleLarge.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppTextField(
-                  controller: ctrl,
-                  hint: 'Offer amount',
-                  obscureText: false,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Row(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.transparent,
+              contentPadding: EdgeInsets.zero,
+              content: GlassSurface(
+                radius: AppRadius.lg,
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: SecondaryButton(
-                        label: 'Cancel',
-                        onPressed: () => Navigator.pop(context),
+                    Text(
+                      'Set your offer',
+                      style: AppTextStyles.titleLarge.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: PrimaryButton(
-                        label: 'Save',
-                        onPressed: () {
-                          final parsed = double.tryParse(
-                            ctrl.text.trim().replaceAll(',', ''),
-                          );
-                          Navigator.pop(context, parsed);
-                        },
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      controller: ctrl,
+                      hint: 'Offer amount',
+                      obscureText: false,
+                      keyboardType: TextInputType.number,
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        errorText!,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SecondaryButton(
+                            label: 'Cancel',
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: PrimaryButton(
+                            label: 'Save',
+                            onPressed: () {
+                              final parsed = double.tryParse(
+                                ctrl.text.trim().replaceAll(',', ''),
+                              );
+                              if (parsed == null || parsed < _minFare) {
+                                setDialogState(() {
+                                  errorText =
+                                      'Minimum fare: ${NgnFormat.whole(_minFare)}';
+                                });
+                                return;
+                              }
+                              Navigator.pop(context, parsed);
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -186,7 +210,7 @@ class _FareStepState extends State<FareStep> {
       animation: c,
       builder: (context, _) {
         final offer = c.offerNaira;
-        final minFare = (offer * 0.80).roundToDouble();
+        final isBelowMinFare = offer < _minFare;
         final isWallet = _paymentMethod == 'wallet';
         final isInsufficient = isWallet && _walletBalance < offer;
 
@@ -206,9 +230,15 @@ class _FareStepState extends State<FareStep> {
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: offer <= minFare
+                      onPressed: offer <= _minFare
                           ? null
-                          : () => c.decrementOffer(step: _step),
+                          : () {
+                              if (offer - _step < _minFare) {
+                                c.setOffer(_minFare);
+                              } else {
+                                c.decrementOffer(step: _step);
+                              }
+                            },
                       icon: const Icon(Icons.remove_rounded),
                     ),
                     Expanded(
@@ -250,6 +280,16 @@ class _FareStepState extends State<FareStep> {
                   ],
                 ),
               ),
+              if (isBelowMinFare) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Minimum fare: ${NgnFormat.whole(_minFare)}',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.sm),
 
               // Pending Bank Transfer Banner (if active)
