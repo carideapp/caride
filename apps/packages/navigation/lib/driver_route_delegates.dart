@@ -63,13 +63,13 @@ class DriverRouteDelegates {
   final WidgetBuilder pendingApproval;
 
   final Widget Function(BuildContext context, StatefulNavigationShell shell)
-      mainShell;
+  mainShell;
 
   final WidgetBuilder home;
   final WidgetBuilder notifications;
   final WidgetBuilder chat;
   final Widget Function(BuildContext context, Map<String, dynamic>? extra)
-      conversation;
+  conversation;
   final WidgetBuilder rides;
   final Widget Function(BuildContext context, String? rideId) rideDetail;
   final WidgetBuilder wallet;
@@ -85,7 +85,7 @@ class DriverRouteDelegates {
   final WidgetBuilder aboutApp;
 
   final WidgetBuilder requests;
-  final WidgetBuilder requestDetail;
+  final Widget Function(BuildContext context, {String? rideId}) requestDetail;
   final WidgetBuilder tripPickup;
   final WidgetBuilder tripActive;
   final WidgetBuilder tripComplete;
@@ -94,7 +94,8 @@ class DriverRouteDelegates {
     BuildContext context,
     String docTitle,
     String? documentType,
-  ) documentUpload;
+  )
+  documentUpload;
   final WidgetBuilder profileBasicInfo;
   final WidgetBuilder profilePicture;
   final WidgetBuilder helpSupport;

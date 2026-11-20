@@ -8,6 +8,7 @@ import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
+import { pruneStaleTokens, resolveDriverTokens } from "./dispatch";
 
 const REGION_PRIMARY = "us-east1";
 const REGION_SCHEDULE = "us-west1";
@@ -447,17 +448,61 @@ async function sendResendEmail(to: string, subject: string, html: string): Promi
   });
 }
 
-async function sendPushToDriver(driverUid: string, title: string, body: string, data?: Record<string, string>): Promise<void> {
+async function sendPushToDriver(
+  driverUid: string,
+  title: string,
+  body: string,
+  data?: Record<string, string>,
+  options?: {
+    channelId?: string;
+    sound?: string;
+    iosSound?: string;
+    timeSensitive?: boolean;
+  }
+): Promise<void> {
   try {
     const snap = await driversCollection.doc(driverUid).get();
-    const token = snap.data()?.fcmToken as string | undefined;
-    if (!token) return;
-    await admin.messaging().send({
-      token, notification: { title, body }, data: data ?? {},
-      android: { priority: "high", notification: { sound: "default", channelId: "caride_alerts" } },
-      apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    const driverData = (snap.data() ?? {}) as Record<string, unknown>;
+    const targets = await resolveDriverTokens(driverUid, undefined, driverData);
+    if (targets.length === 0) return;
+
+    const channelId = options?.channelId ?? "caride_alerts";
+    const androidSound = options?.sound ?? "default";
+    const iosSound = options?.iosSound ?? "default";
+
+    const messages: admin.messaging.Message[] = targets.map((t) => ({
+      token: t.token,
+      notification: { title, body },
+      data: data ?? {},
+      android: {
+        priority: "high",
+        notification: { sound: androidSound, channelId },
+      },
+      apns: {
+        headers: {
+          "apns-push-type": "alert",
+          "apns-priority": "10",
+        },
+        payload: {
+          aps: {
+            sound: iosSound,
+            badge: 1,
+            ...(options?.timeSensitive
+              ? { "interruption-level": "time-sensitive" }
+              : {}),
+          },
+        },
+      },
+    }));
+
+    const batchResp = await admin.messaging().sendEach(messages);
+    await pruneStaleTokens(targets, batchResp.responses);
+    logger.info("FCM push sent", {
+      driverUid,
+      title,
+      successCount: batchResp.successCount,
+      failureCount: batchResp.failureCount,
     });
-    logger.info("FCM push sent", { driverUid, title });
   } catch (e) { logger.warn("FCM push failed", { driverUid, e: String(e) }); }
 }
 
@@ -3286,7 +3331,7 @@ export const submitDriverApplication = onCall({ region: REGION_PRIMARY, maxInsta
   return { success: true };
 });
 
-export const createDriverBid = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+export const createDriverBid = onCall({ region: REGION_PRIMARY, maxInstances: 10 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -3297,42 +3342,86 @@ export const createDriverBid = onCall({ region: REGION_PRIMARY, maxInstances: 5 
   if (!rideId || offerNaira == null || etaMinutes == null) {
     throw new HttpsError("invalid-argument", "Missing required fields.");
   }
-  if (offerNaira <= 0) {
+  if (!Number.isFinite(offerNaira) || offerNaira <= 0) {
     throw new HttpsError("invalid-argument", "Offer amount must be positive.");
   }
 
-  const [rideDoc, driverDoc, presenceDoc] = await Promise.all([
-    admin.firestore().collection("rides").doc(rideId).get(),
-    driversCollection.doc(uid).get(),
-    driverPresenceCollection.doc(uid).get(),
-  ]);
+  const db = admin.firestore();
+  const rideRef = db.collection("rides").doc(rideId);
+  const driverRef = driversCollection.doc(uid);
+  const presenceRef = driverPresenceCollection.doc(uid);
+  const offersCol = db.collection("bids").doc(rideId).collection("offers");
+  const driverSettingsSnap = await db.collection("config").doc("driverSettings").get();
+  const rawMaxNeg = driverSettingsSnap.data()?.maxNegativeBalanceNaira;
+  const maxNegativeBalanceNaira =
+    typeof rawMaxNeg === "number" && Number.isFinite(rawMaxNeg) && rawMaxNeg >= 0
+      ? rawMaxNeg
+      : 3000;
 
-  if (!rideDoc.exists) {
-    throw new HttpsError("not-found", "Ride not found.");
-  }
-  if (!driverDoc.exists) {
-    throw new HttpsError("not-found", "Driver profile not found.");
-  }
+  const bidRef = offersCol.doc();
+  const nowMs = Date.now();
+  const expiresAt = new Date(nowMs + 60_000);
 
-  const ride = rideDoc.data()!;
-  if (!["requested", "bidding"].includes(ride.status)) {
-    throw new HttpsError("failed-precondition", "This ride is no longer accepting bids.");
-  }
+  await db.runTransaction(async (tx) => {
+    const [rideDoc, driverDoc, presenceDoc, existingOffersSnap] = await Promise.all([
+      tx.get(rideRef),
+      tx.get(driverRef),
+      tx.get(presenceRef),
+      tx.get(offersCol.where("driverUid", "==", uid).where("status", "==", "pending").limit(5)),
+    ]);
 
-  const driver = driverDoc.data()!;
-  if (driver.approvalStatus !== "approved") {
-    throw new HttpsError("permission-denied", "Driver is not approved to place bids.");
-  }
+    if (!rideDoc.exists) {
+      throw new HttpsError("not-found", "Ride not found.");
+    }
+    if (!driverDoc.exists) {
+      throw new HttpsError("not-found", "Driver profile not found.");
+    }
 
-  const presence = presenceDoc.data();
-  if (!presence || presence.isAvailableForRequests !== true || presence.availabilityState !== "online") {
-    throw new HttpsError("failed-precondition", "Driver must be online and available before placing bids.");
-  }
+    const ride = rideDoc.data()!;
+    if (!["requested", "bidding"].includes(String(ride.status ?? "")) || ride.driverUid) {
+      throw new HttpsError("failed-precondition", "This ride is no longer accepting bids.");
+    }
+    const rideExpiresAt = (ride.expiresAt as admin.firestore.Timestamp | undefined)?.toDate();
+    if (rideExpiresAt && rideExpiresAt.getTime() <= nowMs) {
+      throw new HttpsError("failed-precondition", "This ride request has expired.");
+    }
 
-  const bidRef = admin.firestore().collection("bids").doc(rideId).collection("offers").doc();
-  const expiresAt = new Date(Date.now() + 60_000);
+    const driver = driverDoc.data()!;
+    if (driver.approvalStatus !== "approved") {
+      throw new HttpsError("permission-denied", "Driver is not approved to place bids.");
+    }
+    const walletBalance = Number(driver.walletBalance) || 0;
+    if (walletBalance <= -maxNegativeBalanceNaira) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Commission debt limit exceeded. Please top up your wallet to bid."
+      );
+    }
 
-  await admin.firestore().runTransaction(async (tx) => {
+    const presence = presenceDoc.data();
+    if (
+      !presence ||
+      presence.isAvailableForRequests !== true ||
+      presence.availabilityState !== "online" ||
+      presence.currentRideId
+    ) {
+      throw new HttpsError("failed-precondition", "Driver must be online and available before placing bids.");
+    }
+
+    const presenceVehicleType = String(presence.vehicleType ?? "").trim().toLowerCase();
+    const rideType = String(ride.rideType ?? "").trim().toLowerCase();
+    if (presenceVehicleType && rideType && presenceVehicleType !== rideType) {
+      throw new HttpsError("failed-precondition", "Vehicle type does not match this ride request.");
+    }
+
+    const hasLivePendingBid = existingOffersSnap.docs.some((doc) => {
+      const exp = (doc.data().expiresAt as admin.firestore.Timestamp | undefined)?.toDate();
+      return !exp || exp.getTime() > nowMs;
+    });
+    if (hasLivePendingBid) {
+      throw new HttpsError("already-exists", "You already have an active bid on this ride.");
+    }
+
     tx.set(bidRef, {
       bidId: bidRef.id,
       rideId,
@@ -3348,7 +3437,7 @@ export const createDriverBid = onCall({ region: REGION_PRIMARY, maxInstances: 5 
       expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    tx.update(admin.firestore().collection("rides").doc(rideId), {
+    tx.update(rideRef, {
       status: "bidding",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -4214,16 +4303,51 @@ export const respondToBid = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, 
     }
     await batch.commit();
   } else if (action === "reject") {
-    await bidRef.update({ status: "rejected", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await admin.firestore().runTransaction(async (tx) => {
+      const [rideSnap, bidSnap] = await Promise.all([tx.get(rideRef), tx.get(bidRef)]);
+      if (!rideSnap.exists) throw new HttpsError("not-found", "Ride not found.");
+      if (!bidSnap.exists) throw new HttpsError("not-found", "Bid not found.");
+      const liveRide = rideSnap.data()!;
+      const liveBid = bidSnap.data()!;
+      if (liveRide.customerUid !== uid) {
+        throw new HttpsError("permission-denied", "Only the customer can respond to bids.");
+      }
+      if (!["requested", "bidding"].includes(String(liveRide.status ?? "")) || liveRide.driverUid) {
+        throw new HttpsError("failed-precondition", "Ride is no longer accepting bid changes.");
+      }
+      if (liveBid.status !== "pending") {
+        throw new HttpsError("failed-precondition", "Bid is no longer pending.");
+      }
+      tx.update(bidRef, {
+        status: "rejected",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
   } else if (action === "counter") {
-    if (counterOffer == null || counterOffer <= 0) {
+    if (counterOffer == null || !Number.isFinite(counterOffer) || counterOffer <= 0) {
       throw new HttpsError("invalid-argument", "Invalid counter offer amount.");
     }
-    await bidRef.update({
-      counterOffer,
-      status: "countered",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      counterAt: admin.firestore.FieldValue.serverTimestamp(),
+    await admin.firestore().runTransaction(async (tx) => {
+      const [rideSnap, bidSnap] = await Promise.all([tx.get(rideRef), tx.get(bidRef)]);
+      if (!rideSnap.exists) throw new HttpsError("not-found", "Ride not found.");
+      if (!bidSnap.exists) throw new HttpsError("not-found", "Bid not found.");
+      const liveRide = rideSnap.data()!;
+      const liveBid = bidSnap.data()!;
+      if (liveRide.customerUid !== uid) {
+        throw new HttpsError("permission-denied", "Only the customer can respond to bids.");
+      }
+      if (!["requested", "bidding"].includes(String(liveRide.status ?? "")) || liveRide.driverUid) {
+        throw new HttpsError("failed-precondition", "Ride is no longer accepting bid changes.");
+      }
+      if (liveBid.status !== "pending") {
+        throw new HttpsError("failed-precondition", "Bid is no longer pending.");
+      }
+      tx.update(bidRef, {
+        counterOffer,
+        status: "countered",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        counterAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
   } else {
     throw new HttpsError("invalid-argument", `Unknown action: ${action}`);
@@ -4492,9 +4616,15 @@ export const onRideUpdatedDriverNotify = onDocumentUpdated(
       if (ok) {
         await sendPushToDriver(
           driverUid,
-          "Trip assigned",
-          `Pickup: ${pickupLabel}`,
-          { type: "ride_assigned", rideId }
+          "Trip assigned!",
+          `Head to pickup: ${pickupLabel}`,
+          { type: "ride_assigned", rideId },
+          {
+            channelId: "caride_ride_assigned_v1",
+            sound: "ride_assigned",
+            iosSound: "ride_assigned.wav",
+            timeSensitive: true,
+          }
         );
       }
     }
@@ -4517,7 +4647,7 @@ export const onRideUpdatedDriverNotify = onDocumentUpdated(
         await sendPushToDriver(
           driverUid,
           "Trip started",
-          `${pickupLabel} â†' ${dropoffLabel}`,
+          `${pickupLabel} → ${dropoffLabel}`,
           { type: "ride_started", rideId }
         );
       }
@@ -8169,6 +8299,13 @@ export const adminSyncDriverEmails = onCall(
     };
   }
 );
+
+export {
+  onRideCreatedDispatchDrivers,
+  onRideUnavailableCancelAlerts,
+  expireStaleRideRequests,
+} from "./dispatch";
+
 
 
 

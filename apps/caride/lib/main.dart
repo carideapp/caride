@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:caride/app/theme_mode_controller.dart';
 import 'package:caride/core/auth/customer_auth_controller.dart';
 import 'package:caride/core/firebase/firebase_bootstrap.dart';
-import 'package:caride/core/notifications/customer_notifications_controller.dart';
+import 'package:caride/core/notifications/app_notification_service.dart';
 import 'package:caride/core/permissions/startup_permissions.dart';
 import 'package:caride/core/navigation/auth_redirect.dart';
 import 'package:caride/router/customer_route_factory.dart';
@@ -35,14 +35,16 @@ Future<void> main() async {
           GoogleMapsFlutterPlatform.instance;
       if (mapsImplementation is GoogleMapsFlutterAndroid) {
         try {
-          await mapsImplementation.initializeWithRenderer(AndroidMapRenderer.latest);
+          await mapsImplementation.initializeWithRenderer(
+            AndroidMapRenderer.latest,
+          );
         } catch (e) {
           debugPrint('Error initializing Google Maps latest renderer: $e');
         }
       }
 
       FirebaseMessaging.onBackgroundMessage(
-        customerFirebaseMessagingBackgroundHandler,
+        carideFirebaseMessagingBackgroundHandler,
       );
 
       SystemChrome.setSystemUIOverlayStyle(
@@ -108,7 +110,8 @@ Future<void> main() async {
     },
     (error, stack) {
       final String errorStr = error.toString();
-      final bool nonFatal = errorStr.contains('HTTP request failed') ||
+      final bool nonFatal =
+          errorStr.contains('HTTP request failed') ||
           errorStr.contains('NetworkImage') ||
           errorStr.contains('HttpException') ||
           errorStr.contains('SocketException') ||
@@ -122,7 +125,11 @@ Future<void> main() async {
           errorStr.contains('Image picker is already active');
 
       try {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: !nonFatal);
+        FirebaseCrashlytics.instance.recordError(
+          error,
+          stack,
+          fatal: !nonFatal,
+        );
       } catch (_) {
         debugPrint('Unhandled error (Crashlytics unavailable): $error\n$stack');
       }
@@ -139,7 +146,6 @@ class CustomerApp extends StatefulWidget {
 
 class _CustomerAppState extends State<CustomerApp> {
   late final CustomerRouterBundle _router;
-  late final CustomerNotificationsController _notifications;
 
   @override
   void initState() {
@@ -149,8 +155,9 @@ class _CustomerAppState extends State<CustomerApp> {
       refreshListenable: customerAuthController,
       redirect: (_, state) => customerAuthRedirect(state),
     );
-    _notifications = CustomerNotificationsController();
-    unawaited(_notifications.initialize(router: _router.router));
+    unawaited(
+      AppNotificationService.instance.initialize(router: _router.router),
+    );
     customerThemeMode.addListener(_onThemeMode);
   }
 
@@ -159,7 +166,7 @@ class _CustomerAppState extends State<CustomerApp> {
   @override
   void dispose() {
     customerThemeMode.removeListener(_onThemeMode);
-    unawaited(_notifications.dispose());
+    unawaited(AppNotificationService.instance.dispose());
     super.dispose();
   }
 

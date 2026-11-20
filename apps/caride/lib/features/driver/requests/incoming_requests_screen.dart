@@ -10,7 +10,8 @@ import 'package:caride/features/driver/auth/data/driver_profile_repository.dart'
 import 'package:caride/features/driver/location/data/driver_presence_repository.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
-import 'package:caride/features/ride_booking/data/ride_repository.dart' hide RideModel;
+import 'package:caride/features/ride_booking/data/ride_repository.dart'
+    hide RideModel;
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:navigation/navigation.dart';
@@ -35,8 +36,9 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final backgroundColor =
-        isDark ? AppColors.darkBackground : AppColors.lightBackground;
+    final backgroundColor = isDark
+        ? AppColors.darkBackground
+        : AppColors.lightBackground;
     final rideRepo = DriverRideRepository();
     final presenceRepo = DriverPresenceRepository();
 
@@ -50,7 +52,10 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.notifications_active_outlined, color: AppColors.primaryGreen),
+            const Icon(
+              Icons.notifications_active_outlined,
+              color: AppColors.primaryGreen,
+            ),
             const SizedBox(width: AppSpacing.sm),
             Text(
               'New Requests',
@@ -125,7 +130,9 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
               ),
               builder: (context, rideSnapshot) {
                 if (rideSnapshot.hasError) {
-                  debugPrint('IncomingRequestsScreen stream error: ${rideSnapshot.error}');
+                  debugPrint(
+                    'IncomingRequestsScreen stream error: ${rideSnapshot.error}',
+                  );
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -144,20 +151,23 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
                 }
 
                 final allRides = rideSnapshot.data ?? [];
-                _declinedRideIds.removeWhere((id) => !allRides.any((r) => r.id == id));
-                final visibleRides =
-                    allRides.where((r) => !_declinedRideIds.contains(r.id)).toList();
-
-                DriverAlertController.instance.onRidesUpdated(
-                  visibleRides,
-                  driverLat: presence.latitude,
-                  driverLng: presence.longitude,
+                _declinedRideIds.removeWhere(
+                  (id) => !allRides.any((r) => r.id == id),
                 );
+                final visibleRides = allRides
+                    .where(
+                      (r) =>
+                          !_declinedRideIds.contains(r.id) &&
+                          !DriverAlertController.instance.isRideDeclined(r.id),
+                    )
+                    .toList();
 
                 if (visibleRides.isNotEmpty) {
                   final driverUid = FirebaseAuth.instance.currentUser?.uid;
                   if (driverUid != null) {
-                    DriverProfileRepository().getDriverProfile(driverUid).then((profile) {
+                    DriverProfileRepository().getDriverProfile(driverUid).then((
+                      profile,
+                    ) {
                       if (profile != null) {
                         for (final ride in visibleRides.take(5)) {
                           RideRepository().updateDriverRideViewerPresence(
@@ -185,11 +195,16 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
                             height: 260,
                             fit: BoxFit.contain,
                             decoder: (bytes) {
-                              return LottieComposition.decodeZip(bytes, filePicker: (files) {
-                                return files.firstWhere(
-                                  (f) => f.name.startsWith('animations/') && f.name.endsWith('.json'),
-                                );
-                              });
+                              return LottieComposition.decodeZip(
+                                bytes,
+                                filePicker: (files) {
+                                  return files.firstWhere(
+                                    (f) =>
+                                        f.name.startsWith('animations/') &&
+                                        f.name.endsWith('.json'),
+                                  );
+                                },
+                              );
                             },
                           ),
                         ),
@@ -203,7 +218,9 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
                               Text(
                                 'Searching for rides...',
                                 style: theme.textTheme.headlineSmall?.copyWith(
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight,
                                   fontWeight: FontWeight.w800,
                                 ),
                                 textAlign: TextAlign.center,
@@ -212,7 +229,9 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
                               Text(
                                 'New ride requests will appear here.\nKeep the app open and stay online.',
                                 style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -395,9 +414,12 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
         throw StateError('Driver is not available for requests.');
       }
       final profile = await _profileRepo.getDriverProfile(uid);
-      
+
       int eta = 5;
-      if (presence.latitude != null && presence.longitude != null && widget.ride.pickupLat != null && widget.ride.pickupLng != null) {
+      if (presence.latitude != null &&
+          presence.longitude != null &&
+          widget.ride.pickupLat != null &&
+          widget.ride.pickupLng != null) {
         final dist = calculateDistance(
           presence.latitude!,
           presence.longitude!,
@@ -466,11 +488,13 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final borderColor =
-        isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE9EAF0);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : const Color(0xFFE9EAF0);
     final isUrgent = _secondsLeft < 15;
 
-    final double? distanceKm = (widget.driverLat != null &&
+    final double? distanceKm =
+        (widget.driverLat != null &&
             widget.driverLng != null &&
             widget.ride.pickupLat != null &&
             widget.ride.pickupLng != null)
@@ -510,7 +534,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                   Text(
                     _hasOffered ? 'YOUR OFFER' : 'CUSTOMER OFFER',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
+                      color: isDark
+                          ? Colors.grey[400]
+                          : const Color(0xFF6E7191),
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.2,
                     ),
@@ -537,7 +563,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                       child: CircularProgressIndicator(
                         value: _progress,
                         strokeWidth: 4,
-                        backgroundColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF3F4F7),
+                        backgroundColor: isDark
+                            ? const Color(0xFF2C2C2C)
+                            : const Color(0xFFF3F4F7),
                         valueColor: AlwaysStoppedAnimation<Color>(
                           isUrgent ? AppColors.error : AppColors.primaryGreen,
                         ),
@@ -547,7 +575,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                       '$_secondsLeft',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w900,
-                        color: isUrgent ? AppColors.error : (isDark ? Colors.white : AppColors.slate900),
+                        color: isUrgent
+                            ? AppColors.error
+                            : (isDark ? Colors.white : AppColors.slate900),
                       ),
                     ),
                   ],
@@ -557,7 +587,10 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primaryGreen.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -565,7 +598,11 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.flash_on_rounded, size: 14, color: AppColors.primaryGreen),
+                          const Icon(
+                            Icons.flash_on_rounded,
+                            size: 14,
+                            color: AppColors.primaryGreen,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'NEW RIDE',
@@ -580,20 +617,31 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                     if (distanceKm != null) ...[
                       const SizedBox(width: AppSpacing.xs),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF3F4F7),
+                          color: isDark
+                              ? const Color(0xFF2C2C2C)
+                              : const Color(0xFFF3F4F7),
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.navigation_outlined, size: 14, color: AppColors.primaryGreen),
+                            const Icon(
+                              Icons.navigation_outlined,
+                              size: 14,
+                              color: AppColors.primaryGreen,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '${distanceKm.toStringAsFixed(1)} km away',
                               style: theme.textTheme.labelSmall?.copyWith(
-                                color: isDark ? Colors.white : AppColors.slate900,
+                                color: isDark
+                                    ? Colors.white
+                                    : AppColors.slate900,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -611,13 +659,21 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
             children: [
               Column(
                 children: [
-                  const Icon(Icons.circle, size: 12, color: AppColors.primaryGreen),
+                  const Icon(
+                    Icons.circle,
+                    size: 12,
+                    color: AppColors.primaryGreen,
+                  ),
                   Container(
                     width: 2,
                     height: 32,
                     color: isDark ? Colors.grey[800] : Colors.grey[200],
                   ),
-                  const Icon(Icons.location_on_rounded, size: 14, color: AppColors.error),
+                  const Icon(
+                    Icons.location_on_rounded,
+                    size: 14,
+                    color: AppColors.error,
+                  ),
                 ],
               ),
               const SizedBox(width: AppSpacing.md),
@@ -628,7 +684,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                     Text(
                       'PICKUP',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: isDark ? Colors.grey[400] : const Color(0xFF8A90A6),
+                        color: isDark
+                            ? Colors.grey[400]
+                            : const Color(0xFF8A90A6),
                         fontWeight: FontWeight.w800,
                         fontSize: 9,
                         letterSpacing: 1,
@@ -648,7 +706,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                     Text(
                       'DROPOFF',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: isDark ? Colors.grey[400] : const Color(0xFF8A90A6),
+                        color: isDark
+                            ? Colors.grey[400]
+                            : const Color(0xFF8A90A6),
                         fontWeight: FontWeight.w800,
                         fontSize: 9,
                         letterSpacing: 1,
@@ -675,7 +735,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF3F4F7),
+                  color: isDark
+                      ? const Color(0xFF2C2C2C)
+                      : const Color(0xFFF3F4F7),
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Text(
@@ -690,7 +752,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF3F4F7),
+                  color: isDark
+                      ? const Color(0xFF2C2C2C)
+                      : const Color(0xFFF3F4F7),
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Row(
@@ -700,7 +764,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                           ? Icons.account_balance_wallet_outlined
                           : Icons.payments_outlined,
                       size: 14,
-                      color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
+                      color: isDark
+                          ? Colors.grey[400]
+                          : const Color(0xFF6E7191),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -738,7 +804,11 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                       child: SecondaryButton(
                         label: 'Decline',
                         onPressed: () {
-                          DriverAlertController.instance.resolveRide(widget.ride.id);
+                          unawaited(
+                            DriverAlertController.instance.declineRide(
+                              widget.ride.id,
+                            ),
+                          );
                           widget.onDecline?.call();
                           if (mounted) setState(() => _expired = true);
                         },
@@ -765,13 +835,20 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                 Center(
                   child: TextButton(
                     onPressed: () {
+                      DriverAlertController.instance.stopAlert(
+                        rideId: widget.ride.id,
+                      );
                       DriverActiveRideState.instance.selectedRide = widget.ride;
-                      context.push(DriverRoutePaths.requestDetail);
+                      context.push(
+                        DriverRoutePaths.requestDetailFor(widget.ride.id),
+                      );
                     },
                     child: Text(
                       'View Full Details',
                       style: TextStyle(
-                        color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
+                        color: isDark
+                            ? Colors.grey[400]
+                            : const Color(0xFF6E7191),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -786,7 +863,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF3F4F7),
+                    color: isDark
+                        ? const Color(0xFF2C2C2C)
+                        : const Color(0xFFF3F4F7),
                     borderRadius: BorderRadius.circular(AppRadius.lg),
                   ),
                   child: Row(
@@ -796,7 +875,9 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation(AppColors.primaryGreen),
+                          valueColor: AlwaysStoppedAnimation(
+                            AppColors.primaryGreen,
+                          ),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
@@ -808,14 +889,18 @@ class _IncomingRequestCardState extends State<_IncomingRequestCard>
                               'Waiting for customer...',
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : AppColors.slate900,
+                                color: isDark
+                                    ? Colors.white
+                                    : AppColors.slate900,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               'Offer expires in $_secondsLeft seconds',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: isDark ? Colors.grey[400] : const Color(0xFF6E7191),
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : const Color(0xFF6E7191),
                               ),
                             ),
                           ],

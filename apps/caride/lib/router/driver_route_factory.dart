@@ -80,7 +80,7 @@ DriverRouteDelegates buildDriverRouteDelegates() {
     privacyPolicy: (_) => const DriverPrivacyPolicyScreen(),
     aboutApp: (_) => const DriverAboutScreen(),
     requests: (_) => const IncomingRequestsScreen(),
-    requestDetail: (_) => const RequestDetailScreen(),
+    requestDetail: (_, {String? rideId}) => RequestDetailScreen(rideId: rideId),
     tripPickup: (_) => const TripPickupScreen(),
     tripActive: (_) => const TripActiveScreen(),
     tripComplete: (_) => const TripCompleteScreen(),

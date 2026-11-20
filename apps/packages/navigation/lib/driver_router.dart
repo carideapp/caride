@@ -163,7 +163,8 @@ DriverRouterBundle createDriverRouter({
       ),
       GoRoute(
         path: DriverRoutePaths.accountSecurity,
-        builder: (context, state) => (d.accountSecurity ?? (_) => const SizedBox.shrink())(context),
+        builder: (context, state) =>
+            (d.accountSecurity ?? (_) => const SizedBox.shrink())(context),
       ),
       GoRoute(
         path: DriverRoutePaths.helpFaq,
@@ -179,7 +180,10 @@ DriverRouterBundle createDriverRouter({
       ),
       GoRoute(
         path: DriverRoutePaths.requestDetail,
-        builder: (context, state) => d.requestDetail(context),
+        builder: (context, state) => d.requestDetail(
+          context,
+          rideId: state.uri.queryParameters['rideId'],
+        ),
       ),
       GoRoute(
         path: DriverRoutePaths.tripPickup,
@@ -237,7 +241,8 @@ DriverRouterBundle createDriverRouter({
       if (d.fleetProfileView != null)
         GoRoute(
           path: DriverRoutePaths.fleetProfileView,
-          builder: (context, state) => d.fleetProfileView!(context, state.extra),
+          builder: (context, state) =>
+              d.fleetProfileView!(context, state.extra),
         ),
       if (d.rentalBookings != null)
         GoRoute(
@@ -252,8 +257,5 @@ DriverRouterBundle createDriverRouter({
     ],
   );
 
-  return DriverRouterBundle(
-    router: router,
-    rootNavigatorKey: rootNavigatorKey,
-  );
+  return DriverRouterBundle(router: router, rootNavigatorKey: rootNavigatorKey);
 }

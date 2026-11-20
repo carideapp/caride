@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:caride/core/auth/customer_auth_controller.dart';
 import 'package:caride/core/auth/pending_otp_session.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
+import 'package:caride/core/notifications/app_notification_service.dart';
+import 'package:caride/core/notifications/pending_notification_intent_service.dart';
+import 'package:caride/core/notifications/unified_notification_router.dart';
 import 'package:caride/features/fleet_manager/auth/controllers/fleet_auth_controller.dart';
 import 'package:caride/features/fleet_manager/controllers/fleet_manager_controller.dart';
 import 'package:design_system/design_system.dart';
@@ -48,11 +53,46 @@ class _SplashScreenState extends State<SplashScreen>
     });
   }
 
+  Future<void> _waitForProfileLoaded() async {
+    if (customerAuthController.profileLoaded) return;
+    final completer = Completer<void>();
+    void listener() {
+      if (customerAuthController.profileLoaded && !completer.isCompleted) {
+        completer.complete();
+      }
+    }
+
+    customerAuthController.addListener(listener);
+    try {
+      await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {},
+      );
+    } finally {
+      customerAuthController.removeListener(listener);
+    }
+  }
+
   Future<void> _navigateNext() async {
     if (_hasNavigated || !mounted) return;
     _hasNavigated = true;
 
+    await AppNotificationService.instance.ensureInitialIntentCaptured();
+    if (!mounted) return;
+
     if (customerAuthController.isAuthenticated) {
+      final pending = PendingNotificationIntentService.instance.consume();
+      if (pending != null) {
+        await _waitForProfileLoaded();
+        if (!mounted) return;
+        final handled = await UnifiedNotificationRouter.instance.handle(
+          router: GoRouter.of(context),
+          data: pending,
+          switchRoleIfNeeded: true,
+        );
+        if (handled || !mounted) return;
+      }
+
       final role = customerAuthController.activeRole;
       if (role == 'fleet') {
         final hasFleet = customerAuthController.fleetExists ||

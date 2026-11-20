@@ -1,211 +1,371 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:async';
+import 'package:flutter/widgets.dart';
 
 import 'package:caride/core/driver/models/ride_model.dart';
 import 'package:caride/core/driver/utils/distance_helper.dart';
+import 'package:caride/core/notifications/app_notification_service.dart';
 import 'driver_alert_audio_service.dart';
 
-/// Central controller managing ride request notifications, deduplication, sound, and vibration.
-class DriverAlertController {
-  DriverAlertController._();
-  static final DriverAlertController instance = DriverAlertController._();
-
-  final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
-
-  final Map<String, DateTime> _alertedRideIds = {};
-  String? _activeAlertRideId;
-
-  static const int _notificationId = 8888;
-
-  static const AndroidNotificationChannel _rideAlertChannel =
-      AndroidNotificationChannel(
-    'caride_ride_alerts',
-    'Ride Request Alerts',
-    description: 'High priority alerts for incoming driver ride requests',
-    importance: Importance.max,
-    sound: RawResourceAndroidNotificationSound('notification'),
-    playSound: true,
-    enableVibration: true,
-  );
-
-  /// Initializes the local notification plugin and channel settings for ride alerts.
-  Future<void> initialize() async {
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/launcher_icon');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _localNotifications.initialize(settings);
-
-    final androidImpl = _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-    await androidImpl?.createNotificationChannel(_rideAlertChannel);
+/// Central controller managing incoming ride alerts, foreground modal presentation,
+/// 45s auto-timeout, deduplication, and native notification/decline synchronization.
+class DriverAlertController with WidgetsBindingObserver {
+  DriverAlertController._({
+    DriverAlertAudioService? audioService,
+    AppNotificationService? notificationService,
+    bool attachLifecycleObserver = true,
+  }) : _audioService = audioService ?? DriverAlertAudioService.instance,
+       _notificationService =
+           notificationService ?? AppNotificationService.instance,
+       _attachLifecycleObserver = attachLifecycleObserver {
+    if (_attachLifecycleObserver) {
+      try {
+        WidgetsBinding.instance.addObserver(this);
+        _lifecycleState =
+            WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+      } catch (_) {}
+    }
   }
 
-  /// Processes active ride stream updates from `IncomingRequestsScreen`.
+  @visibleForTesting
+  DriverAlertController({
+    DriverAlertAudioService? audioService,
+    AppNotificationService? notificationService,
+    bool isForeground = true,
+  }) : _audioService = audioService ?? DriverAlertAudioService.instance,
+       _notificationService =
+           notificationService ?? AppNotificationService.instance,
+       _attachLifecycleObserver = false,
+       _lifecycleState = isForeground
+           ? AppLifecycleState.resumed
+           : AppLifecycleState.paused;
+
+  static final DriverAlertController instance = DriverAlertController._();
+
+  static const Duration alertTtl = Duration(seconds: 45);
+  static const Duration _dedupWindow = Duration(minutes: 5);
+
+  final DriverAlertAudioService _audioService;
+  final AppNotificationService _notificationService;
+  final bool _attachLifecycleObserver;
+
+  final Map<String, DateTime> _alertedRideIds = {};
+  final Set<String> _declinedRideIds = {};
+
+  final ValueNotifier<RideModel?> activeForegroundOffer =
+      ValueNotifier<RideModel?>(null);
+  final ValueNotifier<double?> activeOfferDistanceKm = ValueNotifier<double?>(
+    null,
+  );
+
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  bool _isDriverOnline = false;
+  String? _activeAlertRideId;
+  Timer? _autoStopTimer;
+  bool _initialized = false;
+
+  StreamSubscription<Map<String, dynamic>>? _foregroundPushSub;
+  StreamSubscription<String>? _cancelledPushSub;
+  StreamSubscription<String>? _declinedPushSub;
+
+  bool get isAppForeground => _lifecycleState == AppLifecycleState.resumed;
+  bool get isDriverOnline => _isDriverOnline;
+  String? get activeAlertRideId => _activeAlertRideId;
+  bool isRideDeclined(String rideId) => _declinedRideIds.contains(rideId);
+
+  @visibleForTesting
+  void setLifecycleForTest(AppLifecycleState state) {
+    _lifecycleState = state;
+  }
+
+  void setDriverOnline(bool online) {
+    _isDriverOnline = online;
+    if (!online) {
+      stopAlert();
+    }
+  }
+
+  /// Subscribes to native foreground ride alerts/cancellations and syncs
+  /// any ride IDs previously declined from OS notifications.
+  Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+
+    await syncDeclinedIdsFromNative();
+
+    _foregroundPushSub ??= _notificationService.foregroundRideAlerts.listen((
+      data,
+    ) {
+      _handleForegroundPushPayload(data);
+    });
+    _cancelledPushSub ??= _notificationService.cancelledRideIds.listen((
+      rideId,
+    ) {
+      _alertedRideIds[rideId] = DateTime.now();
+      stopAlert(rideId: rideId);
+    });
+    _declinedPushSub ??= _notificationService.declinedRideIds.listen((rideId) {
+      _declinedRideIds.add(rideId);
+      _alertedRideIds[rideId] = DateTime.now();
+      stopAlert(rideId: rideId);
+    });
+  }
+
+  Future<void> syncDeclinedIdsFromNative() async {
+    final ids = await _notificationService.getDeclinedRideIds();
+    for (final id in ids) {
+      final cleaned = id.trim();
+      if (cleaned.isNotEmpty) {
+        _declinedRideIds.add(cleaned);
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (state == AppLifecycleState.resumed) {
+      unawaited(syncDeclinedIdsFromNative());
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_audioService.stopAlert());
+    }
+  }
+
+  /// Processes live ride stream updates hosted by [DriverMainShell].
   void onRidesUpdated(
     List<RideModel> rides, {
     double? driverLat,
     double? driverLng,
+    bool isOnline = true,
   }) {
+    _isDriverOnline = isOnline;
     _cleanOldDeduplicationEntries();
 
-    if (rides.isEmpty) {
+    if (!isOnline || rides.isEmpty) {
       stopAlert();
       return;
     }
 
-    // Filter available requested/bidding rides
-    final pendingRides = rides.where((r) => r.status == 'requested' || r.status == 'bidding').toList();
+    final now = DateTime.now();
+    final pendingRides = rides.where((r) {
+      final openStatus =
+          r.status == 'searching' ||
+          r.status == 'requested' ||
+          r.status == 'bidding';
+      final notExpired = r.expiresAt == null || r.expiresAt!.isAfter(now);
+      return openStatus && notExpired && !_declinedRideIds.contains(r.id);
+    }).toList();
 
     if (pendingRides.isEmpty) {
       stopAlert();
       return;
     }
 
-    // Check if current active alert ride is still pending
     if (_activeAlertRideId != null) {
-      final activeStillExists = pendingRides.any((r) => r.id == _activeAlertRideId);
-      if (!activeStillExists) {
-        stopAlert();
+      RideModel? matching;
+      for (final r in pendingRides) {
+        if (r.id == _activeAlertRideId) {
+          matching = r;
+          break;
+        }
+      }
+      if (matching == null) {
+        stopAlert(rideId: _activeAlertRideId);
+      } else if (activeForegroundOffer.value != null &&
+          activeForegroundOffer.value!.id == matching.id) {
+        // Refresh in-place with canonical Firestore RideModel data.
+        activeForegroundOffer.value = matching;
+        final updatedDist = _computeDistanceKm(matching, driverLat, driverLng);
+        if (updatedDist != null) {
+          activeOfferDistanceKm.value = updatedDist;
+        }
       }
     }
 
-    // Find first ride that has not been alerted yet
+    if (!isAppForeground) {
+      return;
+    }
+
     for (final ride in pendingRides) {
       if (!_alertedRideIds.containsKey(ride.id)) {
-        double? dist;
-        if (driverLat != null &&
-            driverLng != null &&
-            ride.pickupLat != null &&
-            ride.pickupLng != null) {
-          dist = calculateDistance(
-            driverLat,
-            driverLng,
-            ride.pickupLat!,
-            ride.pickupLng!,
-          );
-        }
+        final dist = _computeDistanceKm(ride, driverLat, driverLng);
         _triggerRideAlert(ride, dist);
         break;
       }
     }
   }
 
-  /// Handles incoming FCM push messages (foreground & background).
-  Future<void> handleIncomingFcmMessage(RemoteMessage message) async {
-    final data = message.data;
-    final type = data['type'] as String?;
-    final rideId = data['rideId'] as String?;
+  void _handleForegroundPushPayload(Map<String, dynamic> data) {
+    if (!_isDriverOnline || !isAppForeground) return;
+    final rideId = data['rideId']?.toString().trim() ?? '';
+    if (rideId.isEmpty || _declinedRideIds.contains(rideId)) return;
 
-    if (type == 'new_ride' || type == 'ride_request') {
-      if (rideId != null && !_alertedRideIds.containsKey(rideId)) {
-        _alertedRideIds[rideId] = DateTime.now();
-        await DriverAlertAudioService.instance.startAlert();
-      }
+    final expiresAtMs = int.tryParse(data['expiresAtMs']?.toString() ?? '');
+    if (expiresAtMs != null &&
+        expiresAtMs > 0 &&
+        DateTime.now().millisecondsSinceEpoch >= expiresAtMs) {
+      return;
     }
+
+    if (_alertedRideIds.containsKey(rideId)) return;
+
+    final offerAmount =
+        double.tryParse(data['customerOffer']?.toString() ?? '') ?? 0.0;
+    final distanceKm = double.tryParse(data['distanceKm']?.toString() ?? '');
+
+    final syntheticRide = RideModel(
+      id: rideId,
+      customerUid: '',
+      status: 'searching',
+      pickupLabel:
+          data['pickupLabel']?.toString().trim().isNotEmpty == true
+              ? data['pickupLabel'].toString().trim()
+              : 'Pickup location',
+      dropoffLabel:
+          data['dropoffLabel']?.toString().trim().isNotEmpty == true
+              ? data['dropoffLabel'].toString().trim()
+              : 'Destination',
+      rideType:
+          data['rideType']?.toString().trim().isNotEmpty == true
+              ? data['rideType'].toString().trim()
+              : 'Regular',
+      customerOffer: offerAmount,
+      paymentMethod:
+          data['paymentMethod']?.toString().trim().isNotEmpty == true
+              ? data['paymentMethod'].toString().trim()
+              : 'cash',
+      expiresAt: expiresAtMs != null && expiresAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(expiresAtMs)
+          : null,
+    );
+
+    _triggerRideAlert(syntheticRide, distanceKm);
   }
 
-  /// Triggers a fresh alert for a ride request.
-  Future<void> _triggerRideAlert(RideModel ride, double? distanceKm) async {
+  double? _computeDistanceKm(
+    RideModel ride,
+    double? driverLat,
+    double? driverLng,
+  ) {
+    if (driverLat == null ||
+        driverLng == null ||
+        ride.pickupLat == null ||
+        ride.pickupLng == null) {
+      return null;
+    }
+    return calculateDistance(
+      driverLat,
+      driverLng,
+      ride.pickupLat!,
+      ride.pickupLng!,
+    );
+  }
+
+  void _triggerRideAlert(RideModel ride, double? distanceKm) {
+    if (!isAppForeground) return;
+    _autoStopTimer?.cancel();
     _activeAlertRideId = ride.id;
     _alertedRideIds[ride.id] = DateTime.now();
+    activeOfferDistanceKm.value = distanceKm;
+    activeForegroundOffer.value = ride;
 
-    // Start looping audio and vibration
-    await DriverAlertAudioService.instance.startAlert();
+    unawaited(_audioService.startAlert());
 
-    // Show heads-up local notification
-    await _showRideNotification(ride, distanceKm);
-  }
+    Duration timeout = alertTtl;
+    final expiresAt = ride.expiresAt;
+    if (expiresAt != null) {
+      final remaining = expiresAt.difference(DateTime.now());
+      if (remaining <= Duration.zero) {
+        stopAlert(rideId: ride.id);
+        return;
+      }
+      if (remaining < timeout) {
+        timeout = remaining;
+      }
+    }
 
-  /// Shows high-priority local push notification.
-  Future<void> _showRideNotification(RideModel ride, double? distanceKm) async {
-    final distText =
-        distanceKm != null ? ' • ${distanceKm.toStringAsFixed(1)} km' : '';
-    final title = 'Ride Available (${ride.rideType})';
-    final body =
-        'Pickup: ${ride.pickupLabel}\nFare: ₦${ride.customerOffer.toStringAsFixed(0)}$distText';
-
-    const androidDetails = AndroidNotificationDetails(
-      'caride_ride_alerts',
-      'Ride Request Alerts',
-      channelDescription: 'High priority alerts for incoming driver ride requests',
-      importance: Importance.max,
-      priority: Priority.high,
-      sound: RawResourceAndroidNotificationSound('notification'),
-      playSound: true,
-      enableVibration: true,
-      fullScreenIntent: true,
-      category: AndroidNotificationCategory.call,
-    );
-
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-      sound: 'notification.wav',
-    );
-
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    final payload = jsonEncode({
-      'path': '/driver/requests',
-      'rideId': ride.id,
-      'type': 'ride_request',
+    _autoStopTimer = Timer(timeout, () {
+      if (_activeAlertRideId == ride.id) {
+        stopAlert(rideId: ride.id);
+      }
     });
+  }
 
-    try {
-      await _localNotifications.show(
-        _notificationId,
-        title,
-        body,
-        details,
-        payload: payload,
-      );
-    } catch (e) {
-      debugPrint('[DriverAlertController] Notification error: $e');
+  /// Stops ringtone audio and OS notification without closing the foreground modal.
+  void silenceAudio({String? rideId}) {
+    unawaited(_audioService.stopAlert());
+    final targetId = rideId?.trim().isNotEmpty == true
+        ? rideId!.trim()
+        : _activeAlertRideId;
+    if (targetId != null && targetId.isNotEmpty) {
+      unawaited(_notificationService.cancelRideNotification(targetId));
     }
   }
 
-  /// Stops current alert audio, vibration, and notification for a resolved ride.
+  /// Marks a ride request as declined locally and natively so alerts stop
+  /// and will not re-trigger for the same ride.
+  Future<void> declineRide(String rideId) async {
+    final cleaned = rideId.trim();
+    if (cleaned.isEmpty) return;
+    _declinedRideIds.add(cleaned);
+    _alertedRideIds[cleaned] = DateTime.now();
+    stopAlert(rideId: cleaned);
+    await _notificationService.markRideDeclined(cleaned);
+  }
+
+  /// Silences and clears any alert state for a handled/resolved ride.
   void resolveRide(String rideId) {
-    if (_activeAlertRideId == rideId) {
-      stopAlert();
+    stopAlert(rideId: rideId);
+  }
+
+  /// Stops active ringtone, clears the foreground offer modal, and cancels any
+  /// OS notification for [rideId] (or the currently active alert if omitted).
+  void stopAlert({String? rideId}) {
+    final targetId = rideId?.trim();
+    if (targetId != null &&
+        targetId.isNotEmpty &&
+        _activeAlertRideId != null &&
+        _activeAlertRideId != targetId) {
+      unawaited(_notificationService.cancelRideNotification(targetId));
+      return;
+    }
+
+    final cancelledId = targetId?.isNotEmpty == true
+        ? targetId
+        : _activeAlertRideId;
+
+    _autoStopTimer?.cancel();
+    _autoStopTimer = null;
+    _activeAlertRideId = null;
+    activeForegroundOffer.value = null;
+    activeOfferDistanceKm.value = null;
+    unawaited(_audioService.stopAlert());
+
+    if (cancelledId != null && cancelledId.isNotEmpty) {
+      unawaited(_notificationService.cancelRideNotification(cancelledId));
     }
   }
 
-  /// Stops all active audio, vibration, and clears the notification.
-  void stopAlert() {
-    _activeAlertRideId = null;
-    DriverAlertAudioService.instance.stopAlert();
-    _localNotifications.cancel(_notificationId);
-  }
-
-  /// Purges old deduplication entries to avoid unbounded memory growth.
   void _cleanOldDeduplicationEntries() {
     final now = DateTime.now();
     _alertedRideIds.removeWhere(
-      (_, timestamp) => now.difference(timestamp).inMinutes > 5,
+      (_, timestamp) => now.difference(timestamp) > _dedupWindow,
     );
   }
 
-  /// Dispose resources.
-  void dispose() {
+  Future<void> dispose() async {
     stopAlert();
+    if (_attachLifecycleObserver) {
+      try {
+        WidgetsBinding.instance.removeObserver(this);
+      } catch (_) {}
+    }
+    await _foregroundPushSub?.cancel();
+    await _cancelledPushSub?.cancel();
+    await _declinedPushSub?.cancel();
+    _foregroundPushSub = null;
+    _cancelledPushSub = null;
+    _declinedPushSub = null;
+    _initialized = false;
   }
 }

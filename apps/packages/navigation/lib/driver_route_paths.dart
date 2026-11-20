@@ -31,6 +31,8 @@ abstract final class DriverRoutePaths {
 
   static const requests = '/driver/requests';
   static const requestDetail = '/driver/requests/detail';
+  static String requestDetailFor(String rideId) =>
+      '$requestDetail?rideId=${Uri.encodeComponent(rideId)}';
   static const tripPickup = '/driver/trip/pickup';
   static const tripActive = '/driver/trip/active';
   static const tripComplete = '/driver/trip/complete';

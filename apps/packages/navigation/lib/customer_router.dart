@@ -24,7 +24,9 @@ CustomerRouterBundle createCustomerRouter({
   Listenable? refreshListenable,
   String? Function(BuildContext, GoRouterState)? redirect,
 }) {
-  final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'customer_root');
+  final rootNavigatorKey = GlobalKey<NavigatorState>(
+    debugLabel: 'customer_root',
+  );
 
   final router = GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -92,8 +94,8 @@ CustomerRouterBundle createCustomerRouter({
                 builder: (context, state) => d.rentalBookings != null
                     ? d.rentalBookings!(context)
                     : (d.rentalBrowse != null
-                        ? d.rentalBrowse!(context)
-                        : const SizedBox.shrink()),
+                          ? d.rentalBrowse!(context)
+                          : const SizedBox.shrink()),
               ),
             ],
           ),
@@ -158,12 +160,14 @@ CustomerRouterBundle createCustomerRouter({
                       GoRoute(
                         path: 'payment',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => d.paymentMethod(context, state.extra),
+                        builder: (context, state) =>
+                            d.paymentMethod(context, state.extra),
                       ),
                       GoRoute(
                         path: 'webview',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => d.topUpWebview(context, state.extra),
+                        builder: (context, state) =>
+                            d.topUpWebview(context, state.extra),
                       ),
                     ],
                   ),
@@ -187,7 +191,8 @@ CustomerRouterBundle createCustomerRouter({
                       GoRoute(
                         path: 'device-management',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => d.deviceManagement(context),
+                        builder: (context, state) =>
+                            d.deviceManagement(context),
                       ),
                       GoRoute(
                         path: 'pin',
@@ -257,17 +262,23 @@ CustomerRouterBundle createCustomerRouter({
                   GoRoute(
                     path: 'legal',
                     parentNavigatorKey: rootNavigatorKey,
-                    builder: (context, state) => d.legal != null ? d.legal!(context) : const SizedBox.shrink(),
+                    builder: (context, state) => d.legal != null
+                        ? d.legal!(context)
+                        : const SizedBox.shrink(),
                     routes: [
                       GoRoute(
                         path: 'terms',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => d.riderTerms != null ? d.riderTerms!(context) : const SizedBox.shrink(),
+                        builder: (context, state) => d.riderTerms != null
+                            ? d.riderTerms!(context)
+                            : const SizedBox.shrink(),
                       ),
                       GoRoute(
                         path: 'privacy',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => d.riderPrivacy != null ? d.riderPrivacy!(context) : const SizedBox.shrink(),
+                        builder: (context, state) => d.riderPrivacy != null
+                            ? d.riderPrivacy!(context)
+                            : const SizedBox.shrink(),
                       ),
                     ],
                   ),
@@ -279,7 +290,8 @@ CustomerRouterBundle createCustomerRouter({
                   GoRoute(
                     path: 'monitor-trip',
                     parentNavigatorKey: rootNavigatorKey,
-                    builder: (context, state) => d.monitorTrip(context, state.extra),
+                    builder: (context, state) =>
+                        d.monitorTrip(context, state.extra),
                   ),
                   GoRoute(
                     path: 'become-driver',
@@ -288,8 +300,9 @@ CustomerRouterBundle createCustomerRouter({
                   ),
                   GoRoute(
                     path: 'wallet',
-                    builder: (context, state) =>
-                        d.wallet != null ? d.wallet!(context) : d.chatOrWallet(context),
+                    builder: (context, state) => d.wallet != null
+                        ? d.wallet!(context)
+                        : d.chatOrWallet(context),
                     routes: [
                       GoRoute(
                         path: 'withdraw',
@@ -299,17 +312,20 @@ CustomerRouterBundle createCustomerRouter({
                           GoRoute(
                             path: 'amount',
                             parentNavigatorKey: rootNavigatorKey,
-                            builder: (context, state) => d.withdrawAmount!(context),
+                            builder: (context, state) =>
+                                d.withdrawAmount!(context),
                           ),
                           GoRoute(
                             path: 'pin',
                             parentNavigatorKey: rootNavigatorKey,
-                            builder: (context, state) => d.withdrawPin!(context),
+                            builder: (context, state) =>
+                                d.withdrawPin!(context),
                           ),
                           GoRoute(
                             path: 'success',
                             parentNavigatorKey: rootNavigatorKey,
-                            builder: (context, state) => d.withdrawSuccess!(context),
+                            builder: (context, state) =>
+                                d.withdrawSuccess!(context),
                           ),
                         ],
                       ),
@@ -431,7 +447,8 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: FleetRoutePaths.editVehicle,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.fleetEditVehicle!(context, state.extra),
+          builder: (context, state) =>
+              d.fleetEditVehicle!(context, state.extra),
         ),
       if (d.fleetBookings != null)
         GoRoute(
@@ -564,7 +581,8 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: FleetRoutePaths.supportConversation,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.fleetSupportConversation!(context, state.extra),
+          builder: (context, state) =>
+              d.fleetSupportConversation!(context, state.extra),
         ),
       if (d.fleetChat != null)
         GoRoute(
@@ -576,7 +594,8 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: FleetRoutePaths.conversation,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.fleetConversation!(context, state.extra),
+          builder: (context, state) =>
+              d.fleetConversation!(context, state.extra),
         ),
       if (d.driverDelegates != null) ...[
         GoRoute(
@@ -602,12 +621,14 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: DriverRoutePaths.registerSuccess,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.driverDelegates!.registerSuccess(context),
+          builder: (context, state) =>
+              d.driverDelegates!.registerSuccess(context),
         ),
         GoRoute(
           path: DriverRoutePaths.forgotPassword,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.driverDelegates!.forgotPassword(context),
+          builder: (context, state) =>
+              d.driverDelegates!.forgotPassword(context),
         ),
         GoRoute(
           path: DriverRoutePaths.onboarding,
@@ -617,7 +638,8 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: DriverRoutePaths.pendingApproval,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) => d.driverDelegates!.pendingApproval(context),
+          builder: (context, state) =>
+              d.driverDelegates!.pendingApproval(context),
         ),
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) {
@@ -632,7 +654,8 @@ CustomerRouterBundle createCustomerRouter({
                 ),
                 GoRoute(
                   path: DriverRoutePaths.notifications,
-                  builder: (context, state) => d.driverDelegates!.notifications(context),
+                  builder: (context, state) =>
+                      d.driverDelegates!.notifications(context),
                 ),
               ],
             ),
@@ -640,7 +663,8 @@ CustomerRouterBundle createCustomerRouter({
               routes: <RouteBase>[
                 GoRoute(
                   path: DriverRoutePaths.rides,
-                  builder: (context, state) => d.driverDelegates!.rides(context),
+                  builder: (context, state) =>
+                      d.driverDelegates!.rides(context),
                 ),
               ],
             ),
@@ -648,7 +672,8 @@ CustomerRouterBundle createCustomerRouter({
               routes: <RouteBase>[
                 GoRoute(
                   path: DriverRoutePaths.requests,
-                  builder: (context, state) => d.driverDelegates!.requests(context),
+                  builder: (context, state) =>
+                      d.driverDelegates!.requests(context),
                 ),
               ],
             ),
@@ -664,7 +689,8 @@ CustomerRouterBundle createCustomerRouter({
               routes: <RouteBase>[
                 GoRoute(
                   path: DriverRoutePaths.profile,
-                  builder: (context, state) => d.driverDelegates!.profile(context),
+                  builder: (context, state) =>
+                      d.driverDelegates!.profile(context),
                 ),
               ],
             ),
@@ -692,31 +718,39 @@ CustomerRouterBundle createCustomerRouter({
         ),
         GoRoute(
           path: DriverRoutePaths.walletBankAccount,
-          builder: (context, state) => d.driverDelegates!.walletBankAccount(context),
+          builder: (context, state) =>
+              d.driverDelegates!.walletBankAccount(context),
         ),
         GoRoute(
           path: DriverRoutePaths.profileHistory,
-          builder: (context, state) => d.driverDelegates!.profileHistory(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profileHistory(context),
         ),
         GoRoute(
           path: DriverRoutePaths.profileRatings,
-          builder: (context, state) => d.driverDelegates!.profileRatings(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profileRatings(context),
         ),
         GoRoute(
           path: DriverRoutePaths.profileDetail,
-          builder: (context, state) => d.driverDelegates!.profileDetail(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profileDetail(context),
         ),
         GoRoute(
           path: DriverRoutePaths.profileDocuments,
-          builder: (context, state) => d.driverDelegates!.profileDocuments(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profileDocuments(context),
         ),
         GoRoute(
           path: DriverRoutePaths.profileVehicle,
-          builder: (context, state) => d.driverDelegates!.profileVehicle(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profileVehicle(context),
         ),
         GoRoute(
           path: DriverRoutePaths.accountSecurity,
-          builder: (context, state) => (d.driverDelegates!.accountSecurity ?? (_) => const SizedBox.shrink())(context),
+          builder: (context, state) =>
+              (d.driverDelegates!.accountSecurity ??
+              (_) => const SizedBox.shrink())(context),
         ),
         GoRoute(
           path: DriverRoutePaths.helpFaq,
@@ -724,7 +758,8 @@ CustomerRouterBundle createCustomerRouter({
         ),
         GoRoute(
           path: DriverRoutePaths.privacyPolicy,
-          builder: (context, state) => d.driverDelegates!.privacyPolicy(context),
+          builder: (context, state) =>
+              d.driverDelegates!.privacyPolicy(context),
         ),
         GoRoute(
           path: DriverRoutePaths.aboutApp,
@@ -732,7 +767,10 @@ CustomerRouterBundle createCustomerRouter({
         ),
         GoRoute(
           path: DriverRoutePaths.requestDetail,
-          builder: (context, state) => d.driverDelegates!.requestDetail(context),
+          builder: (context, state) => d.driverDelegates!.requestDetail(
+            context,
+            rideId: state.uri.queryParameters['rideId'],
+          ),
         ),
         GoRoute(
           path: DriverRoutePaths.tripPickup,
@@ -755,16 +793,22 @@ CustomerRouterBundle createCustomerRouter({
           builder: (context, state) {
             final title = state.uri.queryParameters['title'] ?? 'Document';
             final documentType = state.uri.queryParameters['type'];
-            return d.driverDelegates!.documentUpload(context, title, documentType);
+            return d.driverDelegates!.documentUpload(
+              context,
+              title,
+              documentType,
+            );
           },
         ),
         GoRoute(
           path: DriverRoutePaths.profileBasicInfo,
-          builder: (context, state) => d.driverDelegates!.profileBasicInfo(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profileBasicInfo(context),
         ),
         GoRoute(
           path: DriverRoutePaths.profilePicture,
-          builder: (context, state) => d.driverDelegates!.profilePicture(context),
+          builder: (context, state) =>
+              d.driverDelegates!.profilePicture(context),
         ),
         GoRoute(
           path: DriverRoutePaths.helpSupport,
@@ -784,30 +828,35 @@ CustomerRouterBundle createCustomerRouter({
         ),
         GoRoute(
           path: DriverRoutePaths.becomeCustomer,
-          builder: (context, state) => d.driverDelegates!.becomeCustomer(context),
+          builder: (context, state) =>
+              d.driverDelegates!.becomeCustomer(context),
         ),
         if (d.driverDelegates!.linkedFleets != null)
           GoRoute(
             path: DriverRoutePaths.linkedFleets,
-            builder: (context, state) => d.driverDelegates!.linkedFleets!(context),
+            builder: (context, state) =>
+                d.driverDelegates!.linkedFleets!(context),
           ),
         if (d.driverDelegates!.fleetProfileView != null)
           GoRoute(
             path: DriverRoutePaths.fleetProfileView,
             parentNavigatorKey: rootNavigatorKey,
-            builder: (context, state) => d.driverDelegates!.fleetProfileView!(context, state.extra),
+            builder: (context, state) =>
+                d.driverDelegates!.fleetProfileView!(context, state.extra),
           ),
         if (d.driverDelegates!.rentalBookings != null)
           GoRoute(
             path: DriverRoutePaths.rentalBookings,
             parentNavigatorKey: rootNavigatorKey,
-            builder: (context, state) => d.driverDelegates!.rentalBookings!(context),
+            builder: (context, state) =>
+                d.driverDelegates!.rentalBookings!(context),
           ),
         if (d.driverDelegates!.rentalTrip != null)
           GoRoute(
             path: DriverRoutePaths.rentalTrip,
             parentNavigatorKey: rootNavigatorKey,
-            builder: (context, state) => d.driverDelegates!.rentalTrip!(context, state.extra),
+            builder: (context, state) =>
+                d.driverDelegates!.rentalTrip!(context, state.extra),
           ),
       ],
       if (d.rentalBrowse != null)
@@ -855,8 +904,7 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: CustomerRoutePaths.rentalPayment,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) =>
-              d.rentalPayment!(context, state.extra),
+          builder: (context, state) => d.rentalPayment!(context, state.extra),
         ),
       if (d.popularCars != null)
         GoRoute(
@@ -880,8 +928,7 @@ CustomerRouterBundle createCustomerRouter({
         GoRoute(
           path: CustomerRoutePaths.forYouDetail,
           parentNavigatorKey: rootNavigatorKey,
-          builder: (context, state) =>
-              d.forYouDetail!(context, state.extra),
+          builder: (context, state) => d.forYouDetail!(context, state.extra),
         ),
     ],
   );

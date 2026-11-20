@@ -85,12 +85,28 @@ class DriverFloatingOverlayService {
   Future<void> notifyRideOffer({
     String title = 'New Ride Offer',
     int count = 1,
+    String? rideId,
+    String? pickupLabel,
+    String? dropoffLabel,
+    String? distanceKm,
+    String? paymentMethod,
+    int? remainingMs,
   }) async {
     if (!_isAndroid) return;
     try {
       await _channel.invokeMethod<bool>('notifyRideOffer', {
         'title': title,
         'count': count,
+        if (rideId != null && rideId.isNotEmpty) 'rideId': rideId,
+        if (pickupLabel != null && pickupLabel.isNotEmpty)
+          'pickupLabel': pickupLabel,
+        if (dropoffLabel != null && dropoffLabel.isNotEmpty)
+          'dropoffLabel': dropoffLabel,
+        if (distanceKm != null && distanceKm.isNotEmpty)
+          'distanceKm': distanceKm,
+        if (paymentMethod != null && paymentMethod.isNotEmpty)
+          'paymentMethod': paymentMethod,
+        if (remainingMs != null) 'remainingMs': remainingMs,
       });
     } catch (e) {
       debugPrint('DriverFloatingOverlayService.notifyRideOffer error: $e');
@@ -98,10 +114,13 @@ class DriverFloatingOverlayService {
   }
 
   /// Clears any active ride offer badge/banner on the floating icon.
-  Future<void> clearRideOffer() async {
+  Future<void> clearRideOffer({String? rideId}) async {
     if (!_isAndroid) return;
     try {
-      await _channel.invokeMethod<bool>('clearRideOffer');
+      await _channel.invokeMethod<bool>(
+        'clearRideOffer',
+        rideId != null && rideId.isNotEmpty ? {'rideId': rideId} : null,
+      );
     } catch (e) {
       debugPrint('DriverFloatingOverlayService.clearRideOffer error: $e');
     }

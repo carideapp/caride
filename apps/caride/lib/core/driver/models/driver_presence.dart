@@ -32,6 +32,8 @@ class DriverPresence {
     this.currentRideId,
     this.vehicleType,
     this.approvalStatusSnapshot,
+    this.geohash,
+    this.platform,
     this.lastHeartbeatAt,
     this.updatedAt,
   });
@@ -46,6 +48,8 @@ class DriverPresence {
   final String? currentRideId;
   final String? vehicleType;
   final String? approvalStatusSnapshot;
+  final String? geohash;
+  final String? platform;
   final DateTime? lastHeartbeatAt;
   final DateTime? updatedAt;
 
@@ -81,6 +85,8 @@ class DriverPresence {
       currentRideId: data['currentRideId'] as String?,
       vehicleType: data['vehicleType'] as String?,
       approvalStatusSnapshot: data['approvalStatusSnapshot'] as String?,
+      geohash: data['geohash'] as String?,
+      platform: data['platform'] as String?,
       lastHeartbeatAt: (data['lastHeartbeatAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );

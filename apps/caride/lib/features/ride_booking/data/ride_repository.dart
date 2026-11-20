@@ -86,6 +86,7 @@ class RideModel {
     this.createdAt,
     this.acceptedAt,
     this.completedAt,
+    this.expiresAt,
     this.startCode,
     this.receiverName,
     this.receiverPhone,
@@ -115,6 +116,7 @@ class RideModel {
   final DateTime? createdAt;
   final DateTime? acceptedAt;
   final DateTime? completedAt;
+  final DateTime? expiresAt;
   final String? startCode;
   final String? receiverName;
   final String? receiverPhone;
@@ -145,6 +147,7 @@ class RideModel {
     DateTime? createdAt,
     DateTime? acceptedAt,
     DateTime? completedAt,
+    DateTime? expiresAt,
     String? startCode,
     String? receiverName,
     String? receiverPhone,
@@ -174,6 +177,7 @@ class RideModel {
       createdAt: createdAt ?? this.createdAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,
       completedAt: completedAt ?? this.completedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
       startCode: startCode ?? this.startCode,
       receiverName: receiverName ?? this.receiverName,
       receiverPhone: receiverPhone ?? this.receiverPhone,
@@ -229,6 +233,7 @@ class RideModel {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       acceptedAt: (data['acceptedAt'] as Timestamp?)?.toDate(),
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
+      expiresAt: (data['expiresAt'] as Timestamp?)?.toDate(),
       startCode: data['startCode'] as String?,
       receiverName: data['receiverName'] as String?,
       receiverPhone: data['receiverPhone'] as String?,
@@ -279,10 +284,14 @@ class RideRepository {
     if (_uid == null) throw Exception('Not signed in.');
     final doc = _ridesCol.doc();
     final startCode = (1000 + Random().nextInt(9000)).toString();
+    final expiresAt = Timestamp.fromDate(
+      DateTime.now().add(const Duration(minutes: 3)),
+    );
     await doc.set({
       'customerUid': _uid,
       'status': 'requested',
       'updatedAt': FieldValue.serverTimestamp(),
+      'expiresAt': expiresAt,
       'pickupLabel': pickupLabel,
       'pickupName': pickupLabel,
       'pickupLat': pickupLat,
@@ -350,27 +359,33 @@ class RideRepository {
     });
   }
 
-  /// Sends a counter-offer back to a specific driver bid.
+  /// Sends a counter-offer back to a specific driver bid via Cloud Function.
   Future<void> counterBid({
     required String rideId,
     required String bidId,
     required double counterAmountNaira,
   }) async {
-    await _bidsCol(rideId).doc(bidId).update({
+    if (_uid == null) throw Exception('Not signed in.');
+    final callable = _functions.httpsCallable('respondToBid');
+    await callable.call<Map<dynamic, dynamic>>({
+      'rideId': rideId,
+      'bidId': bidId,
+      'action': 'counter',
       'counterOffer': counterAmountNaira,
-      'updatedAt': FieldValue.serverTimestamp(),
-      'counterAt': FieldValue.serverTimestamp(),
     });
   }
 
-  /// Declines a single driver bid (marks it so driver knows).
+  /// Declines a single driver bid via Cloud Function (marks it rejected so driver knows).
   Future<void> declineBid({
     required String rideId,
     required String bidId,
   }) async {
-    await _bidsCol(rideId).doc(bidId).update({
-      'status': 'declined',
-      'updatedAt': FieldValue.serverTimestamp(),
+    if (_uid == null) throw Exception('Not signed in.');
+    final callable = _functions.httpsCallable('respondToBid');
+    await callable.call<Map<dynamic, dynamic>>({
+      'rideId': rideId,
+      'bidId': bidId,
+      'action': 'reject',
     });
   }
 

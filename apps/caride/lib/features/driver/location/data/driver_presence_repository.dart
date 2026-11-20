@@ -1,7 +1,11 @@
+import 'dart:io' show Platform;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:caride/core/driver/models/driver_presence.dart';
+import 'package:caride/core/driver/utils/geohash_helper.dart';
 
 class DriverPresenceRepository {
   DriverPresenceRepository({
@@ -14,6 +18,13 @@ class DriverPresenceRepository {
   final FirebaseAuth _auth;
 
   String? get _uid => _auth.currentUser?.uid;
+
+  String? get _platformName {
+    if (kIsWeb) return 'web';
+    if (Platform.isIOS) return 'ios';
+    if (Platform.isAndroid) return 'android';
+    return null;
+  }
 
   DocumentReference<Map<String, dynamic>> _presenceRef(String uid) =>
       _firestore.collection('driverPresence').doc(uid);
@@ -50,11 +61,18 @@ class DriverPresenceRepository {
     if (uid == null) return;
     final now = FieldValue.serverTimestamp();
 
+    final platform = _platformName;
+    final geohash = lastLocation != null
+        ? GeohashHelper.encode(lastLocation.latitude, lastLocation.longitude, precision: 7)
+        : null;
+
     await _presenceRef(uid).set({
       'driverUid': uid,
       'availabilityState': availabilityState.value,
       'isAvailableForRequests': isAvailableForRequests,
       'lastLocation': lastLocation,
+      if (geohash != null) 'geohash': geohash,
+      if (platform != null) 'platform': platform,
       'heading': heading,
       'speedMps': speedMps,
       'accuracyM': accuracyM,
@@ -100,6 +118,11 @@ class DriverPresenceRepository {
   }) async {
     final uid = _uid;
     if (uid == null) return;
+    final platform = _platformName;
+    final geohash = lastLocation != null
+        ? GeohashHelper.encode(lastLocation.latitude, lastLocation.longitude, precision: 7)
+        : null;
+
     await _presenceRef(uid).set({
       'driverUid': uid,
       if (availabilityState != null)
@@ -107,6 +130,8 @@ class DriverPresenceRepository {
       if (isAvailableForRequests != null)
         'isAvailableForRequests': isAvailableForRequests,
       if (lastLocation != null) 'lastLocation': lastLocation,
+      if (geohash != null) 'geohash': geohash,
+      if (platform != null) 'platform': platform,
       if (heading != null) 'heading': heading,
       if (speedMps != null) 'speedMps': speedMps,
       if (accuracyM != null) 'accuracyM': accuracyM,

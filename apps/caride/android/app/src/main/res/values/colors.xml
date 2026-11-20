@@ -2,4 +2,5 @@
 <resources>
     <!-- Background color matching the Lottie splash animation's green background -->
     <color name="splash_bg">#FFFFFF</color>
+    <color name="caride_brand_green">#16A34A</color>
 </resources>

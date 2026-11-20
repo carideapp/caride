@@ -3,7 +3,7 @@ description: "Premium ride-hailing and courier service application."
 
 publish_to: 'none' 
 
-version: 1.0.11+40
+version: 1.0.11+41
 
 environment:
   sdk: ^3.9.0
@@ -160,6 +160,8 @@ flutter:
     - lib/assets/rider_permit_half.png
     - lib/assets/rider_permit_blur.png
     - assets/audio/notification.wav
+    - assets/audio/ride_ringtone.wav
+    - assets/audio/ride_assigned.wav
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

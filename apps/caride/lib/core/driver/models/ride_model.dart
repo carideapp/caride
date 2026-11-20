@@ -30,6 +30,7 @@ class RideModel {
     this.updatedAt,
     this.acceptedAt,
     this.cancelledAt,
+    this.expiresAt,
     this.startCode,
     this.receiverName,
     this.receiverPhone,
@@ -64,6 +65,7 @@ class RideModel {
   final DateTime? updatedAt;
   final DateTime? acceptedAt;
   final DateTime? cancelledAt;
+  final DateTime? expiresAt;
   final String? startCode;
   final String? receiverName;
   final String? receiverPhone;
@@ -103,6 +105,7 @@ class RideModel {
     DateTime? updatedAt,
     DateTime? acceptedAt,
     DateTime? cancelledAt,
+    DateTime? expiresAt,
     String? startCode,
     String? receiverName,
     String? receiverPhone,
@@ -137,6 +140,7 @@ class RideModel {
       updatedAt: updatedAt ?? this.updatedAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
+      expiresAt: expiresAt ?? this.expiresAt,
       startCode: startCode ?? this.startCode,
       receiverName: receiverName ?? this.receiverName,
       receiverPhone: receiverPhone ?? this.receiverPhone,
@@ -189,6 +193,7 @@ class RideModel {
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
       acceptedAt: (data['acceptedAt'] as Timestamp?)?.toDate(),
       cancelledAt: (data['cancelledAt'] as Timestamp?)?.toDate(),
+      expiresAt: (data['expiresAt'] as Timestamp?)?.toDate(),
       startCode: data['startCode'] as String?,
       receiverName: data['receiverName'] as String?,
       receiverPhone: data['receiverPhone'] as String?,

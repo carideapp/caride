@@ -245,7 +245,10 @@ class _DriverBidsStepState extends State<DriverBidsStep> {
               }
               final allBids = snap.data!;
               final bids = allBids.where((b) {
-                return !b.isExpired && b.status != 'declined' && b.status != 'expired';
+                return !b.isExpired &&
+                    b.status != 'declined' &&
+                    b.status != 'rejected' &&
+                    b.status != 'expired';
               }).toList();
 
               _lastActiveBids = bids;

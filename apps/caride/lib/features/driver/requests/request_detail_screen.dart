@@ -9,7 +9,10 @@ import 'package:caride/features/driver/auth/data/driver_profile_repository.dart'
 import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
 import 'package:caride/features/ride_booking/data/ride_repository.dart'
     hide RideModel;
+import 'package:caride/core/driver/notifications/driver_alert_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:navigation/driver_route_paths.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 import 'package:caride/core/config/app_config_repository.dart';
 import 'package:caride/features/driver/widgets/driver_counter_offer_bottom_sheet.dart';
@@ -19,7 +22,9 @@ import 'package:caride/core/driver/utils/distance_helper.dart';
 import 'package:caride/features/driver/location/data/driver_presence_repository.dart';
 
 class RequestDetailScreen extends StatefulWidget {
-  const RequestDetailScreen({super.key});
+  const RequestDetailScreen({super.key, this.rideId});
+
+  final String? rideId;
 
   @override
   State<RequestDetailScreen> createState() => _RequestDetailScreenState();
@@ -31,15 +36,34 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   final _presenceRepo = DriverPresenceRepository();
   DriverPresence? _presence;
   bool _submitting = false;
+  bool _declining = false;
+  bool _navigatedToTrip = false;
+  bool _stoppedAlertForUnavailable = false;
+  bool _bidSuccessDialogOpen = false;
   Timer? _viewerTimer;
   RideModel? _latestRide;
 
-  RideModel? get _ride =>
-      _latestRide ?? DriverActiveRideState.instance.selectedRide;
+  String? get _effectiveRideId {
+    final explicit = widget.rideId?.trim();
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    return DriverActiveRideState.instance.selectedRide?.id;
+  }
+
+  RideModel? get _ride {
+    final latest = _latestRide;
+    if (latest != null) return latest;
+    final selected = DriverActiveRideState.instance.selectedRide;
+    final effectiveId = _effectiveRideId;
+    if (selected != null && (effectiveId == null || selected.id == effectiveId)) {
+      return selected;
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
+    DriverAlertController.instance.stopAlert(rideId: _effectiveRideId);
     _fetchPresence();
     _registerViewerPresence();
     _viewerTimer = Timer.periodic(
@@ -90,12 +114,64 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     super.dispose();
   }
 
+  void _navigateBack() {
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(DriverRoutePaths.requests);
+    }
+  }
+
+  bool _isRideAvailable(RideModel ride) {
+    if (ride.status != 'searching') return false;
+    final expiresAt = ride.expiresAt;
+    if (expiresAt != null && !expiresAt.isAfter(DateTime.now())) {
+      return false;
+    }
+    return true;
+  }
+
+  String _unavailableMessage(RideModel ride) {
+    switch (ride.status) {
+      case 'cancelled':
+        return 'This ride request was cancelled by the customer.';
+      case 'expired':
+        return 'This ride request has expired.';
+      case 'driver_assigned':
+      case 'arrived':
+      case 'in_progress':
+      case 'completed':
+        return 'This ride request has already been accepted by another driver.';
+      default:
+        final expiresAt = ride.expiresAt;
+        if (expiresAt != null && !expiresAt.isAfter(DateTime.now())) {
+          return 'This ride request has expired.';
+        }
+        return 'This ride request is no longer available.';
+    }
+  }
+
+  Future<void> _declineCurrentRide(RideModel ride) async {
+    if (_declining) return;
+    setState(() => _declining = true);
+    try {
+      await DriverAlertController.instance.declineRide(ride.id);
+    } finally {
+      if (mounted) {
+        setState(() => _declining = false);
+        _navigateBack();
+      }
+    }
+  }
+
   void _showSuccessPopup() {
+    _bidSuccessDialogOpen = true;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
-        final theme = Theme.of(context);
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
         final isDark = theme.brightness == Brightness.dark;
         final surfaceColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
 
@@ -139,9 +215,11 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                 width: double.infinity,
                 child: PrimaryButton(
                   label: 'Back to Requests',
+                  showShadow: false,
                   onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
+                    _bidSuccessDialogOpen = false;
+                    Navigator.pop(dialogContext);
+                    _navigateBack();
                   },
                 ),
               ),
@@ -149,7 +227,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
           ),
         );
       },
-    );
+    ).then((_) {
+      _bidSuccessDialogOpen = false;
+    });
   }
 
   Future<bool> _checkDebtLimit() async {
@@ -173,7 +253,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
 
   Future<void> _placeBid(double amount) async {
     final ride = _ride;
-    if (ride == null) return;
+    if (ride == null || !_isRideAvailable(ride)) return;
 
     final uid = driverAuthController.currentUid;
     if (uid == null) return;
@@ -246,11 +326,20 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.06)
         : const Color(0xFFE9EAF0);
-    final initialRide = DriverActiveRideState.instance.selectedRide;
+    final effectiveRideId = _effectiveRideId;
+    final selected = DriverActiveRideState.instance.selectedRide;
+    final initialRide =
+        selected != null && selected.id == effectiveRideId ? selected : null;
 
-    if (initialRide == null) {
+    if (effectiveRideId == null || effectiveRideId.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Offer Details')),
+        backgroundColor: backgroundColor,
+        appBar: AppBar(
+          backgroundColor: backgroundColor,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('Offer Details'),
+        ),
         body: const Center(
           child: EmptyState(
             title: 'No ride selected',
@@ -262,11 +351,90 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
     }
 
     return StreamBuilder<RideModel?>(
-      stream: _rideRepo.streamRide(initialRide.id),
+      stream: _rideRepo.streamRide(effectiveRideId),
       initialData: initialRide,
       builder: (context, snapshot) {
-        final ride = snapshot.data ?? initialRide;
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            snapshot.data == null) {
+          return Scaffold(
+            backgroundColor: backgroundColor,
+            appBar: AppBar(
+              backgroundColor: backgroundColor,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              title: const Text('Offer Details'),
+            ),
+            body: const Center(
+              child: CircularProgressIndicator(color: AppColors.primaryGreen),
+            ),
+          );
+        }
+
+        final ride = snapshot.data;
+        if (ride == null) {
+          if (!_stoppedAlertForUnavailable) {
+            _stoppedAlertForUnavailable = true;
+            DriverAlertController.instance.stopAlert(rideId: effectiveRideId);
+          }
+          return Scaffold(
+            backgroundColor: backgroundColor,
+            appBar: AppBar(
+              backgroundColor: backgroundColor,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              title: const Text('Offer Details'),
+            ),
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const EmptyState(
+                      title: 'Request unavailable',
+                      message:
+                          'This ride request is no longer available or has expired.',
+                      icon: Icons.event_busy_rounded,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    PrimaryButton(
+                      label: 'Back to Requests',
+                      showShadow: false,
+                      onPressed: _navigateBack,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         _latestRide = ride;
+        final currentUid = FirebaseAuth.instance.currentUser?.uid;
+        final assignedToMe = currentUid != null &&
+            ride.driverUid == currentUid &&
+            (ride.status == 'driver_assigned' ||
+                ride.status == 'arrived' ||
+                ride.status == 'in_progress');
+        if (assignedToMe && !_navigatedToTrip) {
+          _navigatedToTrip = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            DriverAlertController.instance.stopAlert(rideId: ride.id);
+            DriverActiveRideState.instance.activeRideId = ride.id;
+            if (_bidSuccessDialogOpen) {
+              _bidSuccessDialogOpen = false;
+              Navigator.of(context, rootNavigator: true).maybePop();
+            }
+            context.go(DriverRoutePaths.tripPickup);
+          });
+        }
+
+        final isAvailable = _isRideAvailable(ride);
+        if (!isAvailable && !assignedToMe && !_stoppedAlertForUnavailable) {
+          _stoppedAlertForUnavailable = true;
+          DriverAlertController.instance.stopAlert(rideId: ride.id);
+        }
 
         final double? distanceKm =
             (_presence?.latitude != null &&
@@ -763,29 +931,75 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                   const SizedBox(height: AppSpacing.lg),
 
                   // ── Main Actions ──
-                  PrimaryButton(
-                    label: 'Accept Customer Price',
-                    isLoading: _submitting,
-                    onPressed: () => _placeBid(ride.customerOffer),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  SecondaryButton(
-                    label: 'Counter',
-                    onPressed: _submitting ? null : _showCounterSheet,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Center(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(
-                        'Decline Request',
-                        style: TextStyle(
-                          color: theme.colorScheme.error,
-                          fontWeight: FontWeight.w700,
+                  if (!isAvailable && !assignedToMe) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.error.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(
+                          color: theme.colorScheme.error.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: theme.colorScheme.error,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              _unavailableMessage(ride),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    PrimaryButton(
+                      label: 'Back to Requests',
+                      showShadow: false,
+                      onPressed: _navigateBack,
+                    ),
+                  ] else if (isAvailable) ...[
+                    PrimaryButton(
+                      label: 'Accept Customer Price',
+                      showShadow: false,
+                      isLoading: _submitting,
+                      onPressed: _submitting || _declining
+                          ? null
+                          : () => _placeBid(ride.customerOffer),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    SecondaryButton(
+                      label: 'Counter',
+                      onPressed:
+                          _submitting || _declining ? null : _showCounterSheet,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Center(
+                      child: TextButton(
+                        onPressed: _submitting || _declining
+                            ? null
+                            : () => _declineCurrentRide(ride),
+                        child: Text(
+                          _declining ? 'Declining...' : 'Decline Request',
+                          style: TextStyle(
+                            color: theme.colorScheme.error,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

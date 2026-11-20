@@ -326,11 +326,41 @@ class DriverPresenceController extends ChangeNotifier {
       notifyListeners();
     }
 
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
+    final LocationSettings locationSettings;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 5,
-      ),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'CaRide Driver Online',
+          notificationText: 'Live location active to receive nearby ride alerts',
+          notificationChannelName: 'CaRide Driver Online',
+          notificationIcon: AndroidResource(
+            name: 'ic_stat_caride',
+            defType: 'drawable',
+          ),
+          enableWakeLock: true,
+          setOngoing: true,
+        ),
+      );
+    } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+        activityType: ActivityType.automotiveNavigation,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+        allowBackgroundLocationUpdates: true,
+      );
+    } else {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      );
+    }
+
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
     ).listen((position) async {
       _currentPosition = position;
       notifyListeners();

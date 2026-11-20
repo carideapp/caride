@@ -4,8 +4,6 @@ import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -14,6 +12,8 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -31,11 +32,15 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import kotlin.math.abs
 
 class DriverFloatingService : Service() {
 
     companion object {
+        @Volatile
+        var isRunning: Boolean = false
+
         const val ACTION_START = "com.caride.app.ACTION_START_FLOATING"
         const val ACTION_STOP = "com.caride.app.ACTION_STOP_FLOATING"
         const val ACTION_NOTIFY_OFFER = "com.caride.app.ACTION_NOTIFY_OFFER"
@@ -45,8 +50,13 @@ class DriverFloatingService : Service() {
         const val EXTRA_SUBTITLE = "extra_subtitle"
         const val EXTRA_COUNT = "extra_count"
         const val EXTRA_OPEN_REQUESTS = "open_ride_requests"
+        const val EXTRA_RIDE_ID = "extra_ride_id"
+        const val EXTRA_PICKUP_LABEL = "extra_pickup_label"
+        const val EXTRA_DROPOFF_LABEL = "extra_dropoff_label"
+        const val EXTRA_DISTANCE_KM = "extra_distance_km"
+        const val EXTRA_PAYMENT_METHOD = "extra_payment_method"
+        const val EXTRA_REMAINING_MS = "extra_remaining_ms"
 
-        private const val CHANNEL_ID = "caride_floating_driver"
         private const val NOTIFICATION_ID = 4091
     }
 
@@ -54,44 +64,85 @@ class DriverFloatingService : Service() {
     private var rootView: LinearLayout? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var badgeView: TextView? = null
-    private var bannerView: TextView? = null
+    private var offerCardView: LinearLayout? = null
+    private var offerTitleView: TextView? = null
+    private var offerRouteView: TextView? = null
+    private var offerMetaView: TextView? = null
+    private var activeRideId: String? = null
     private var pulseAnimator: ObjectAnimator? = null
+    private var mediaPlayer: MediaPlayer? = null
     private var activeRingtone: Ringtone? = null
     private val ringtoneHandler = Handler(Looper.getMainLooper())
-    private val stopRingtoneRunnable = Runnable { stopRingtone() }
+    private val stopAlertRunnable = Runnable { clearOfferAlert() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        createNotificationChannel()
+        NotificationChannelRegistrar.registerAll(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                isRunning = false
                 removeOverlay()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_NOTIFY_OFFER -> {
+                if (!Settings.canDrawOverlays(this)) {
+                    isRunning = false
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 if (rootView == null) {
                     startForeground(NOTIFICATION_ID, buildNotification())
+                    isRunning = true
                     showOverlay()
+                } else {
+                    isRunning = true
+                }
+                val rideId = intent.getStringExtra(EXTRA_RIDE_ID)?.trim().orEmpty()
+                if (rideId.isNotEmpty() && RideAlertStore.isDeclined(this, rideId)) {
+                    return START_STICKY
                 }
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: "New Ride Offer"
                 val count = intent.getIntExtra(EXTRA_COUNT, 1)
-                showOfferAlert(title, count)
+                val pickupLabel = intent.getStringExtra(EXTRA_PICKUP_LABEL)?.trim().orEmpty()
+                val dropoffLabel = intent.getStringExtra(EXTRA_DROPOFF_LABEL)?.trim().orEmpty()
+                val distanceKm = intent.getStringExtra(EXTRA_DISTANCE_KM)?.trim().orEmpty()
+                val paymentMethod = intent.getStringExtra(EXTRA_PAYMENT_METHOD)?.trim().orEmpty()
+                val remainingMs = intent.getLongExtra(EXTRA_REMAINING_MS, 45_000L).coerceIn(5_000L, 60_000L)
+                showOfferAlert(
+                    rideId = rideId.ifEmpty { null },
+                    title = title,
+                    count = count,
+                    pickupLabel = pickupLabel,
+                    dropoffLabel = dropoffLabel,
+                    distanceKm = distanceKm,
+                    paymentMethod = paymentMethod,
+                    remainingMs = remainingMs,
+                )
                 return START_STICKY
             }
             ACTION_CLEAR_OFFER -> {
-                clearOfferAlert()
+                val cancelRideId = intent.getStringExtra(EXTRA_RIDE_ID)?.trim().orEmpty()
+                if (cancelRideId.isEmpty() || activeRideId == null || cancelRideId == activeRideId) {
+                    clearOfferAlert()
+                }
                 return START_STICKY
             }
             else -> {
+                if (!Settings.canDrawOverlays(this)) {
+                    isRunning = false
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startForeground(NOTIFICATION_ID, buildNotification())
+                isRunning = true
                 if (rootView == null) {
                     showOverlay()
                 }
@@ -101,6 +152,7 @@ class DriverFloatingService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         removeOverlay()
         super.onDestroy()
     }
@@ -126,7 +178,7 @@ class DriverFloatingService : Service() {
         val circleBg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.WHITE)
-            setStroke(dp(2), Color.parseColor("#0A8754"))
+            setStroke(dp(2), Color.parseColor("#16A34A"))
         }
 
         val logoImage = ImageView(this).apply {
@@ -159,23 +211,115 @@ class DriverFloatingService : Service() {
         }
         bubbleFrame.addView(badge, badgeParams)
 
-        val bannerBg = GradientDrawable().apply {
+        val cardBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dp(16).toFloat()
             setColor(Color.parseColor("#111827"))
-            setStroke(dp(1), Color.parseColor("#0A8754"))
+            setStroke(dp(1), Color.parseColor("#16A34A"))
         }
 
-        val banner = TextView(this).apply {
-            background = bannerBg
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = cardBg
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            visibility = View.GONE
+            setOnClickListener { openAppToRequests(activeRideId) }
+        }
+
+        val titleView = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+
+        val routeView = TextView(this).apply {
+            setTextColor(Color.parseColor("#E5E7EB"))
+            textSize = 12f
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = View.GONE
+        }
+        val routeParams = LinearLayout.LayoutParams(
+            dp(220),
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(2)
+        }
+
+        val metaView = TextView(this).apply {
+            setTextColor(Color.parseColor("#86EFAC"))
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = View.GONE
+        }
+        val metaParams = LinearLayout.LayoutParams(
+            dp(220),
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(3)
+        }
+
+        val actionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val actionsParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(8)
+        }
+
+        val openBtnBg = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(10).toFloat()
+            setColor(Color.parseColor("#16A34A"))
+        }
+        val openBtn = TextView(this).apply {
+            text = "Open & Bid"
+            background = openBtnBg
             setTextColor(Color.WHITE)
             textSize = 12f
             setTypeface(null, Typeface.BOLD)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            visibility = View.GONE
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            setOnClickListener { openAppToRequests(activeRideId) }
         }
 
-        val bannerParams = LinearLayout.LayoutParams(
+        val dismissBtnBg = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(10).toFloat()
+            setColor(Color.parseColor("#1F2937"))
+            setStroke(dp(1), Color.parseColor("#374151"))
+        }
+        val dismissBtn = TextView(this).apply {
+            text = "Dismiss"
+            background = dismissBtnBg
+            setTextColor(Color.parseColor("#D1D5DB"))
+            textSize = 12f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            setOnClickListener { dismissCurrentOffer() }
+        }
+        val dismissParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            marginStart = dp(8)
+        }
+
+        actionsRow.addView(openBtn)
+        actionsRow.addView(dismissBtn, dismissParams)
+
+        card.addView(titleView)
+        card.addView(routeView, routeParams)
+        card.addView(metaView, metaParams)
+        card.addView(actionsRow, actionsParams)
+
+        val cardParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
@@ -183,7 +327,7 @@ class DriverFloatingService : Service() {
         }
 
         container.addView(bubbleFrame)
-        container.addView(banner, bannerParams)
+        container.addView(card, cardParams)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -204,24 +348,31 @@ class DriverFloatingService : Service() {
             y = dp(180)
         }
 
-        attachDragAndTapListener(container, params)
+        attachDragAndTapListener(bubbleFrame, container, params)
 
         rootView = container
         layoutParams = params
         badgeView = badge
-        bannerView = banner
+        offerCardView = card
+        offerTitleView = titleView
+        offerRouteView = routeView
+        offerMetaView = metaView
 
         windowManager.addView(container, params)
     }
 
-    private fun attachDragAndTapListener(view: View, params: WindowManager.LayoutParams) {
+    private fun attachDragAndTapListener(
+        dragTarget: View,
+        container: View,
+        params: WindowManager.LayoutParams,
+    ) {
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
         var initialTouchY = 0f
         var moved = false
 
-        view.setOnTouchListener { _, event ->
+        dragTarget.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x
@@ -239,12 +390,12 @@ class DriverFloatingService : Service() {
                     }
                     params.x = initialX + dx
                     params.y = initialY + dy
-                    windowManager.updateViewLayout(view, params)
+                    windowManager.updateViewLayout(container, params)
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
-                        openAppToRequests()
+                        openAppToRequests(activeRideId)
                     }
                     true
                 }
@@ -253,45 +404,127 @@ class DriverFloatingService : Service() {
         }
     }
 
-    private fun showOfferAlert(title: String, count: Int) {
+    private fun showOfferAlert(
+        rideId: String?,
+        title: String,
+        count: Int,
+        pickupLabel: String,
+        dropoffLabel: String,
+        distanceKm: String,
+        paymentMethod: String,
+        remainingMs: Long,
+    ) {
+        activeRideId = rideId
         badgeView?.apply {
             text = if (count > 9) "9+" else count.toString()
             visibility = View.VISIBLE
         }
-        bannerView?.apply {
-            text = "$title • Tap to view"
-            visibility = View.VISIBLE
+        offerTitleView?.text = title
+
+        val routeText = when {
+            pickupLabel.isNotEmpty() && dropoffLabel.isNotEmpty() -> "$pickupLabel -> $dropoffLabel"
+            pickupLabel.isNotEmpty() -> pickupLabel
+            dropoffLabel.isNotEmpty() -> dropoffLabel
+            else -> ""
         }
+        offerRouteView?.apply {
+            if (routeText.isNotEmpty()) {
+                text = routeText
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.GONE
+            }
+        }
+
+        val metaParts = mutableListOf<String>()
+        if (distanceKm.isNotEmpty()) {
+            metaParts.add("$distanceKm km away")
+        }
+        if (paymentMethod.isNotEmpty()) {
+            metaParts.add(paymentMethod.replaceFirstChar { it.uppercaseChar() })
+        }
+        val metaText = metaParts.joinToString(" • ")
+        offerMetaView?.apply {
+            if (metaText.isNotEmpty()) {
+                text = metaText
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.GONE
+            }
+        }
+
+        offerCardView?.visibility = View.VISIBLE
+
         rootView?.let { target ->
             pulseAnimator?.cancel()
             pulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
                 target,
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.08f, 1f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.08f, 1f)
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.06f, 1f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.06f, 1f)
             ).apply {
                 duration = 700
                 repeatCount = ValueAnimator.INFINITE
                 start()
             }
         }
-        playRingtone()
+        playRingtone(remainingMs)
     }
 
-    private fun playRingtone() {
+    private fun playRingtone(durationMs: Long) {
         stopRingtone()
+        val ringAttrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
+        var started = false
         try {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            activeRingtone = RingtoneManager.getRingtone(applicationContext, uri)?.apply {
-                play()
+            val afd = resources.openRawResourceFd(R.raw.ride_ringtone)
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(ringAttrs)
+                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                isLooping = true
+                prepare()
+                start()
             }
-            ringtoneHandler.postDelayed(stopRingtoneRunnable, 20_000L)
+            afd.close()
+            started = true
         } catch (_: Exception) {
+            try {
+                mediaPlayer?.release()
+            } catch (_: Exception) {
+            }
+            mediaPlayer = null
         }
+
+        if (!started) {
+            try {
+                val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                activeRingtone = RingtoneManager.getRingtone(applicationContext, uri)?.apply {
+                    audioAttributes = ringAttrs
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        isLooping = true
+                    }
+                    play()
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        ringtoneHandler.postDelayed(stopAlertRunnable, durationMs.coerceIn(5_000L, 60_000L))
     }
 
     private fun stopRingtone() {
-        ringtoneHandler.removeCallbacks(stopRingtoneRunnable)
+        ringtoneHandler.removeCallbacks(stopAlertRunnable)
+        try {
+            mediaPlayer?.let { mp ->
+                if (mp.isPlaying) mp.stop()
+                mp.release()
+            }
+        } catch (_: Exception) {
+        }
+        mediaPlayer = null
         try {
             activeRingtone?.stop()
         } catch (_: Exception) {
@@ -301,6 +534,7 @@ class DriverFloatingService : Service() {
 
     private fun clearOfferAlert() {
         stopRingtone()
+        activeRideId = null
         pulseAnimator?.cancel()
         pulseAnimator = null
         rootView?.apply {
@@ -308,13 +542,27 @@ class DriverFloatingService : Service() {
             scaleY = 1f
         }
         badgeView?.visibility = View.GONE
-        bannerView?.visibility = View.GONE
+        offerCardView?.visibility = View.GONE
     }
 
-    private fun openAppToRequests() {
+    private fun dismissCurrentOffer() {
+        val rideId = activeRideId
+        if (!rideId.isNullOrEmpty()) {
+            RideAlertStore.markDeclined(this, rideId)
+            NotificationManagerCompat.from(this)
+                .cancel(RideAlertStore.notificationIdForRide(rideId))
+        }
+        clearOfferAlert()
+    }
+
+    private fun openAppToRequests(rideId: String?) {
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_OPEN_REQUESTS, true)
+            if (!rideId.isNullOrEmpty()) {
+                putExtra(CarideFirebaseMessagingService.EXTRA_RIDE_ID, rideId)
+                putExtra(CarideFirebaseMessagingService.EXTRA_ALERT_TYPE, "ride_request")
+            }
         }
         startActivity(launchIntent)
         clearOfferAlert()
@@ -322,6 +570,7 @@ class DriverFloatingService : Service() {
 
     private fun removeOverlay() {
         stopRingtone()
+        activeRideId = null
         pulseAnimator?.cancel()
         pulseAnimator = null
         rootView?.let {
@@ -332,21 +581,10 @@ class DriverFloatingService : Service() {
         }
         rootView = null
         badgeView = null
-        bannerView = null
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "CaRide Driver Online",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Keeps the CaRide floating driver icon active while you are online."
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        offerCardView = null
+        offerTitleView = null
+        offerRouteView = null
+        offerMetaView = null
     }
 
     private fun buildNotification(): Notification {
@@ -361,13 +599,12 @@ class DriverFloatingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, NotificationChannelRegistrar.CHANNEL_DRIVER_ONLINE)
             .setContentTitle("CaRide Driver Online")
-            .setContentText("Floating icon active for incoming ride offers")
-            .setSmallIcon(R.drawable.caride_driver_logo)
+            .setContentText("Floating bubble ready for incoming ride requests")
+            .setSmallIcon(R.drawable.ic_stat_caride)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
     }
 }
-
