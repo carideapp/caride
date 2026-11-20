@@ -9,6 +9,12 @@ import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebas
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { pruneStaleTokens, resolveDriverTokens } from "./dispatch";
+import {
+  getEffectiveSecurityPolicy,
+  checkAndEnforceIpRateLimit,
+  extractClientIp,
+  logSecurityAuditEvent,
+} from "./security";
 
 const REGION_PRIMARY = "us-east1";
 const REGION_SCHEDULE = "us-west1";
@@ -1057,6 +1063,16 @@ export const requestEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 
     throw new HttpsError("invalid-argument", "Invalid email format.");
   }
 
+  const db = admin.firestore();
+  const policy = await getEffectiveSecurityPolicy(db);
+  const clientIp = extractClientIp(request);
+
+  // 1. IP Rate Limiting Check
+  const ipCheck = await checkAndEnforceIpRateLimit(db, clientIp, "otp_request", policy);
+  if (!ipCheck.allowed) {
+    throw new HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many requests from this IP. Please try again later.");
+  }
+
   const userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
   if (isSignUp && userRecord) {
     // Check if the user already has an active profile for THIS specific role
@@ -1087,7 +1103,24 @@ export const requestEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 
     throw new HttpsError("not-found", "No account exists for this email.");
   }
 
-  const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
+  // 2. Account Lockout Check
+  if (userRecord) {
+    const lockSnap = await db.collection("security_account_locks").doc(userRecord.uid).get();
+    if (lockSnap.exists && lockSnap.data()?.status === "active") {
+      const lockData = lockSnap.data() || {};
+      const now = Date.now();
+      const exp = lockData.expiresAt?.toDate?.()?.getTime();
+      if (lockData.lockType === "temporary" && exp && exp <= now) {
+        // Natural expiration
+      } else {
+        throw new HttpsError("permission-denied", "This account is temporarily locked due to security policy. Please try again later or contact support.");
+      }
+    }
+  }
+
+  const otpTtlMinutes = policy.otpRecoveryProtection?.otpTtlMinutes || OTP_TTL_MINUTES;
+  const maxAttempts = policy.otpRecoveryProtection?.maxVerifyAttempts || MAX_VERIFY_ATTEMPTS;
+  const expiresAt = new Date(Date.now() + otpTtlMinutes * 60_000);
   const code = generateOtpCode();
   const challengeId = crypto.randomUUID();
 
@@ -1099,7 +1132,7 @@ export const requestEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 
     role,
     referredByCode: payload.referredByCode?.trim().toUpperCase() || null,
     attempts: 0,
-    maxAttempts: MAX_VERIFY_ATTEMPTS,
+    maxAttempts,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
     used: false,
@@ -1119,9 +1152,32 @@ export const sendCustomPasswordResetEmail = onCall({ region: REGION_PRIMARY, max
     throw new HttpsError("invalid-argument", "Invalid email format.");
   }
 
+  const db = admin.firestore();
+  const policy = await getEffectiveSecurityPolicy(db);
+  const clientIp = extractClientIp(request);
+
+  // 1. IP Rate Limiting Check
+  const ipCheck = await checkAndEnforceIpRateLimit(db, clientIp, "password_reset", policy);
+  if (!ipCheck.allowed) {
+    throw new HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many password reset requests from this IP.");
+  }
+
   const userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
   if (!userRecord) {
     throw new HttpsError("not-found", "No account exists for this email.");
+  }
+
+  // 2. Account Lockout Check
+  const lockSnap = await db.collection("security_account_locks").doc(userRecord.uid).get();
+  if (lockSnap.exists && lockSnap.data()?.status === "active") {
+    const lockData = lockSnap.data() || {};
+    const now = Date.now();
+    const exp = lockData.expiresAt?.toDate?.()?.getTime();
+    if (lockData.lockType === "temporary" && exp && exp <= now) {
+      // Natural expiration
+    } else {
+      throw new HttpsError("permission-denied", "This account is currently locked for security. Please contact support.");
+    }
   }
 
   try {
@@ -1167,6 +1223,16 @@ export const verifyEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 }
     throw new HttpsError("invalid-argument", "Invalid OTP format.");
   }
 
+  const db = admin.firestore();
+  const policy = await getEffectiveSecurityPolicy(db);
+  const clientIp = extractClientIp(request);
+
+  // 1. IP Rate Limiting Check
+  const ipCheck = await checkAndEnforceIpRateLimit(db, clientIp, "otp_verify", policy);
+  if (!ipCheck.allowed) {
+    throw new HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many verification attempts from this IP.");
+  }
+
   const docRef = challengeCollection.doc(challengeId);
   const snapshot = await docRef.get();
   if (!snapshot.exists) {
@@ -1194,7 +1260,19 @@ export const verifyEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 }
     throw new HttpsError("resource-exhausted", "Maximum OTP attempts reached.");
   }
   if (hashCode(code) !== data.codeHash) {
-    await docRef.update({ attempts: admin.firestore.FieldValue.increment(1) });
+    const nextAttempts = (data.attempts || 0) + 1;
+    await docRef.update({ attempts: nextAttempts });
+    if (nextAttempts >= data.maxAttempts) {
+      await logSecurityAuditEvent(db, {
+        eventType: "otp_abuse_triggered",
+        severity: "high",
+        targetEmail: email,
+        ip: clientIp,
+        endpoint: "verifyEmailOtp",
+        actionTaken: "otp_challenge_exhausted",
+        description: `OTP challenge ${challengeId} exhausted for ${email} from ${clientIp} (${nextAttempts} incorrect attempts).`,
+      });
+    }
     throw new HttpsError("permission-denied", "Incorrect OTP code.");
   }
 
@@ -8305,6 +8383,18 @@ export {
   onRideUnavailableCancelAlerts,
   expireStaleRideRequests,
 } from "./dispatch";
+
+export {
+  getSecurityPolicyCallable,
+  updateSecurityPolicyCallable,
+  checkAccountLockStatusCallable,
+  reportLoginAttemptCallable,
+  adminUnlockAccountCallable,
+  adminManualLockAccountCallable,
+  adminRestrictIpCallable,
+  adminUnrestrictIpCallable,
+  reconcileExpiredSecurityLocks,
+} from "./security";
 
 
 

@@ -217,23 +217,19 @@ class DriverAlertController with WidgetsBindingObserver {
       id: rideId,
       customerUid: '',
       status: 'searching',
-      pickupLabel:
-          data['pickupLabel']?.toString().trim().isNotEmpty == true
-              ? data['pickupLabel'].toString().trim()
-              : 'Pickup location',
-      dropoffLabel:
-          data['dropoffLabel']?.toString().trim().isNotEmpty == true
-              ? data['dropoffLabel'].toString().trim()
-              : 'Destination',
-      rideType:
-          data['rideType']?.toString().trim().isNotEmpty == true
-              ? data['rideType'].toString().trim()
-              : 'Regular',
+      pickupLabel: data['pickupLabel']?.toString().trim().isNotEmpty == true
+          ? data['pickupLabel'].toString().trim()
+          : 'Pickup location',
+      dropoffLabel: data['dropoffLabel']?.toString().trim().isNotEmpty == true
+          ? data['dropoffLabel'].toString().trim()
+          : 'Destination',
+      rideType: data['rideType']?.toString().trim().isNotEmpty == true
+          ? data['rideType'].toString().trim()
+          : 'Regular',
       customerOffer: offerAmount,
-      paymentMethod:
-          data['paymentMethod']?.toString().trim().isNotEmpty == true
-              ? data['paymentMethod'].toString().trim()
-              : 'cash',
+      paymentMethod: data['paymentMethod']?.toString().trim().isNotEmpty == true
+          ? data['paymentMethod'].toString().trim()
+          : 'cash',
       expiresAt: expiresAtMs != null && expiresAtMs > 0
           ? DateTime.fromMillisecondsSinceEpoch(expiresAtMs)
           : null,

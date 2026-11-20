@@ -1,7 +1,9 @@
 int? extractCooldownSeconds(Object error) {
   final raw = error.toString();
-  final match =
-      RegExp(r'(\d+)\s*seconds?', caseSensitive: false).firstMatch(raw);
+  final match = RegExp(
+    r'(\d+)\s*seconds?',
+    caseSensitive: false,
+  ).firstMatch(raw);
   if (match != null) {
     return int.tryParse(match.group(1) ?? '');
   }
@@ -88,10 +90,16 @@ String mapAuthErrorMessage(Object error) {
   }
 
   // 8. Account & Identity state
-  if (lower.contains('user-disabled') ||
+  if (lower.contains('temporarily locked') ||
+      lower.contains('failed login attempts') ||
+      lower.contains('user-disabled') ||
       lower.contains('blocked') ||
       lower.contains('suspended')) {
-    return 'This account has been disabled. Please contact support.';
+    if (raw.contains('temporarily locked') || raw.contains('contact')) {
+      final msg = raw.replaceFirst(RegExp(r'^.*?\]\s*'), '').trim();
+      if (msg.isNotEmpty && msg.length < 150) return msg;
+    }
+    return 'This account is temporarily locked for security. Please try again later or contact support.';
   }
   if (lower.contains('driver account already exists') ||
       lower.contains('driver-already-exists')) {
@@ -123,13 +131,15 @@ String mapAuthErrorMessage(Object error) {
   if (lower.contains('weak-password')) {
     return 'Password is too weak. Please choose a stronger password (at least 6 characters).';
   }
-  if (lower.contains('wrong-password') || lower.contains('invalid-credential')) {
+  if (lower.contains('wrong-password') ||
+      lower.contains('invalid-credential')) {
     return 'Invalid email or password. Please check your details and try again.';
   }
   if (lower.contains('invalid-argument') || lower.contains('invalid-phone')) {
     return 'The phone number or email format is invalid. Please check your information.';
   }
-  if (lower.contains('invalid-referral') || lower.contains('referral-not-found')) {
+  if (lower.contains('invalid-referral') ||
+      lower.contains('referral-not-found')) {
     return 'The referral code entered is invalid. Please verify or leave it blank.';
   }
   if (lower.contains('permission-denied')) {
@@ -138,7 +148,9 @@ String mapAuthErrorMessage(Object error) {
   if (lower.contains('unauthenticated')) {
     return 'Your session has expired. Please try signing up again.';
   }
-  if (lower.contains('internal') || lower.contains('server-error') || lower.contains('500')) {
+  if (lower.contains('internal') ||
+      lower.contains('server-error') ||
+      lower.contains('500')) {
     return 'Our servers encountered a temporary issue. Please try again shortly.';
   }
 

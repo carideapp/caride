@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -114,14 +115,88 @@ class FleetAuthRepository {
     }
   }
 
+  Future<Map<String, dynamic>> checkAccountLockStatus(String identifier) async {
+    try {
+      final callable = _functions.httpsCallable('checkAccountLockStatusCallable');
+      final res = await callable.call<Map<String, dynamic>>({'identifier': identifier.trim().toLowerCase()});
+      return Map<String, dynamic>.from(res.data);
+    } catch (_) {
+      return {'isLocked': false};
+    }
+  }
+
+  Future<Map<String, dynamic>> reportLoginAttempt({
+    required String identifier,
+    required bool success,
+    String? errorCode,
+    String? role,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable('reportLoginAttemptCallable');
+      final res = await callable.call<Map<String, dynamic>>({
+        'identifier': identifier.trim().toLowerCase(),
+        'success': success,
+        if (errorCode != null) 'errorCode': errorCode,
+        if (role != null) 'role': role,
+      });
+      return Map<String, dynamic>.from(res.data);
+    } catch (_) {
+      return {'success': false};
+    }
+  }
+
   Future<UserCredential> signInWithEmailAndPassword({
     required String email,
     required String password,
   }) async {
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: email.trim().toLowerCase(),
-      password: password,
-    );
+    final cleanEmail = email.trim().toLowerCase();
+
+    // 1. Check if fleet manager account or IP is under active lock
+    final lockCheck = await checkAccountLockStatus(cleanEmail);
+    if (lockCheck['isLocked'] == true) {
+      throw FirebaseAuthException(
+        code: 'user-disabled',
+        message: lockCheck['reason'] as String? ??
+            'Too many failed login attempts. Your account is temporarily locked.',
+      );
+    }
+
+    UserCredential credential;
+    try {
+      credential = await _auth.signInWithEmailAndPassword(
+        email: cleanEmail,
+        password: password,
+      );
+    } on FirebaseAuthException catch (authError) {
+      final attemptResult = await reportLoginAttempt(
+        identifier: cleanEmail,
+        success: false,
+        errorCode: authError.code,
+        role: 'fleet',
+      );
+      if (attemptResult['isLocked'] == true) {
+        throw FirebaseAuthException(
+          code: 'user-disabled',
+          message: attemptResult['reason'] as String? ??
+              'Too many failed login attempts. Your account is temporarily locked.',
+        );
+      }
+      rethrow;
+    } catch (e) {
+      await reportLoginAttempt(
+        identifier: cleanEmail,
+        success: false,
+        errorCode: 'unknown',
+        role: 'fleet',
+      );
+      rethrow;
+    }
+
+    unawaited(reportLoginAttempt(
+      identifier: cleanEmail,
+      success: true,
+      role: 'fleet',
+    ));
 
     final uid = credential.user?.uid;
     if (uid != null) {

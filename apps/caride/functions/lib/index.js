@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendAnnouncementPush = exports.onChatMessageCreated = exports.takeWeeklyWalletSnapshot = exports.reconcileStuckRides = exports.adminRetryFailedPayout = exports.adminExecuteSettlementBatch = exports.adminCreateSettlementBatch = exports.adminProcessSinglePayout = exports.adminProcessWithdrawal = exports.onRideUpdatedDriverNotify = exports.onRideUpdatedCustomerNotify = exports.onRideCreatedCustomerNotify = exports.onRideStatusChanged = exports.rateCustomer = exports.cancelRideByCustomer = exports.respondToBid = exports.completeRide = exports.publishDriverLocation = exports.updateRideStatus = exports.createDriverBid = exports.submitDriverApplication = exports.onDriverRatingChanged = exports.notifyDriverApprovalStatus = exports.sendDriverWelcomeOnProfileCreate = exports.sendWelcomeEmailOnProfileCreate = exports.onVehicleReviewUpdated = exports.onVehicleReviewCreated = exports.onDriverDocumentUpdated = exports.onDriverDocumentCreated = exports.saveDriverBankAccount = exports.resolveTransactPayBankAccount = exports.listTransactPayBanks = exports.saveTransactPayCard = exports.transactPayWebhook = exports.createDedicatedVirtualAccount = exports.verifyTransactPayTransaction = exports.chargeTransactPayCard = exports.initializeTransactPayTransaction = exports.initializeBankTransfer = exports.initializeTierSettings = exports.deleteStaffAccount = exports.processStaffWithdrawal = exports.requestStaffWithdrawal = exports.updateStaffProfile = exports.createStaffAccount = exports.applyReferralCode = exports.createDriverProfileCallable = exports.verifyEmailOtp = exports.sendCustomPasswordResetEmail = exports.requestEmailOtp = void 0;
-exports.expireStaleRideRequests = exports.onRideUnavailableCancelAlerts = exports.onRideCreatedDispatchDrivers = exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
+exports.reconcileExpiredSecurityLocks = exports.adminUnrestrictIpCallable = exports.adminRestrictIpCallable = exports.adminManualLockAccountCallable = exports.adminUnlockAccountCallable = exports.reportLoginAttemptCallable = exports.checkAccountLockStatusCallable = exports.updateSecurityPolicyCallable = exports.getSecurityPolicyCallable = exports.expireStaleRideRequests = exports.onRideUnavailableCancelAlerts = exports.onRideCreatedDispatchDrivers = exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
 exports.encryptTransactPayPayload = encryptTransactPayPayload;
 exports.transactpayRequest = transactpayRequest;
 exports.doesProfileNameMatchNimc = doesProfileNameMatchNimc;
@@ -51,6 +51,7 @@ const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const v2_1 = require("firebase-functions/v2");
 const dispatch_1 = require("./dispatch");
+const security_1 = require("./security");
 const REGION_PRIMARY = "us-east1";
 const REGION_SCHEDULE = "us-west1";
 const VPC_CONNECTOR = process.env.VPC_CONNECTOR || "transactpay-connector";
@@ -867,6 +868,14 @@ exports.requestEmailOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInsta
     if (!isValidEmail(email)) {
         throw new https_1.HttpsError("invalid-argument", "Invalid email format.");
     }
+    const db = admin.firestore();
+    const policy = await (0, security_1.getEffectiveSecurityPolicy)(db);
+    const clientIp = (0, security_1.extractClientIp)(request);
+    // 1. IP Rate Limiting Check
+    const ipCheck = await (0, security_1.checkAndEnforceIpRateLimit)(db, clientIp, "otp_request", policy);
+    if (!ipCheck.allowed) {
+        throw new https_1.HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many requests from this IP. Please try again later.");
+    }
     const userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
     if (isSignUp && userRecord) {
         // Check if the user already has an active profile for THIS specific role
@@ -899,7 +908,24 @@ exports.requestEmailOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInsta
     if (!isSignUp && !userRecord) {
         throw new https_1.HttpsError("not-found", "No account exists for this email.");
     }
-    const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
+    // 2. Account Lockout Check
+    if (userRecord) {
+        const lockSnap = await db.collection("security_account_locks").doc(userRecord.uid).get();
+        if (lockSnap.exists && lockSnap.data()?.status === "active") {
+            const lockData = lockSnap.data() || {};
+            const now = Date.now();
+            const exp = lockData.expiresAt?.toDate?.()?.getTime();
+            if (lockData.lockType === "temporary" && exp && exp <= now) {
+                // Natural expiration
+            }
+            else {
+                throw new https_1.HttpsError("permission-denied", "This account is temporarily locked due to security policy. Please try again later or contact support.");
+            }
+        }
+    }
+    const otpTtlMinutes = policy.otpRecoveryProtection?.otpTtlMinutes || OTP_TTL_MINUTES;
+    const maxAttempts = policy.otpRecoveryProtection?.maxVerifyAttempts || MAX_VERIFY_ATTEMPTS;
+    const expiresAt = new Date(Date.now() + otpTtlMinutes * 60_000);
     const code = generateOtpCode();
     const challengeId = node_crypto_1.default.randomUUID();
     await challengeCollection.doc(challengeId).set({
@@ -910,7 +936,7 @@ exports.requestEmailOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInsta
         role,
         referredByCode: payload.referredByCode?.trim().toUpperCase() || null,
         attempts: 0,
-        maxAttempts: MAX_VERIFY_ATTEMPTS,
+        maxAttempts,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
         used: false,
@@ -925,9 +951,30 @@ exports.sendCustomPasswordResetEmail = (0, https_1.onCall)({ region: REGION_PRIM
     if (!isValidEmail(email)) {
         throw new https_1.HttpsError("invalid-argument", "Invalid email format.");
     }
+    const db = admin.firestore();
+    const policy = await (0, security_1.getEffectiveSecurityPolicy)(db);
+    const clientIp = (0, security_1.extractClientIp)(request);
+    // 1. IP Rate Limiting Check
+    const ipCheck = await (0, security_1.checkAndEnforceIpRateLimit)(db, clientIp, "password_reset", policy);
+    if (!ipCheck.allowed) {
+        throw new https_1.HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many password reset requests from this IP.");
+    }
     const userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
     if (!userRecord) {
         throw new https_1.HttpsError("not-found", "No account exists for this email.");
+    }
+    // 2. Account Lockout Check
+    const lockSnap = await db.collection("security_account_locks").doc(userRecord.uid).get();
+    if (lockSnap.exists && lockSnap.data()?.status === "active") {
+        const lockData = lockSnap.data() || {};
+        const now = Date.now();
+        const exp = lockData.expiresAt?.toDate?.()?.getTime();
+        if (lockData.lockType === "temporary" && exp && exp <= now) {
+            // Natural expiration
+        }
+        else {
+            throw new https_1.HttpsError("permission-denied", "This account is currently locked for security. Please contact support.");
+        }
     }
     try {
         const actionCodeSettings = {
@@ -965,6 +1012,14 @@ exports.verifyEmailOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstan
     if (!/^\d{6}$/.test(code)) {
         throw new https_1.HttpsError("invalid-argument", "Invalid OTP format.");
     }
+    const db = admin.firestore();
+    const policy = await (0, security_1.getEffectiveSecurityPolicy)(db);
+    const clientIp = (0, security_1.extractClientIp)(request);
+    // 1. IP Rate Limiting Check
+    const ipCheck = await (0, security_1.checkAndEnforceIpRateLimit)(db, clientIp, "otp_verify", policy);
+    if (!ipCheck.allowed) {
+        throw new https_1.HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many verification attempts from this IP.");
+    }
     const docRef = challengeCollection.doc(challengeId);
     const snapshot = await docRef.get();
     if (!snapshot.exists) {
@@ -982,7 +1037,19 @@ exports.verifyEmailOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstan
         throw new https_1.HttpsError("resource-exhausted", "Maximum OTP attempts reached.");
     }
     if (hashCode(code) !== data.codeHash) {
-        await docRef.update({ attempts: admin.firestore.FieldValue.increment(1) });
+        const nextAttempts = (data.attempts || 0) + 1;
+        await docRef.update({ attempts: nextAttempts });
+        if (nextAttempts >= data.maxAttempts) {
+            await (0, security_1.logSecurityAuditEvent)(db, {
+                eventType: "otp_abuse_triggered",
+                severity: "high",
+                targetEmail: email,
+                ip: clientIp,
+                endpoint: "verifyEmailOtp",
+                actionTaken: "otp_challenge_exhausted",
+                description: `OTP challenge ${challengeId} exhausted for ${email} from ${clientIp} (${nextAttempts} incorrect attempts).`,
+            });
+        }
         throw new https_1.HttpsError("permission-denied", "Incorrect OTP code.");
     }
     let userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
@@ -6840,3 +6907,13 @@ var dispatch_2 = require("./dispatch");
 Object.defineProperty(exports, "onRideCreatedDispatchDrivers", { enumerable: true, get: function () { return dispatch_2.onRideCreatedDispatchDrivers; } });
 Object.defineProperty(exports, "onRideUnavailableCancelAlerts", { enumerable: true, get: function () { return dispatch_2.onRideUnavailableCancelAlerts; } });
 Object.defineProperty(exports, "expireStaleRideRequests", { enumerable: true, get: function () { return dispatch_2.expireStaleRideRequests; } });
+var security_2 = require("./security");
+Object.defineProperty(exports, "getSecurityPolicyCallable", { enumerable: true, get: function () { return security_2.getSecurityPolicyCallable; } });
+Object.defineProperty(exports, "updateSecurityPolicyCallable", { enumerable: true, get: function () { return security_2.updateSecurityPolicyCallable; } });
+Object.defineProperty(exports, "checkAccountLockStatusCallable", { enumerable: true, get: function () { return security_2.checkAccountLockStatusCallable; } });
+Object.defineProperty(exports, "reportLoginAttemptCallable", { enumerable: true, get: function () { return security_2.reportLoginAttemptCallable; } });
+Object.defineProperty(exports, "adminUnlockAccountCallable", { enumerable: true, get: function () { return security_2.adminUnlockAccountCallable; } });
+Object.defineProperty(exports, "adminManualLockAccountCallable", { enumerable: true, get: function () { return security_2.adminManualLockAccountCallable; } });
+Object.defineProperty(exports, "adminRestrictIpCallable", { enumerable: true, get: function () { return security_2.adminRestrictIpCallable; } });
+Object.defineProperty(exports, "adminUnrestrictIpCallable", { enumerable: true, get: function () { return security_2.adminUnrestrictIpCallable; } });
+Object.defineProperty(exports, "reconcileExpiredSecurityLocks", { enumerable: true, get: function () { return security_2.reconcileExpiredSecurityLocks; } });

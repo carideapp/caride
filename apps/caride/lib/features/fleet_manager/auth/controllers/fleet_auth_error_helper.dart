@@ -23,7 +23,13 @@ class FleetAuthErrorHelper {
         case 'weak-password':
           return 'Password is too weak. Please use at least 6 characters with a combination of letters and numbers.';
         case 'user-disabled':
-          return 'This Fleet Manager account has been deactivated. Please contact CaRide Support for assistance.';
+          if (error.message != null &&
+              (error.message!.contains('temporarily locked') ||
+                  error.message!.contains('failed login') ||
+                  error.message!.contains('minutes'))) {
+            return error.message!;
+          }
+          return 'This Fleet Manager account is locked. Please try again later or contact CaRide Support.';
         case 'too-many-requests':
           return 'Too many consecutive failed attempts. Please wait a few moments before trying again.';
         case 'network-request-failed':

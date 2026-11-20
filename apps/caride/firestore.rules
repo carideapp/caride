@@ -84,6 +84,26 @@ service cloud.firestore {
       allow write: if isAdmin() || isStaff();
     }
 
+    // ─── Security Center & Account Protection ───────────────────
+    match /security_account_locks/{uid} {
+      allow read: if isOwner(uid) || isAdmin() || isStaff();
+      allow write: if false; // Cloud Functions only
+    }
+
+    match /security_ip_stats/{ipKey} {
+      allow read: if isAdmin() || isStaff();
+      allow write: if false; // Cloud Functions only
+    }
+
+    match /security_ip_windows/{windowKey} {
+      allow read, write: if false; // Cloud Functions only
+    }
+
+    match /security_audit_logs/{logId} {
+      allow read: if isAdmin() || isStaff();
+      allow write: if false; // Immutable Cloud Functions audit trail
+    }
+
     // ─── Special Offers / Promos (any signed-in user can read; admins/staff write) ──
     match /promos/{promoId} {
       allow read: if isSignedIn();
