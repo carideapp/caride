@@ -503,7 +503,7 @@ function determineNextLockoutStage(policy, currentAttempts, previousStageOrder =
 /**
  * Get current active security policy (Callable)
  */
-exports.getSecurityPolicyCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 10 }, async (request) => {
+exports.getSecurityPolicyCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 10, cors: true }, async (request) => {
     await assertAdminOrStaff(request, false);
     const db = admin.firestore();
     const policy = await getEffectiveSecurityPolicy(db);
@@ -512,7 +512,7 @@ exports.getSecurityPolicyCallable = (0, https_1.onCall)({ region: REGION_PRIMARY
 /**
  * Update security policy dynamically (Admin Only Callable)
  */
-exports.updateSecurityPolicyCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+exports.updateSecurityPolicyCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5, cors: true }, async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
     const newPolicy = request.data?.policy;
@@ -570,7 +570,7 @@ exports.updateSecurityPolicyCallable = (0, https_1.onCall)({ region: REGION_PRIM
 /**
  * Check if an account or IP is locked before attempting login
  */
-exports.checkAccountLockStatusCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 15 }, async (request) => {
+exports.checkAccountLockStatusCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 15, cors: true }, async (request) => {
     const db = admin.firestore();
     const identifier = String(request.data?.identifier || "").trim();
     const rawIp = extractClientIp(request);
@@ -649,7 +649,7 @@ exports.checkAccountLockStatusCallable = (0, https_1.onCall)({ region: REGION_PR
 /**
  * Report login attempt outcome (success or failure) to track attempts and trigger progressive lockouts
  */
-exports.reportLoginAttemptCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 15 }, async (request) => {
+exports.reportLoginAttemptCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 15, cors: true }, async (request) => {
     const db = admin.firestore();
     const identifier = String(request.data?.identifier || "").trim();
     const success = Boolean(request.data?.success);
@@ -828,7 +828,7 @@ exports.reportLoginAttemptCallable = (0, https_1.onCall)({ region: REGION_PRIMAR
 /**
  * Admin: Manually unlock an account (Callable)
  */
-exports.adminUnlockAccountCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+exports.adminUnlockAccountCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5, cors: true }, async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
     const uid = String(request.data?.uid || "").trim();
@@ -876,7 +876,7 @@ exports.adminUnlockAccountCallable = (0, https_1.onCall)({ region: REGION_PRIMAR
 /**
  * Admin: Manually place an account under lock (Callable)
  */
-exports.adminManualLockAccountCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+exports.adminManualLockAccountCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5, cors: true }, async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
     const uid = String(request.data?.uid || "").trim();
@@ -932,7 +932,7 @@ exports.adminManualLockAccountCallable = (0, https_1.onCall)({ region: REGION_PR
 /**
  * Admin: Restrict or Block an IP address (Callable)
  */
-exports.adminRestrictIpCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+exports.adminRestrictIpCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5, cors: true }, async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
     const rawIp = String(request.data?.ip || "").trim();
@@ -972,7 +972,7 @@ exports.adminRestrictIpCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, 
 /**
  * Admin: Unrestrict or Unblock an IP address (Callable)
  */
-exports.adminUnrestrictIpCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+exports.adminUnrestrictIpCallable = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5, cors: true }, async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
     const rawIp = String(request.data?.ip || "").trim();

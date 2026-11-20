@@ -625,7 +625,7 @@ export function determineNextLockoutStage(
  * Get current active security policy (Callable)
  */
 export const getSecurityPolicyCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 10 },
+  { region: REGION_PRIMARY, maxInstances: 10, cors: true },
   async (request) => {
     await assertAdminOrStaff(request, false);
     const db = admin.firestore();
@@ -638,7 +638,7 @@ export const getSecurityPolicyCallable = onCall(
  * Update security policy dynamically (Admin Only Callable)
  */
 export const updateSecurityPolicyCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 5 },
+  { region: REGION_PRIMARY, maxInstances: 5, cors: true },
   async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
@@ -706,7 +706,7 @@ export const updateSecurityPolicyCallable = onCall(
  * Check if an account or IP is locked before attempting login
  */
 export const checkAccountLockStatusCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 15 },
+  { region: REGION_PRIMARY, maxInstances: 15, cors: true },
   async (request) => {
     const db = admin.firestore();
     const identifier = String(request.data?.identifier || "").trim();
@@ -805,7 +805,7 @@ export const checkAccountLockStatusCallable = onCall(
  * Report login attempt outcome (success or failure) to track attempts and trigger progressive lockouts
  */
 export const reportLoginAttemptCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 15 },
+  { region: REGION_PRIMARY, maxInstances: 15, cors: true },
   async (request) => {
     const db = admin.firestore();
     const identifier = String(request.data?.identifier || "").trim();
@@ -1032,7 +1032,7 @@ export const reportLoginAttemptCallable = onCall(
  * Admin: Manually unlock an account (Callable)
  */
 export const adminUnlockAccountCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 5 },
+  { region: REGION_PRIMARY, maxInstances: 5, cors: true },
   async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
@@ -1093,7 +1093,7 @@ export const adminUnlockAccountCallable = onCall(
  * Admin: Manually place an account under lock (Callable)
  */
 export const adminManualLockAccountCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 5 },
+  { region: REGION_PRIMARY, maxInstances: 5, cors: true },
   async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
@@ -1162,7 +1162,7 @@ export const adminManualLockAccountCallable = onCall(
  * Admin: Restrict or Block an IP address (Callable)
  */
 export const adminRestrictIpCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 5 },
+  { region: REGION_PRIMARY, maxInstances: 5, cors: true },
   async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
@@ -1216,7 +1216,7 @@ export const adminRestrictIpCallable = onCall(
  * Admin: Unrestrict or Unblock an IP address (Callable)
  */
 export const adminUnrestrictIpCallable = onCall(
-  { region: REGION_PRIMARY, maxInstances: 5 },
+  { region: REGION_PRIMARY, maxInstances: 5, cors: true },
   async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
