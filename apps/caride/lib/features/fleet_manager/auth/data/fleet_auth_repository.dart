@@ -19,11 +19,14 @@ class FleetAuthRepository {
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
     FirebaseFunctions? functions,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _storage = storage ?? _safeStorageInstance(),
-        _functions = functions ??
-            FirebaseFunctions.instanceFor(region: AppEnv.firebaseFunctionsRegion);
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _storage = storage ?? _safeStorageInstance(),
+       _functions =
+           functions ??
+           FirebaseFunctions.instanceFor(
+             region: AppEnv.firebaseFunctionsRegion,
+           );
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -36,10 +39,12 @@ class FleetAuthRepository {
     } catch (_) {
       try {
         return FirebaseStorage.instanceFor(
-            bucket: 'gs://caride-app.firebasestorage.app');
+          bucket: 'gs://caride-app.firebasestorage.app',
+        );
       } catch (_) {
         return FirebaseStorage.instanceFor(
-            bucket: 'caride-app.firebasestorage.app');
+          bucket: 'caride-app.firebasestorage.app',
+        );
       }
     }
   }
@@ -48,7 +53,6 @@ class FleetAuthRepository {
   User? get currentUser => _auth.currentUser;
 
   // ── Authentication Operations ─────────────────────────────────────────
-
 
   Future<AuthChallenge> requestEmailOtp({
     required String email,
@@ -118,8 +122,12 @@ class FleetAuthRepository {
 
   Future<Map<String, dynamic>> checkAccountLockStatus(String identifier) async {
     try {
-      final callable = _functions.httpsCallable('checkAccountLockStatusCallable');
-      final res = await callable.call<Map<String, dynamic>>({'identifier': identifier.trim().toLowerCase()});
+      final callable = _functions.httpsCallable(
+        'checkAccountLockStatusCallable',
+      );
+      final res = await callable.call<Map<String, dynamic>>({
+        'identifier': identifier.trim().toLowerCase(),
+      });
       return Map<String, dynamic>.from(res.data);
     } catch (_) {
       return {'isLocked': false};
@@ -156,7 +164,8 @@ class FleetAuthRepository {
     final lockCheck = await checkAccountLockStatus(cleanEmail);
     if (lockCheck['isLocked'] == true) {
       throw AccountLockoutException(
-        message: lockCheck['reason'] as String? ??
+        message:
+            lockCheck['reason'] as String? ??
             'Too many failed login attempts. Your account is temporarily locked.',
         lockType: lockCheck['lockType'] as String? ?? 'temporary',
         stageName: lockCheck['stageName'] as String?,
@@ -180,7 +189,8 @@ class FleetAuthRepository {
       );
       if (attemptResult['isLocked'] == true) {
         throw AccountLockoutException(
-          message: attemptResult['reason'] as String? ??
+          message:
+              attemptResult['reason'] as String? ??
               'Too many failed login attempts. Your account is temporarily locked.',
           lockType: attemptResult['lockType'] as String? ?? 'temporary',
           stageName: attemptResult['stageName'] as String?,
@@ -191,7 +201,8 @@ class FleetAuthRepository {
       if (authError.code == 'user-disabled') {
         final recheck = await checkAccountLockStatus(cleanEmail);
         throw AccountLockoutException(
-          message: recheck['reason'] as String? ??
+          message:
+              recheck['reason'] as String? ??
               'Your account has been locked for security. Please contact CaRide support.',
           lockType: recheck['lockType'] as String? ?? 'manual',
           stageName: recheck['stageName'] as String? ?? 'Account Lockout',
@@ -211,11 +222,9 @@ class FleetAuthRepository {
       rethrow;
     }
 
-    unawaited(reportLoginAttempt(
-      identifier: cleanEmail,
-      success: true,
-      role: 'fleet',
-    ));
+    unawaited(
+      reportLoginAttempt(identifier: cleanEmail, success: true, role: 'fleet'),
+    );
 
     final uid = credential.user?.uid;
     if (uid != null) {
@@ -226,8 +235,10 @@ class FleetAuthRepository {
           .limit(1)
           .get();
 
-      final customerDoc =
-          await _firestore.collection('customers').doc(uid).get();
+      final customerDoc = await _firestore
+          .collection('customers')
+          .doc(uid)
+          .get();
       final driverDoc = await _firestore.collection('drivers').doc(uid).get();
 
       final userRef = _firestore.collection('users').doc(uid);
@@ -301,7 +312,9 @@ class FleetAuthRepository {
         'updatedAt': now,
       }, SetOptions(merge: true));
     } catch (e) {
-      debugPrint('provisionFleetUserAfterOtp fleet_managers doc set (handled): $e');
+      debugPrint(
+        'provisionFleetUserAfterOtp fleet_managers doc set (handled): $e',
+      );
     }
 
     // 3. Set password via email/password link if provided (allows email+pass login later).
@@ -346,13 +359,20 @@ class FleetAuthRepository {
     if (fullName != null && fullName.isNotEmpty) data['fullName'] = fullName;
     if (phone != null && phone.isNotEmpty) data['phone'] = phone;
     if (gender != null) data['gender'] = gender;
-    if (companyName != null && companyName.isNotEmpty) data['businessName'] = companyName;
-    if (companyAddress != null && companyAddress.isNotEmpty) data['address'] = companyAddress;
-    if (rcNumber != null && rcNumber.isNotEmpty) data['registrationNumber'] = rcNumber;
-    if (identityDocumentType != null) data['identityDocumentType'] = identityDocumentType;
+    if (companyName != null && companyName.isNotEmpty)
+      data['businessName'] = companyName;
+    if (companyAddress != null && companyAddress.isNotEmpty)
+      data['address'] = companyAddress;
+    if (rcNumber != null && rcNumber.isNotEmpty)
+      data['registrationNumber'] = rcNumber;
+    if (identityDocumentType != null)
+      data['identityDocumentType'] = identityDocumentType;
     if (signupStep != null) data['signupStep'] = signupStep;
 
-    await _firestore.collection('fleet_managers').doc(uid).set(data, SetOptions(merge: true));
+    await _firestore
+        .collection('fleet_managers')
+        .doc(uid)
+        .set(data, SetOptions(merge: true));
   }
 
   /// Fetches the draft onboarding document for the fleet manager.
@@ -397,8 +417,9 @@ class FleetAuthRepository {
   }) async {
     final ext = file.path.split('.').last;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final storageRef =
-        _storage.ref().child('fleet_documents/$uid/${docName}_$timestamp.$ext');
+    final storageRef = _storage.ref().child(
+      'fleet_documents/$uid/${docName}_$timestamp.$ext',
+    );
 
     final uploadTask = await storageRef.putFile(file);
     return await uploadTask.ref.getDownloadURL();
@@ -581,13 +602,13 @@ class FleetAuthRepository {
         .doc(referrerDoc.id)
         .collection('referrals')
         .add({
-      'referredUid': newUid,
-      'email': email,
-      'userType': 'FleetManager',
-      'status': 'completed',
-      'rewardAmount': creditAmt,
-      'joinedAt': FieldValue.serverTimestamp(),
-    });
+          'referredUid': newUid,
+          'email': email,
+          'userType': 'FleetManager',
+          'status': 'completed',
+          'rewardAmount': creditAmt,
+          'joinedAt': FieldValue.serverTimestamp(),
+        });
 
     await _firestore.collection(targetColl).doc(referrerDoc.id).set({
       'referralEarnings': FieldValue.increment(creditAmt),
@@ -601,9 +622,12 @@ class FleetAuthRepository {
   }) async {
     final now = FieldValue.serverTimestamp();
     final isCompany = profile.businessType.toLowerCase() == 'company';
-    final name = profile.fullName.isNotEmpty ? profile.fullName : 'Fleet Partner';
-    final businessTitle =
-        profile.businessName.isNotEmpty ? profile.businessName : name;
+    final name = profile.fullName.isNotEmpty
+        ? profile.fullName
+        : 'Fleet Partner';
+    final businessTitle = profile.businessName.isNotEmpty
+        ? profile.businessName
+        : name;
 
     // 1. Trigger Cloud Function (if deployed on backend)
     try {
@@ -626,7 +650,8 @@ class FleetAuthRepository {
           'to': [profile.email],
           'message': {
             'subject': 'Welcome to CaRide Fleet Partner Program, $name!',
-            'text': '''
+            'text':
+                '''
 Welcome to CaRide Fleet Partner Program!
 
 Hello $name,
@@ -642,8 +667,9 @@ If you have any questions, feel free to reply to this email or reach out to supp
 Best regards,
 The CaRide Operations Team
             '''
-                .trim(),
-            'html': '''
+                    .trim(),
+            'html':
+                '''
 <!DOCTYPE html>
 <html>
 <head>
@@ -682,7 +708,7 @@ The CaRide Operations Team
 </body>
 </html>
             '''
-                .trim(),
+                    .trim(),
           },
           'createdAt': now,
         });
@@ -698,13 +724,13 @@ The CaRide Operations Team
           .doc(uid)
           .collection('notifications')
           .add({
-        'title': 'Welcome to CaRide Fleet Program!',
-        'body':
-            'Your Fleet Manager application for $businessTitle has been received and is in review.',
-        'type': 'fleet_application_submitted',
-        'isRead': false,
-        'createdAt': now,
-      });
+            'title': 'Welcome to CaRide Fleet Program!',
+            'body':
+                'Your Fleet Manager application for $businessTitle has been received and is in review.',
+            'type': 'fleet_application_submitted',
+            'isRead': false,
+            'createdAt': now,
+          });
     } catch (e) {
       debugPrint('Error creating in-app notification: $e');
     }
@@ -719,10 +745,10 @@ The CaRide Operations Team
         .limit(1)
         .snapshots()
         .map((snap) {
-      if (snap.docs.isEmpty) return null;
-      final doc = snap.docs.first;
-      return FleetProfile.fromMap(doc.data(), doc.id);
-    });
+          if (snap.docs.isEmpty) return null;
+          final doc = snap.docs.first;
+          return FleetProfile.fromMap(doc.data(), doc.id);
+        });
   }
 }
 

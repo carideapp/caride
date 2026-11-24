@@ -8393,6 +8393,9 @@ export {
   adminManualLockAccountCallable,
   adminRestrictIpCallable,
   adminUnrestrictIpCallable,
+  submitLockoutSupportMessageCallable,
+  getLockoutSupportChatCallable,
+  listLockoutSupportChatsCallable,
   reconcileExpiredSecurityLocks,
 } from "./security";
 

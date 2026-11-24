@@ -2,6 +2,7 @@ import 'package:caride/core/auth/account_lockout_exception.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/auth/customer_auth_controller.dart';
 import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
+import 'package:caride/features/auth/widgets/floating_lockout_support_button.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
@@ -56,7 +57,12 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
           e,
           email: _emailController.text.trim(),
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'driver',
+          onResetPassword: () => context.push(DriverRoutePaths.forgotPassword),
+        );
         return;
       }
       setState(() => _errorMessage = _friendlyError(e));
@@ -101,8 +107,10 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : Colors.white,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
           children: [
             // Top Bar with Back Button
             Padding(
@@ -408,6 +416,12 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
           ],
         ),
       ),
-    );
+      FloatingLockoutSupportButton(
+        role: 'driver',
+        emailController: _emailController,
+      ),
+    ],
+  ),
+);
   }
 }

@@ -1036,11 +1036,28 @@ export const adminUnlockAccountCallable = onCall(
   async (request) => {
     const adminUser = await assertAdminOrStaff(request, true);
     const db = admin.firestore();
-    const uid = String(request.data?.uid || "").trim();
+    let uid = String(request.data?.uid || "").trim();
+    const email = String(request.data?.email || "").trim().toLowerCase();
     const reason = String(request.data?.reason || "Admin manual unlock").trim();
 
+    if (!uid && email) {
+      try {
+        const userRec = await admin.auth().getUserByEmail(email);
+        uid = userRec.uid;
+      } catch (err: any) {
+        const snap = await db
+          .collection("security_account_locks")
+          .where("email", "==", email)
+          .limit(1)
+          .get();
+        if (!snap.empty) {
+          uid = snap.docs[0].id;
+        }
+      }
+    }
+
     if (!uid) {
-      throw new HttpsError("invalid-argument", "Missing user UID.");
+      throw new HttpsError("invalid-argument", "Missing user UID or registered email.");
     }
 
     const lockRef = db.collection("security_account_locks").doc(uid);
@@ -1053,7 +1070,7 @@ export const adminUnlockAccountCallable = onCall(
       logger.warn("Could not re-enable Firebase Auth user (may not exist in Auth):", err.message);
     }
 
-    const targetEmail = lockSnap.exists ? lockSnap.data()?.email : "";
+    const targetEmail = email || (lockSnap.exists ? lockSnap.data()?.email : "");
     const targetType = lockSnap.exists ? lockSnap.data()?.accountType : "unknown";
 
     // 2. Update lock record in Firestore
@@ -1070,7 +1087,22 @@ export const adminUnlockAccountCallable = onCall(
       { merge: true }
     );
 
-    // 3. Log audit event
+    // 3. Clear failed login count in user/driver/fleet profile
+    try {
+      if (targetType === "driver" || !targetType) {
+        await db.collection("drivers").doc(uid).set({ isLockedOut: false, failedLoginAttempts: 0 }, { merge: true });
+      }
+      if (targetType === "customer" || !targetType) {
+        await db.collection("users").doc(uid).set({ isLockedOut: false, failedLoginAttempts: 0 }, { merge: true });
+      }
+      if (targetType === "fleet" || !targetType) {
+        await db.collection("fleet_managers").doc(uid).set({ isLockedOut: false, failedLoginAttempts: 0 }, { merge: true });
+      }
+    } catch (clearErr: any) {
+      logger.warn("Could not clear lock flags on profile doc:", clearErr.message);
+    }
+
+    // 4. Log audit event
     await logSecurityAuditEvent(db, {
       eventType: "manual_unlock",
       severity: "medium",
@@ -1254,6 +1286,354 @@ export const adminUnrestrictIpCallable = onCall(
     });
 
     return { success: true, message: `IP ${ip} unblocked successfully.` };
+  }
+);
+
+/**
+ * Submit a lockout support chat message (Callable for unauthenticated/locked users)
+ * - Customer messages route to collection `supportChats` with `userType: 'customer'` (shown in CustomerSupportPage)
+ * - Driver messages route to collection `supportChats` with `userType: 'driver'` (shown in DriverSupportPage)
+ * - Fleet manager messages route to collection `support_tickets` with `userType: 'fleet'` (shown in FleetSupportPage)
+ */
+export const submitLockoutSupportMessageCallable = onCall(
+  { region: REGION_PRIMARY, maxInstances: 10, cors: true },
+  async (request) => {
+    const db = admin.firestore();
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    const rawRole = String(request.data?.role || "customer").trim().toLowerCase();
+    const role: "customer" | "driver" | "fleet" = rawRole === "driver" ? "driver" : rawRole === "fleet" ? "fleet" : "customer";
+    const text = String(request.data?.message || "").trim();
+    const subject = String(request.data?.subject || "Account Lockout Support Request").trim();
+    const stageName = String(request.data?.stageName || "Final Lockout / Manual Unlock Required").trim();
+    const existingChatId = String(request.data?.chatId || "").trim();
+
+    if (!email) {
+      throw new HttpsError("invalid-argument", "Email address is required.");
+    }
+    if (!text) {
+      throw new HttpsError("invalid-argument", "Message cannot be empty.");
+    }
+
+    // Try finding user UID and name from Auth or Collections
+    let userUid = "";
+    let userName = "";
+    try {
+      const userRec = await admin.auth().getUserByEmail(email);
+      userUid = userRec.uid;
+      userName = userRec.displayName || "";
+    } catch (_) {
+      // User might not exist or auth lookup failed
+    }
+
+    if (!userName) {
+      if (role === "driver" && userUid) {
+        const dSnap = await db.collection("drivers").doc(userUid).get();
+        if (dSnap.exists) userName = dSnap.data()?.fullName || dSnap.data()?.name || "";
+      } else if (role === "fleet" && userUid) {
+        const fSnap = await db.collection("fleet_managers").doc(userUid).get();
+        if (fSnap.exists) userName = fSnap.data()?.companyName || fSnap.data()?.fullName || "";
+      } else if (userUid) {
+        const uSnap = await db.collection("users").doc(userUid).get();
+        if (uSnap.exists) userName = uSnap.data()?.fullName || uSnap.data()?.name || "";
+      }
+    }
+    if (!userName) {
+      userName = email.split("@")[0];
+    }
+
+    const nowMs = Date.now();
+
+    // ─── 1. Fleet Manager Support Tickets ──────────────────────────────
+    if (role === "fleet") {
+      let ticketId = existingChatId;
+      if (ticketId) {
+        const ticketRef = db.collection("support_tickets").doc(ticketId);
+        const ticketSnap = await ticketRef.get();
+        if (!ticketSnap.exists) {
+          throw new HttpsError("not-found", "Support ticket not found.");
+        }
+        await ticketRef.collection("messages").add({
+          senderUid: userUid || "locked-user",
+          senderRole: "fleet",
+          senderName: userName,
+          text,
+          createdAtMs: nowMs,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        await ticketRef.update({
+          lastMessage: text,
+          lastMessageAtMs: nowMs,
+          updatedAtMs: nowMs,
+          lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: "open",
+        });
+        return { success: true, chatId: ticketId, role: "fleet" };
+      } else {
+        const ticketRef = db.collection("support_tickets").doc();
+        ticketId = ticketRef.id;
+        await ticketRef.set({
+          ticketId,
+          userId: userUid,
+          userUid,
+          userEmail: email,
+          userName,
+          userType: "fleet",
+          subject,
+          status: "open",
+          isAccountLockout: true,
+          lockoutStage: stageName,
+          lastMessage: text,
+          lastMessageAtMs: nowMs,
+          updatedAtMs: nowMs,
+          createdAtMs: nowMs,
+          lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        await ticketRef.collection("messages").add({
+          senderUid: userUid || "locked-user",
+          senderRole: "fleet",
+          senderName: userName,
+          text,
+          createdAtMs: nowMs,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { success: true, chatId: ticketId, role: "fleet" };
+      }
+    }
+
+    // ─── 2. Customer & Driver Support Chats ────────────────────────────
+    let chatId = existingChatId;
+    if (chatId) {
+      const chatRef = db.collection("supportChats").doc(chatId);
+      const chatSnap = await chatRef.get();
+      if (!chatSnap.exists) {
+        throw new HttpsError("not-found", "Support chat not found.");
+      }
+      await chatRef.collection("messages").add({
+        senderUid: userUid || "locked-user",
+        senderRole: role,
+        text,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      await chatRef.set(
+        {
+          lastMessage: text,
+          lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: "active",
+        },
+        { merge: true }
+      );
+      return { success: true, chatId, role };
+    } else {
+      const chatRef = db.collection("supportChats").doc();
+      chatId = chatRef.id;
+      const chatDoc: Record<string, any> = {
+        userType: role,
+        subject,
+        status: "active",
+        isAccountLockout: true,
+        lockoutStage: stageName,
+        lastMessage: text,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      if (role === "driver") {
+        chatDoc.driverUid = userUid;
+        chatDoc.driverName = userName;
+        chatDoc.driverEmail = email;
+        chatDoc.userUid = userUid;
+        chatDoc.userName = userName;
+        chatDoc.userEmail = email;
+      } else {
+        chatDoc.userUid = userUid;
+        chatDoc.userName = userName;
+        chatDoc.userEmail = email;
+        chatDoc.customerUid = userUid;
+        chatDoc.customerName = userName;
+        chatDoc.customerEmail = email;
+      }
+
+      await chatRef.set(chatDoc);
+      await chatRef.collection("messages").add({
+        senderUid: userUid || "locked-user",
+        senderRole: role,
+        text,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { success: true, chatId, role };
+    }
+  }
+);
+
+/**
+ * Get messages and status for a locked-out user's support chat (Callable)
+ */
+export const getLockoutSupportChatCallable = onCall(
+  { region: REGION_PRIMARY, maxInstances: 10, cors: true },
+  async (request) => {
+    const db = admin.firestore();
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    const chatId = String(request.data?.chatId || "").trim();
+    const rawRole = String(request.data?.role || "customer").trim().toLowerCase();
+    const role: "customer" | "driver" | "fleet" = rawRole === "driver" ? "driver" : rawRole === "fleet" ? "fleet" : "customer";
+
+    if (!chatId) {
+      throw new HttpsError("invalid-argument", "Missing chatId parameter.");
+    }
+
+    if (role === "fleet") {
+      const ticketRef = db.collection("support_tickets").doc(chatId);
+      const ticketSnap = await ticketRef.get();
+      if (!ticketSnap.exists) {
+        throw new HttpsError("not-found", "Support ticket not found.");
+      }
+      const data = ticketSnap.data()!;
+      // Security check: email must match if provided
+      if (email && data.userEmail && String(data.userEmail).toLowerCase() !== email) {
+        throw new HttpsError("permission-denied", "Access denied to this ticket.");
+      }
+
+      const msgsSnap = await ticketRef.collection("messages").orderBy("createdAtMs", "asc").get();
+      const messages = msgsSnap.docs.map((doc) => {
+        const m = doc.data();
+        const createdAt = m.createdAt as admin.firestore.Timestamp | undefined;
+        return {
+          id: doc.id,
+          senderRole: m.senderRole || "fleet",
+          senderName: m.senderName || "",
+          text: m.text || "",
+          imageUrl: m.imageUrl || null,
+          createdAtMs: m.createdAtMs || (createdAt ? createdAt.toMillis() : Date.now()),
+        };
+      });
+
+      return {
+        id: ticketSnap.id,
+        role: "fleet",
+        subject: data.subject || "Fleet Support",
+        status: data.status || "open",
+        isAccountLockout: Boolean(data.isAccountLockout),
+        lastMessage: data.lastMessage || "",
+        messages,
+      };
+    } else {
+      const chatRef = db.collection("supportChats").doc(chatId);
+      const chatSnap = await chatRef.get();
+      if (!chatSnap.exists) {
+        throw new HttpsError("not-found", "Support chat not found.");
+      }
+      const data = chatSnap.data()!;
+      const ticketEmail = String(data.userEmail || data.driverEmail || data.customerEmail || "").toLowerCase();
+      if (email && ticketEmail && ticketEmail !== email) {
+        throw new HttpsError("permission-denied", "Access denied to this chat.");
+      }
+
+      const msgsSnap = await chatRef.collection("messages").orderBy("createdAt", "asc").get();
+      const messages = msgsSnap.docs.map((doc) => {
+        const m = doc.data();
+        const createdAt = m.createdAt as admin.firestore.Timestamp | undefined;
+        return {
+          id: doc.id,
+          senderRole: m.senderRole || (role === "driver" ? "driver" : "customer"),
+          senderName: m.senderName || (m.senderRole === "admin" ? "CaRide Support" : "You"),
+          text: m.text || "",
+          imageUrl: m.imageUrl || null,
+          createdAtMs: createdAt ? createdAt.toMillis() : (m.createdAtMs || Date.now()),
+        };
+      });
+
+      return {
+        id: chatSnap.id,
+        role,
+        subject: data.subject || (role === "driver" ? "Driver Support" : "Customer Support"),
+        status: data.status || "active",
+        isAccountLockout: Boolean(data.isAccountLockout),
+        lastMessage: data.lastMessage || "",
+        messages,
+      };
+    }
+  }
+);
+
+/**
+ * List support chats/tickets for a locked-out user (Callable)
+ */
+export const listLockoutSupportChatsCallable = onCall(
+  { region: REGION_PRIMARY, maxInstances: 10, cors: true },
+  async (request) => {
+    const db = admin.firestore();
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    const rawRole = String(request.data?.role || "customer").trim().toLowerCase();
+    const role: "customer" | "driver" | "fleet" = rawRole === "driver" ? "driver" : rawRole === "fleet" ? "fleet" : "customer";
+
+    if (!email) {
+      throw new HttpsError("invalid-argument", "Missing email parameter.");
+    }
+
+    if (role === "fleet") {
+      const snap = await db
+        .collection("support_tickets")
+        .where("userEmail", "==", email)
+        .limit(20)
+        .get();
+
+      const chats = snap.docs.map((d) => {
+        const data = d.data();
+        const createdAt = data.createdAt as admin.firestore.Timestamp | undefined;
+        const lastMessageAt = data.lastMessageAt as admin.firestore.Timestamp | undefined;
+        return {
+          id: d.id,
+          role: "fleet",
+          subject: data.subject || "Fleet Support Inquiry",
+          status: data.status || "open",
+          isAccountLockout: Boolean(data.isAccountLockout),
+          lastMessage: data.lastMessage || "",
+          lastMessageAtMs: data.lastMessageAtMs || (lastMessageAt ? lastMessageAt.toMillis() : Date.now()),
+          createdAtMs: data.createdAtMs || (createdAt ? createdAt.toMillis() : Date.now()),
+        };
+      });
+      chats.sort((a, b) => b.lastMessageAtMs - a.lastMessageAtMs);
+      return { chats };
+    } else {
+      const snap = await db
+        .collection("supportChats")
+        .where("userEmail", "==", email)
+        .limit(20)
+        .get();
+
+      let docs = snap.docs;
+      if (docs.length === 0 && role === "driver") {
+        const driverSnap = await db
+          .collection("supportChats")
+          .where("driverEmail", "==", email)
+          .limit(20)
+          .get();
+        docs = driverSnap.docs;
+      }
+
+      const chats = docs
+        .map((d) => {
+          const data = d.data();
+          const createdAt = data.createdAt as admin.firestore.Timestamp | undefined;
+          const lastMessageAt = data.lastMessageAt as admin.firestore.Timestamp | undefined;
+          const userType = (data.userType as string)?.toLowerCase();
+          return {
+            id: d.id,
+            role: userType === "driver" ? "driver" : "customer",
+            subject: data.subject || "Support Inquiry",
+            status: data.status || "active",
+            isAccountLockout: Boolean(data.isAccountLockout),
+            lastMessage: data.lastMessage || "",
+            lastMessageAtMs: lastMessageAt ? lastMessageAt.toMillis() : Date.now(),
+            createdAtMs: createdAt ? createdAt.toMillis() : Date.now(),
+          };
+        })
+        .filter((c) => (role === "driver" ? c.role === "driver" : c.role === "customer"));
+
+      chats.sort((a, b) => b.lastMessageAtMs - a.lastMessageAtMs);
+      return { chats };
+    }
   }
 );
 

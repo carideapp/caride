@@ -244,7 +244,8 @@ class DriverAuthRepository {
     final lockCheck = await checkAccountLockStatus(cleanEmail);
     if (lockCheck['isLocked'] == true) {
       throw AccountLockoutException(
-        message: lockCheck['reason'] as String? ??
+        message:
+            lockCheck['reason'] as String? ??
             'Too many failed login attempts. Your account is temporarily locked.',
         lockType: lockCheck['lockType'] as String? ?? 'temporary',
         stageName: lockCheck['stageName'] as String?,
@@ -268,7 +269,8 @@ class DriverAuthRepository {
       );
       if (attemptResult['isLocked'] == true) {
         throw AccountLockoutException(
-          message: attemptResult['reason'] as String? ??
+          message:
+              attemptResult['reason'] as String? ??
               'Too many failed login attempts. Your account is temporarily locked.',
           lockType: attemptResult['lockType'] as String? ?? 'temporary',
           stageName: attemptResult['stageName'] as String?,
@@ -279,7 +281,8 @@ class DriverAuthRepository {
       if (authError.code == 'user-disabled') {
         final recheck = await checkAccountLockStatus(cleanEmail);
         throw AccountLockoutException(
-          message: recheck['reason'] as String? ??
+          message:
+              recheck['reason'] as String? ??
               'Your account has been locked for security. Please contact CaRide support.',
           lockType: recheck['lockType'] as String? ?? 'manual',
           stageName: recheck['stageName'] as String? ?? 'Account Lockout',

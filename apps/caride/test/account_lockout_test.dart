@@ -1,8 +1,12 @@
 import 'package:caride/core/auth/account_lockout_exception.dart';
+import 'package:caride/core/auth/lockout_support_service.dart';
 import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('AccountLockoutException & Helper Tests', () {
     test('Correctly identifies temporary lockout vs manual lockout', () {
       final temp = AccountLockoutException(
@@ -68,6 +72,68 @@ void main() {
     test('Support email constants point to operations@caride.ng and opeations@caride.ng', () {
       expect(AccountLockoutBottomSheet.supportEmailPrimary, equals('operations@caride.ng'));
       expect(AccountLockoutBottomSheet.supportEmailAlias, equals('opeations@caride.ng'));
+    });
+  });
+
+  group('LockoutSupportService & State Persistence Tests', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('Records, retrieves, and clears active lockout session correctly', () async {
+      expect(await LockoutSupportService.hasActiveLockout(role: 'customer'), isFalse);
+
+      await LockoutSupportService.recordActiveLockout(
+        role: 'customer',
+        email: 'customer@caride.ng',
+        chatId: 'chat_cust_123',
+      );
+
+      expect(await LockoutSupportService.hasActiveLockout(role: 'customer'), isTrue);
+      expect(
+        await LockoutSupportService.getRecordedLockedEmail('customer'),
+        equals('customer@caride.ng'),
+      );
+      expect(
+        await LockoutSupportService.getActiveChatId(
+          role: 'customer',
+          email: 'customer@caride.ng',
+        ),
+        equals('chat_cust_123'),
+      );
+
+      // Separate roles are isolated
+      expect(await LockoutSupportService.hasActiveLockout(role: 'driver'), isFalse);
+
+      await LockoutSupportService.clearLockoutRecord(
+        role: 'customer',
+        email: 'customer@caride.ng',
+      );
+      expect(await LockoutSupportService.hasActiveLockout(role: 'customer'), isFalse);
+    });
+
+    test('Isolated driver and fleet support sessions', () async {
+      await LockoutSupportService.recordActiveLockout(
+        role: 'driver',
+        email: 'driver@caride.ng',
+        chatId: 'driver_chat_456',
+      );
+      await LockoutSupportService.recordActiveLockout(
+        role: 'fleet',
+        email: 'fleet@caride.ng',
+        chatId: 'fleet_ticket_789',
+      );
+
+      expect(await LockoutSupportService.hasActiveLockout(role: 'driver'), isTrue);
+      expect(await LockoutSupportService.hasActiveLockout(role: 'fleet'), isTrue);
+      expect(
+        await LockoutSupportService.getActiveChatId(role: 'driver', email: 'driver@caride.ng'),
+        equals('driver_chat_456'),
+      );
+      expect(
+        await LockoutSupportService.getActiveChatId(role: 'fleet', email: 'fleet@caride.ng'),
+        equals('fleet_ticket_789'),
+      );
     });
   });
 }

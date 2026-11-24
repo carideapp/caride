@@ -1,5 +1,6 @@
 import 'package:caride/core/auth/account_lockout_exception.dart';
 import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
+import 'package:caride/features/auth/widgets/floating_lockout_support_button.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
@@ -63,7 +64,12 @@ class _FleetManagerLoginScreenState extends State<FleetManagerLoginScreen> {
           e,
           email: _emailController.text.trim(),
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'fleet',
+          onResetPassword: () => context.push(FleetRoutePaths.forgotPassword),
+        );
         return;
       }
       final parsed = FleetAuthErrorHelper.parseError(e);
@@ -88,8 +94,10 @@ class _FleetManagerLoginScreenState extends State<FleetManagerLoginScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : Colors.white,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
           children: [
             // Top Bar with Back Button
             Padding(
@@ -368,6 +376,12 @@ class _FleetManagerLoginScreenState extends State<FleetManagerLoginScreen> {
           ],
         ),
       ),
-    );
+      FloatingLockoutSupportButton(
+        role: 'fleet',
+        emailController: _emailController,
+      ),
+    ],
+  ),
+);
   }
 }

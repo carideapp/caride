@@ -3,21 +3,28 @@ import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:caride/core/auth/account_lockout_exception.dart';
+import 'package:caride/core/auth/lockout_support_service.dart';
+import 'package:caride/features/auth/locked_account_support_screen.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:navigation/navigation.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Modal bottom sheet presenting account lockout status, live countdown timer,
-/// and support contact actions for final security lockouts.
+/// direct password reset action, and in-app support chat actions.
 class AccountLockoutBottomSheet extends StatefulWidget {
   const AccountLockoutBottomSheet({
     super.key,
     required this.lockout,
+    this.role = 'customer',
+    this.onResetPassword,
   });
 
   final AccountLockoutException lockout;
+  final String role; // 'customer' | 'driver' | 'fleet'
+  final VoidCallback? onResetPassword;
 
   /// Primary support recipient as specified for operations team
   static const String supportEmailPrimary = 'operations@caride.ng';
@@ -27,12 +34,18 @@ class AccountLockoutBottomSheet extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required AccountLockoutException lockout,
+    String role = 'customer',
+    VoidCallback? onResetPassword,
   }) {
     return BottomSheetShell.show<void>(
       context: context,
       isDismissible: true,
       enableDrag: true,
-      child: AccountLockoutBottomSheet(lockout: lockout),
+      child: AccountLockoutBottomSheet(
+        lockout: lockout,
+        role: role,
+        onResetPassword: onResetPassword,
+      ),
     );
   }
 
@@ -95,12 +108,47 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
   }
 
   Future<void> _handleContactSupport() async {
+    Navigator.of(context).pop();
+    final userEmail = widget.lockout.email.trim();
+    if (userEmail.isNotEmpty) {
+      await LockoutSupportService.recordActiveLockout(
+        role: widget.role,
+        email: userEmail,
+      );
+    }
+    if (!mounted) return;
+    await LockedAccountSupportScreen.show(
+      context,
+      email: userEmail,
+      role: widget.role,
+      stageName: widget.lockout.stageName,
+    );
+  }
+
+  void _handleResetPassword() {
+    Navigator.of(context).pop();
+    if (widget.onResetPassword != null) {
+      widget.onResetPassword!();
+      return;
+    }
+    final role = widget.role.trim().toLowerCase();
+    if (role == 'driver') {
+      context.push(DriverRoutePaths.forgotPassword);
+    } else if (role == 'fleet') {
+      context.push(FleetRoutePaths.forgotPassword);
+    } else {
+      context.push(CustomerRoutePaths.forgotPassword);
+    }
+  }
+
+  Future<void> _handleEmailSupportFallback() async {
     setState(() => _openingEmail = true);
     final userEmail = widget.lockout.email.trim();
     final subject = 'Account Lockout Support Request - ${userEmail.isNotEmpty ? userEmail : "CaRide User"}';
     final body = 'Hello CaRide Operations Team,\n\n'
         'My account has reached the maximum failed login attempt limit and is currently locked for security.\n\n'
         'Account Email: ${userEmail.isNotEmpty ? userEmail : "Not provided"}\n'
+        'Role: ${widget.role}\n'
         'Lockout Stage: ${widget.lockout.stageName ?? "Final Lockout / Manual Unlock Required"}\n'
         'Timestamp: ${DateTime.now().toLocal()}\n'
         'Device OS: ${Platform.operatingSystem}\n\n'
@@ -380,32 +428,31 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
             ),
             const SizedBox(height: AppSpacing.lg),
 
-            // Contact Support Button (Launches Gmail/Mail compose)
+            // Contact Support Button (Opens in-app chat direct with Admin Support)
             PrimaryButton(
-              label: _openingEmail ? 'Opening Mail App...' : 'Contact Support',
-              icon: Icons.mail_rounded,
-              isLoading: _openingEmail,
+              label: 'Contact Support',
+              icon: Icons.chat_bubble_outline_rounded,
               onPressed: _handleContactSupport,
             ),
             const SizedBox(height: AppSpacing.sm),
 
-            // Copy Email Tile
+            // Email Fallback Link
             InkWell(
               borderRadius: BorderRadius.circular(AppRadius.md),
-              onTap: _copySupportEmail,
+              onTap: _handleEmailSupportFallback,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.copy_rounded,
+                      Icons.mail_outline_rounded,
                       size: 14,
                       color: isDark ? Colors.white70 : AppColors.brand,
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Copy ${AccountLockoutBottomSheet.supportEmailPrimary}',
+                      'Email Operations Support (${AccountLockoutBottomSheet.supportEmailPrimary})',
                       style: AppTextStyles.caption.copyWith(
                         color: isDark ? Colors.white70 : AppColors.brand,
                         fontWeight: FontWeight.w600,
@@ -418,20 +465,29 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
             const SizedBox(height: AppSpacing.xs),
           ],
 
-          // Action Button for Temporary Lockout
+          // ─── Action Buttons for Temporary Lockout ──────────────────────────
           if (!isManual) ...[
+            // 1. Direct "Reset Password" button inside the lockout sheet itself
             PrimaryButton(
-              label: _timerExpired ? 'Try Again' : 'Close',
+              label: 'Reset Forgotten Password',
+              icon: Icons.lock_reset_rounded,
+              onPressed: _handleResetPassword,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+
+            // 2. Try Signing In / Close
+            SecondaryButton(
+              label: _timerExpired ? 'Try Signing In' : 'Close',
               icon: _timerExpired ? Icons.arrow_forward_rounded : null,
               onPressed: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: AppSpacing.sm),
 
-            // Subtle help link for users who need immediate assistance
+            // Subtle help link for users who need immediate support
             TextButton(
               onPressed: _handleContactSupport,
               child: Text(
-                'Need help? Contact Operations Support',
+                'Need help? Chat with Operations Support',
                 style: AppTextStyles.caption.copyWith(
                   color: isDark
                       ? AppColors.textSecondaryDark
