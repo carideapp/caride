@@ -438,13 +438,13 @@ export async function checkAndEnforceIpRateLimit(
       ...(ipStatSnap.exists
         ? {}
         : {
-            firstSeenAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: "active",
-            severity: "low",
-            failedAuthCount: 0,
-            successAuthCount: 0,
-            targetedAccounts: [],
-          }),
+          firstSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: "active",
+          severity: "low",
+          failedAuthCount: 0,
+          successAuthCount: 0,
+          targetedAccounts: [],
+        }),
     },
     { merge: true }
   );
@@ -536,7 +536,7 @@ export async function resolveUser(
           accountType,
         };
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // Try searching customers, drivers, fleet_managers
@@ -794,9 +794,8 @@ export const checkAccountLockStatusCallable = onCall(
       reason:
         lockType === "manual"
           ? "Your account has been locked for security. Please contact CaRide support."
-          : `Too many failed login attempts. Your account is temporarily locked. Please try again in ${
-              remainingSeconds ? Math.ceil(remainingSeconds / 60) : 5
-            } minutes.`,
+          : `Too many failed login attempts. Your account is temporarily locked. Please try again in ${remainingSeconds ? Math.ceil(remainingSeconds / 60) : 5
+          } minutes.`,
     };
   }
 );
@@ -858,10 +857,10 @@ export const reportLoginAttemptCallable = onCall(
           lastSuccessfulIp: rawIp,
           ...(resetOnSuccess
             ? {
-                failedAttempts: 0,
-                stageOrder: 0,
-                status: lockData.status === "active" ? "unlocked" : (lockData.status || "unlocked"),
-              }
+              failedAttempts: 0,
+              stageOrder: 0,
+              status: lockData.status === "active" ? "unlocked" : (lockData.status || "unlocked"),
+            }
             : {}),
         },
         { merge: true }
@@ -958,9 +957,8 @@ export const reportLoginAttemptCallable = onCall(
         ip: rawIp,
         endpoint: "login",
         actionTaken: stage.isManualUnlock ? "manual_security_lockout" : "temporary_security_lockout",
-        description: `Account ${user.email || user.uid} reached ${stage.name} (${currentFailedAttempts} failed attempts). ${
-          stage.isManualUnlock ? "Requires manual Admin unlock." : `Locked for ${stage.durationValue} ${stage.durationUnit}.`
-        }`,
+        description: `Account ${user.email || user.uid} reached ${stage.name} (${currentFailedAttempts} failed attempts). ${stage.isManualUnlock ? "Requires manual Admin unlock." : `Locked for ${stage.durationValue} ${stage.durationUnit}.`
+          }`,
       });
     }
 
@@ -978,15 +976,15 @@ export const reportLoginAttemptCallable = onCall(
         lastErrorCode: errorCode,
         ...(isLocked
           ? {
-              status: "active",
-              lockType,
-              stageOrder,
-              stageName: stage?.name || "Lockout",
-              lockedAt: admin.firestore.FieldValue.serverTimestamp(),
-              expiresAt: lockExpiresAt ? admin.firestore.Timestamp.fromDate(lockExpiresAt) : null,
-              lockReason: `Failed password attempts (${currentFailedAttempts} consecutive attempts)`,
-              totalHistoricalLocks: admin.firestore.FieldValue.increment(1),
-            }
+            status: "active",
+            lockType,
+            stageOrder,
+            stageName: stage?.name || "Lockout",
+            lockedAt: admin.firestore.FieldValue.serverTimestamp(),
+            expiresAt: lockExpiresAt ? admin.firestore.Timestamp.fromDate(lockExpiresAt) : null,
+            lockReason: `Failed password attempts (${currentFailedAttempts} consecutive attempts)`,
+            totalHistoricalLocks: admin.firestore.FieldValue.increment(1),
+          }
           : {}),
       },
       { merge: true }
@@ -1233,9 +1231,8 @@ export const adminRestrictIpCallable = onCall(
       ip,
       endpoint: "adminRestrictIp",
       actionTaken: "manual_ip_block",
-      description: `IP ${ip} blocked by Administrator ${adminUser.email || adminUser.uid}. Reason: ${reason}. Duration: ${
-        isPermanent ? "Indefinite" : `${durationMinutes}m`
-      }`,
+      description: `IP ${ip} blocked by Administrator ${adminUser.email || adminUser.uid}. Reason: ${reason}. Duration: ${isPermanent ? "Indefinite" : `${durationMinutes}m`
+        }`,
       adminId: adminUser.uid,
       adminEmail: adminUser.email,
     });

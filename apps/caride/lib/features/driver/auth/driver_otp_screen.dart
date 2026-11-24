@@ -134,7 +134,12 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
           e,
           email: driverAuthController.pendingEmail ?? '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'driver',
+          onResetPassword: () => context.push(DriverRoutePaths.forgotPassword),
+        );
         return;
       }
       final cooldown = extractCooldownSeconds(e);
@@ -179,7 +184,12 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
           e,
           email: driverAuthController.pendingEmail ?? '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'driver',
+          onResetPassword: () => context.push(DriverRoutePaths.forgotPassword),
+        );
         return;
       }
       final cooldown = extractCooldownSeconds(e);
@@ -223,7 +233,12 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
           e,
           email: driverAuthController.pendingEmail ?? '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'driver',
+          onResetPassword: () => context.push(DriverRoutePaths.forgotPassword),
+        );
         return;
       }
       final cooldown = extractCooldownSeconds(e);

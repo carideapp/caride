@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:caride/core/auth/account_lockout_exception.dart';
 import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
+import 'package:caride/features/auth/widgets/floating_lockout_support_button.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -131,9 +132,17 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
         setState(() => _errorMessage = null);
         final lockout = AccountLockoutHelper.extract(
           e,
-          email: fleetAuthController.pendingEmail ?? '',
+          email: (fleetAuthController.pendingEmail?.isNotEmpty == true
+                  ? fleetAuthController.pendingEmail
+                  : fleetAuthController.email) ??
+              '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'fleet',
+          onResetPassword: () => context.push(FleetRoutePaths.forgotPassword),
+        );
         return;
       }
       final parsed = FleetAuthErrorHelper.parseError(e);
@@ -178,9 +187,17 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
         setState(() => _errorMessage = null);
         final lockout = AccountLockoutHelper.extract(
           e,
-          email: fleetAuthController.pendingEmail ?? '',
+          email: (fleetAuthController.pendingEmail?.isNotEmpty == true
+                  ? fleetAuthController.pendingEmail
+                  : fleetAuthController.email) ??
+              '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'fleet',
+          onResetPassword: () => context.push(FleetRoutePaths.forgotPassword),
+        );
         return;
       }
       final parsed = FleetAuthErrorHelper.parseError(e);
@@ -218,9 +235,17 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
         setState(() => _errorMessage = null);
         final lockout = AccountLockoutHelper.extract(
           e,
-          email: fleetAuthController.pendingEmail ?? '',
+          email: (fleetAuthController.pendingEmail?.isNotEmpty == true
+                  ? fleetAuthController.pendingEmail
+                  : fleetAuthController.email) ??
+              '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'fleet',
+          onResetPassword: () => context.push(FleetRoutePaths.forgotPassword),
+        );
         return;
       }
       final parsed = FleetAuthErrorHelper.parseError(e);
@@ -246,8 +271,10 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : Colors.white,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
           children: [
             // Top Bar with Circular Back Button
             Padding(
@@ -525,6 +552,17 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
           ],
         ),
       ),
-    );
+      FloatingLockoutSupportButton(
+        role: 'fleet',
+        emailController: TextEditingController(
+          text: (fleetAuthController.pendingEmail?.isNotEmpty == true
+                  ? fleetAuthController.pendingEmail
+                  : fleetAuthController.email) ??
+              '',
+        ),
+      ),
+    ],
+  ),
+);
   }
 }

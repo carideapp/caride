@@ -63,7 +63,8 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _remainingSeconds = widget.lockout.remainingSeconds ??
+    _remainingSeconds =
+        widget.lockout.remainingSeconds ??
         (widget.lockout.isManualOrPermanent ? 0 : 300);
 
     if (!widget.lockout.isManualOrPermanent && _remainingSeconds > 0) {
@@ -144,8 +145,10 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
   Future<void> _handleEmailSupportFallback() async {
     setState(() => _openingEmail = true);
     final userEmail = widget.lockout.email.trim();
-    final subject = 'Account Lockout Support Request - ${userEmail.isNotEmpty ? userEmail : "CaRide User"}';
-    final body = 'Hello CaRide Operations Team,\n\n'
+    final subject =
+        'Account Lockout Support Request - ${userEmail.isNotEmpty ? userEmail : "CaRide User"}';
+    final body =
+        'Hello CaRide Operations Team,\n\n'
         'My account has reached the maximum failed login attempt limit and is currently locked for security.\n\n'
         'Account Email: ${userEmail.isNotEmpty ? userEmail : "Not provided"}\n'
         'Role: ${widget.role}\n'
@@ -158,7 +161,8 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: AccountLockoutBottomSheet.supportEmailPrimary,
-      query: 'cc=${AccountLockoutBottomSheet.supportEmailAlias}'
+      query:
+          'cc=${AccountLockoutBottomSheet.supportEmailAlias}'
           '&subject=${Uri.encodeComponent(subject)}'
           '&body=${Uri.encodeComponent(body)}',
     );
@@ -191,12 +195,19 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
       SnackBar(
         content: Row(
           children: const [
-            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+            Icon(
+              Icons.check_circle_outline_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
             SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
                 'Support email (operations@caride.ng) copied to clipboard.',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -218,8 +229,9 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
     final isManual = widget.lockout.isManualOrPermanent;
 
     final primaryTextColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtitleTextColor =
-        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final subtitleTextColor = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
     final accentColor = isManual ? AppColors.error : const Color(0xFFF59E0B);
 
     return Padding(
@@ -247,8 +259,8 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
                 isManual
                     ? Icons.lock_person_rounded
                     : (_timerExpired
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.lock_clock_rounded),
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.lock_clock_rounded),
                 size: 34,
                 color: _timerExpired && !isManual
                     ? AppColors.success
@@ -263,8 +275,8 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
             isManual
                 ? 'Account Locked'
                 : (_timerExpired
-                    ? 'Lockout Expired'
-                    : 'Account Temporarily Locked'),
+                      ? 'Lockout Expired'
+                      : 'Account Temporarily Locked'),
             textAlign: TextAlign.center,
             style: AppTextStyles.headlineSmall.copyWith(
               color: primaryTextColor,
@@ -279,8 +291,8 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
             isManual
                 ? 'You have reached the maximum number of failed login attempts. For security reasons, your account has been locked and requires administrative review to restore access.'
                 : (_timerExpired
-                    ? 'The temporary security lockout has expired. You may now attempt to sign in again with your credentials.'
-                    : 'Too many consecutive failed login attempts were detected. For your protection, sign-in has been temporarily disabled.'),
+                      ? 'The temporary security lockout has expired. You may now attempt to sign in again with your credentials.'
+                      : 'Too many consecutive failed login attempts were detected. For your protection, sign-in has been temporarily disabled.'),
             textAlign: TextAlign.center,
             style: AppTextStyles.bodyMedium.copyWith(
               color: subtitleTextColor,
@@ -341,12 +353,18 @@ class _AccountLockoutBottomSheetState extends State<AccountLockoutBottomSheet> {
                 vertical: AppSpacing.md,
               ),
               decoration: BoxDecoration(
-                color: (_timerExpired ? AppColors.success : const Color(0xFFF59E0B))
-                    .withValues(alpha: isDark ? 0.12 : 0.08),
+                color:
+                    (_timerExpired
+                            ? AppColors.success
+                            : const Color(0xFFF59E0B))
+                        .withValues(alpha: isDark ? 0.12 : 0.08),
                 borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(
-                  color: (_timerExpired ? AppColors.success : const Color(0xFFF59E0B))
-                      .withValues(alpha: 0.3),
+                  color:
+                      (_timerExpired
+                              ? AppColors.success
+                              : const Color(0xFFF59E0B))
+                          .withValues(alpha: 0.3),
                   width: 1.2,
                 ),
               ),

@@ -82,7 +82,12 @@ class _OtpScreenState extends State<OtpScreen> {
           error,
           email: customerAuthController.pendingChallenge?.email ?? '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'customer',
+          onResetPassword: () => context.push(CustomerRoutePaths.forgotPassword),
+        );
         return;
       }
       final cooldown = extractCooldownSeconds(error);
@@ -158,7 +163,12 @@ class _OtpScreenState extends State<OtpScreen> {
           error,
           email: customerAuthController.pendingChallenge?.email ?? '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'customer',
+          onResetPassword: () => context.push(CustomerRoutePaths.forgotPassword),
+        );
         return;
       }
       final cooldown = extractCooldownSeconds(error);
@@ -205,7 +215,12 @@ class _OtpScreenState extends State<OtpScreen> {
           error,
           email: customerAuthController.pendingChallenge?.email ?? '',
         );
-        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        AccountLockoutBottomSheet.show(
+          context,
+          lockout: lockout,
+          role: 'customer',
+          onResetPassword: () => context.push(CustomerRoutePaths.forgotPassword),
+        );
         return;
       }
       final cooldown = extractCooldownSeconds(error);
