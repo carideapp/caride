@@ -9,6 +9,7 @@ import '../../features/profile/data/account_repository.dart';
 import '../services/deep_link_service.dart';
 import '../services/termii_service.dart';
 
+import 'account_lockout_exception.dart';
 import 'auth_challenge.dart';
 import 'auth_repository.dart';
 import 'pending_otp_session.dart';
@@ -422,6 +423,9 @@ class CustomerAuthController extends ChangeNotifier {
       try {
         await _repository.signInWithEmailAndPassword(email: resolvedEmail, password: password);
       } catch (authError) {
+        if (AccountLockoutHelper.isLockout(authError)) {
+          rethrow;
+        }
         // If user entered a real email, check if their account was created via phone OTP
         // (synthetic email in Auth, but real email saved in Firestore).
         if (!isPhone && resolvedEmail.contains('@') && !resolvedEmail.endsWith('@phone.caride.com')) {

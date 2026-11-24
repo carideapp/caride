@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_models/shared_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/auth/account_lockout_exception.dart';
 import '../../../../core/auth/auth_challenge.dart';
 import '../../../../core/auth/customer_auth_controller.dart';
 import '../../../../core/auth/pending_otp_session.dart';
@@ -523,6 +524,9 @@ class FleetAuthController extends ChangeNotifier {
           password: passInput,
         );
       } catch (authError) {
+        if (AccountLockoutHelper.isLockout(authError)) {
+          rethrow;
+        }
         // If user entered a real email, check if fleet account was created via phone OTP
         if (!isPhone && resolved.contains('@') && !resolved.endsWith('@phone.caride.com')) {
           final cleanInputEmail = resolved.toLowerCase();

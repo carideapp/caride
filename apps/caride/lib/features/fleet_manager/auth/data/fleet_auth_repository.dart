@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_models/shared_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/auth/account_lockout_exception.dart';
 import '../../../../core/auth/auth_challenge.dart';
 import '../../../../core/config/app_env.dart';
 
@@ -154,10 +155,13 @@ class FleetAuthRepository {
     // 1. Check if fleet manager account or IP is under active lock
     final lockCheck = await checkAccountLockStatus(cleanEmail);
     if (lockCheck['isLocked'] == true) {
-      throw FirebaseAuthException(
-        code: 'user-disabled',
+      throw AccountLockoutException(
         message: lockCheck['reason'] as String? ??
             'Too many failed login attempts. Your account is temporarily locked.',
+        lockType: lockCheck['lockType'] as String? ?? 'temporary',
+        stageName: lockCheck['stageName'] as String?,
+        remainingSeconds: lockCheck['remainingSeconds'] as int?,
+        email: cleanEmail,
       );
     }
 
@@ -175,14 +179,29 @@ class FleetAuthRepository {
         role: 'fleet',
       );
       if (attemptResult['isLocked'] == true) {
-        throw FirebaseAuthException(
-          code: 'user-disabled',
+        throw AccountLockoutException(
           message: attemptResult['reason'] as String? ??
               'Too many failed login attempts. Your account is temporarily locked.',
+          lockType: attemptResult['lockType'] as String? ?? 'temporary',
+          stageName: attemptResult['stageName'] as String?,
+          remainingSeconds: attemptResult['remainingSeconds'] as int?,
+          email: cleanEmail,
+        );
+      }
+      if (authError.code == 'user-disabled') {
+        final recheck = await checkAccountLockStatus(cleanEmail);
+        throw AccountLockoutException(
+          message: recheck['reason'] as String? ??
+              'Your account has been locked for security. Please contact CaRide support.',
+          lockType: recheck['lockType'] as String? ?? 'manual',
+          stageName: recheck['stageName'] as String? ?? 'Account Lockout',
+          remainingSeconds: recheck['remainingSeconds'] as int?,
+          email: cleanEmail,
         );
       }
       rethrow;
     } catch (e) {
+      if (e is AccountLockoutException) rethrow;
       await reportLoginAttempt(
         identifier: cleanEmail,
         success: false,

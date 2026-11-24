@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:caride/core/auth/account_lockout_exception.dart';
 import 'package:caride/core/auth/customer_auth_controller.dart';
 import 'package:caride/core/config/app_env.dart';
 import 'package:caride/core/utils/auth_error_mapper.dart';
+import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
@@ -74,6 +76,15 @@ class _OtpScreenState extends State<OtpScreen> {
       context.go(CustomerRoutePaths.home);
     } catch (error) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(error)) {
+        setState(() => _formError = null);
+        final lockout = AccountLockoutHelper.extract(
+          error,
+          email: customerAuthController.pendingChallenge?.email ?? '',
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final cooldown = extractCooldownSeconds(error);
       if (cooldown != null && cooldown > 0) {
         _startResendTimer(cooldownOverride: cooldown);
@@ -141,6 +152,15 @@ class _OtpScreenState extends State<OtpScreen> {
       );
     } catch (error) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(error)) {
+        setState(() => _formError = null);
+        final lockout = AccountLockoutHelper.extract(
+          error,
+          email: customerAuthController.pendingChallenge?.email ?? '',
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final cooldown = extractCooldownSeconds(error);
       if (cooldown != null && cooldown > 0) {
         _startResendTimer(cooldownOverride: cooldown);
@@ -179,6 +199,15 @@ class _OtpScreenState extends State<OtpScreen> {
       );
     } catch (error) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(error)) {
+        setState(() => _formError = null);
+        final lockout = AccountLockoutHelper.extract(
+          error,
+          email: customerAuthController.pendingChallenge?.email ?? '',
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final cooldown = extractCooldownSeconds(error);
       if (cooldown != null && cooldown > 0) {
         _startResendTimer(cooldownOverride: cooldown);

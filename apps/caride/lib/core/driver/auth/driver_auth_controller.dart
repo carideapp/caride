@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_challenge.dart';
 import 'auth_repository.dart';
+import '../../auth/account_lockout_exception.dart';
 import '../../auth/pending_otp_session.dart';
 import '../../auth/customer_auth_controller.dart';
 import '../../services/termii_service.dart';
@@ -452,6 +453,9 @@ class DriverAuthController extends ChangeNotifier {
           password: password,
         );
       } catch (authError) {
+        if (AccountLockoutHelper.isLockout(authError)) {
+          rethrow;
+        }
         // If user entered a real email, check if driver account was created via phone OTP
         if (!isPhone &&
             resolved.contains('@') &&

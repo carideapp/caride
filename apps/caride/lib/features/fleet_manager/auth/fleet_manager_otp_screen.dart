@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:caride/core/auth/account_lockout_exception.dart';
+import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -125,6 +127,15 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
       context.pop(true);
     } catch (e) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(e)) {
+        setState(() => _errorMessage = null);
+        final lockout = AccountLockoutHelper.extract(
+          e,
+          email: fleetAuthController.pendingEmail ?? '',
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final parsed = FleetAuthErrorHelper.parseError(e);
       setState(() {
         _errorMessage = parsed;
@@ -163,6 +174,15 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(e)) {
+        setState(() => _errorMessage = null);
+        final lockout = AccountLockoutHelper.extract(
+          e,
+          email: fleetAuthController.pendingEmail ?? '',
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final parsed = FleetAuthErrorHelper.parseError(e);
       setState(() => _errorMessage = parsed);
       FleetAuthErrorHelper.showErrorSnackBar(context, parsed);
@@ -194,6 +214,15 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(e)) {
+        setState(() => _errorMessage = null);
+        final lockout = AccountLockoutHelper.extract(
+          e,
+          email: fleetAuthController.pendingEmail ?? '',
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final parsed = FleetAuthErrorHelper.parseError(e);
       setState(() => _errorMessage = parsed);
       FleetAuthErrorHelper.showErrorSnackBar(context, parsed);

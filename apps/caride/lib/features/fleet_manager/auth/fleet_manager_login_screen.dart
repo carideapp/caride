@@ -1,3 +1,5 @@
+import 'package:caride/core/auth/account_lockout_exception.dart';
+import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
@@ -55,6 +57,15 @@ class _FleetManagerLoginScreenState extends State<FleetManagerLoginScreen> {
       context.go(FleetRoutePaths.dashboard);
     } catch (e) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(e)) {
+        setState(() => _errorMessage = null);
+        final lockout = AccountLockoutHelper.extract(
+          e,
+          email: _emailController.text.trim(),
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       final parsed = FleetAuthErrorHelper.parseError(e);
       setState(() {
         _errorMessage = parsed;

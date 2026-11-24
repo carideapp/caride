@@ -1,5 +1,7 @@
+import 'package:caride/core/auth/account_lockout_exception.dart';
 import 'package:caride/core/driver/auth/driver_auth_controller.dart';
 import 'package:caride/core/auth/customer_auth_controller.dart';
+import 'package:caride/features/auth/widgets/account_lockout_bottom_sheet.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:navigation/navigation.dart';
@@ -48,6 +50,15 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
       await customerAuthController.provisionRole('driver');
     } catch (e) {
       if (!mounted) return;
+      if (AccountLockoutHelper.isLockout(e)) {
+        setState(() => _errorMessage = null);
+        final lockout = AccountLockoutHelper.extract(
+          e,
+          email: _emailController.text.trim(),
+        );
+        AccountLockoutBottomSheet.show(context, lockout: lockout);
+        return;
+      }
       setState(() => _errorMessage = _friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);

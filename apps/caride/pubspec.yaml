@@ -3,7 +3,7 @@ description: "Premium ride-hailing and courier service application."
 
 publish_to: 'none' 
 
-version: 1.0.11+43
+version: 1.0.11+44
 
 environment:
   sdk: ^3.9.0
