@@ -17,7 +17,6 @@ import 'package:caride/features/driver/profile/data/driver_tier_repository.dart'
 import 'package:caride/core/services/app_update_service.dart';
 import 'package:caride/features/driver/ride/data/driver_ride_repository.dart';
 import 'package:caride/core/config/app_config_repository.dart';
-import 'package:caride/features/driver/widgets/driver_alert_readiness_sheet.dart';
 import 'package:caride/features/driver/widgets/driver_debt_prompt_bottom_sheet.dart';
 import 'package:caride/features/driver/profile/driver_vehicle_screen.dart';
 import 'package:flutter/material.dart';
@@ -44,7 +43,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   StreamSubscription? _profileSubscription;
   StreamSubscription? _driverSettingsSub;
   bool _promptedCompleteProfile = false;
-  bool _alertAttentionNeeded = false;
   double _walletBalance = 0.0;
   double _maxNegativeBalance = 3000.0;
 
@@ -55,7 +53,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _presenceController.addListener(_handlePresenceChanged);
     _listenToProfile();
     _listenToDriverSettings();
-    unawaited(_refreshAlertReadiness());
     unawaited(_checkPopupAnnouncements());
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -63,13 +60,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         unawaited(AppUpdateService.checkAndShowUpdateDialog(context));
       }
     });
-  }
-
-  Future<void> _refreshAlertReadiness() async {
-    final attention = await DriverAlertReadinessSheet.hasAttentionNeeded();
-    if (mounted) {
-      setState(() => _alertAttentionNeeded = attention);
-    }
   }
 
   Future<void> _checkPopupAnnouncements() async {
@@ -1034,88 +1024,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                           .stop();
                                     }
                                   }
-                                  unawaited(_refreshAlertReadiness());
                                 },
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(AppRadius.xl),
-                    onTap: () async {
-                      await DriverAlertReadinessSheet.show(context);
-                      if (mounted) {
-                        unawaited(_refreshAlertReadiness());
-                      }
-                    },
-                    child: GlassContainer(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: (_alertAttentionNeeded
-                                      ? const Color(0xFFF59E0B)
-                                      : AppColors.brand)
-                                  .withValues(alpha: 0.14),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.notifications_active_rounded,
-                              size: 16,
-                              color: _alertAttentionNeeded
-                                  ? const Color(0xFFF59E0B)
-                                  : AppColors.brand,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              'Ride Alert Readiness',
-                              style: AppTextStyles.labelLarge.copyWith(
-                                color: isDark
-                                    ? AppColors.textPrimaryDark
-                                    : AppColors.textPrimaryLight,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: (_alertAttentionNeeded
-                                      ? const Color(0xFFF59E0B)
-                                      : AppColors.brand)
-                                  .withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              _alertAttentionNeeded ? 'Check' : 'Ready',
-                              style: AppTextStyles.caption.copyWith(
-                                color: _alertAttentionNeeded
-                                    ? const Color(0xFFF59E0B)
-                                    : AppColors.brand,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
