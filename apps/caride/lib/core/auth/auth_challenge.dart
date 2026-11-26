@@ -6,6 +6,7 @@ class AuthChallenge {
     required this.isSignUp,
     this.phone,
     this.channel = 'email',
+    this.isPasswordReset = false,
   });
 
   final String challengeId;
@@ -14,6 +15,7 @@ class AuthChallenge {
   final bool isSignUp;
   final String? phone;
   final String channel;
+  final bool isPasswordReset;
 
   bool get isSms => channel == 'sms' || (phone != null && phone!.isNotEmpty);
 }

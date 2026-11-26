@@ -11,6 +11,7 @@ class DriverRouteDelegates {
     required this.otp,
     required this.registerSuccess,
     required this.forgotPassword,
+    this.resetNewPassword,
     required this.onboarding,
     required this.pendingApproval,
     required this.mainShell,
@@ -59,6 +60,7 @@ class DriverRouteDelegates {
   final WidgetBuilder otp;
   final WidgetBuilder registerSuccess;
   final WidgetBuilder forgotPassword;
+  final WidgetBuilder? resetNewPassword;
   final WidgetBuilder onboarding;
   final WidgetBuilder pendingApproval;
 

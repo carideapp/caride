@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import 'auth_repository.dart';
 import '../../auth/account_lockout_exception.dart';
 import '../../auth/pending_otp_session.dart';
 import '../../auth/customer_auth_controller.dart';
+import '../../config/app_env.dart';
 import '../../services/termii_service.dart';
 
 class DriverAuthController extends ChangeNotifier {
@@ -567,6 +569,118 @@ class DriverAuthController extends ChangeNotifier {
     _setBusy(true);
     try {
       await _repository.sendPasswordResetEmail(email);
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  String? _verifiedResetCode;
+  String? get verifiedResetCode => _verifiedResetCode;
+  void setVerifiedResetCode(String code) => _verifiedResetCode = code;
+
+  /// Requests a password reset OTP sent via SMS to the driver's registered phone number.
+  Future<void> requestPasswordResetPhoneOtp(String phone) async {
+    final cleanPhone = TermiiService.formatToLocal11Digits(phone.trim());
+    if (cleanPhone.length != 11 || !cleanPhone.startsWith('0')) {
+      throw Exception('Please enter a valid 11-digit phone number (e.g. 08012345678).');
+    }
+
+    _setBusy(true);
+    try {
+      // 1. Verify that a driver account exists for this phone number
+      final driverSnap = await FirebaseFirestore.instance
+          .collection('drivers')
+          .where('phone', isEqualTo: cleanPhone)
+          .limit(1)
+          .get();
+
+      if (driverSnap.docs.isEmpty) {
+        final userSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('phone', isEqualTo: cleanPhone)
+            .limit(1)
+            .get();
+
+        if (userSnap.docs.isEmpty) {
+          throw Exception('No driver account found registered with this phone number.');
+        }
+      }
+
+      // 2. Dispatch OTP via Termii SMS
+      final result = await TermiiService.instance.sendOtp(cleanPhone);
+      _pendingChallenge = AuthChallenge(
+        challengeId: result.pinId,
+        email: '$cleanPhone@phone.caride.com',
+        phone: cleanPhone,
+        expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+        isSignUp: false,
+        isPasswordReset: true,
+        channel: 'sms',
+      );
+      _pendingPhone = cleanPhone;
+
+      await PendingOtpSessionService.instance.saveSession(
+        PendingOtpSession(
+          challenge: _pendingChallenge!,
+          role: 'driver',
+          phone: cleanPhone,
+          savedAt: DateTime.now(),
+        ),
+      );
+      notifyListeners();
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  /// Verifies the OTP code for password reset.
+  Future<void> verifyPasswordResetOtp(String code) async {
+    final challenge = _pendingChallenge;
+    if (challenge == null) {
+      throw Exception('Session expired. Please request a new verification code.');
+    }
+
+    _setBusy(true);
+    try {
+      await TermiiService.instance.verifyOtp(
+        pinId: challenge.challengeId,
+        code: code.trim(),
+      );
+      _verifiedResetCode = code.trim();
+      notifyListeners();
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  /// Resets the driver password using verified phone OTP.
+  Future<void> resetPasswordWithPhoneOtp(String newPassword) async {
+    final challenge = _pendingChallenge;
+    final phone = challenge?.phone ?? _pendingPhone;
+    final pinId = challenge?.challengeId;
+    final code = _verifiedResetCode;
+
+    if (phone == null || pinId == null || code == null) {
+      throw Exception('Verification details missing. Please start password reset again.');
+    }
+
+    _setBusy(true);
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: AppEnv.firebaseFunctionsRegion)
+          .httpsCallable('resetPasswordWithPhoneOtp');
+      await callable.call<Map<String, dynamic>>({
+        'phone': phone,
+        'pinId': pinId,
+        'code': code,
+        'newPassword': newPassword.trim(),
+        'role': 'driver',
+      });
+
+      _pendingChallenge = null;
+      _verifiedResetCode = null;
+      _pendingPhone = null;
+      await PendingOtpSessionService.instance.clearSession();
+      notifyListeners();
     } finally {
       _setBusy(false);
     }

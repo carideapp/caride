@@ -46,6 +46,7 @@ class PendingOtpSession {
         'email': challenge.email,
         'expiresAt': challenge.expiresAt.toIso8601String(),
         'isSignUp': challenge.isSignUp,
+        'isPasswordReset': challenge.isPasswordReset,
         'channel': challenge.channel,
         'challengePhone': challenge.phone,
         'role': role,
@@ -70,6 +71,7 @@ class PendingOtpSession {
         expiresAt: DateTime.tryParse(json['expiresAt'] as String? ?? '') ??
             DateTime.now().add(const Duration(minutes: 5)),
         isSignUp: json['isSignUp'] as bool? ?? true,
+        isPasswordReset: json['isPasswordReset'] as bool? ?? false,
         phone: phoneVal,
         channel: channelVal,
       ),

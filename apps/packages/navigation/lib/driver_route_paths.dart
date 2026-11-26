@@ -7,6 +7,7 @@ abstract final class DriverRoutePaths {
   static const otp = '/driver/otp';
   static const registerSuccess = '/driver/register-success';
   static const forgotPassword = '/driver/forgot-password';
+  static const resetNewPassword = '/driver/reset-new-password';
   static const onboarding = '/driver/onboarding';
   static const pendingApproval = '/driver/pending-approval';
 

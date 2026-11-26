@@ -38,7 +38,9 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
     if (driverAuthController.pendingChallenge == null) {
       final restored = await driverAuthController.restorePendingSession();
       if (!restored && mounted) {
-        setState(() => _errorMessage = 'Session expired. Please request a new OTP.');
+        setState(
+          () => _errorMessage = 'Session expired. Please request a new OTP.',
+        );
       }
     }
     if (mounted) {
@@ -88,15 +90,26 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
 
     final pendingChallenge = driverAuthController.pendingChallenge;
     if (pendingChallenge == null) {
-      setState(() => _errorMessage = 'Session expired. Please request a new OTP.');
+      setState(
+        () => _errorMessage = 'Session expired. Please request a new OTP.',
+      );
       return;
     }
+    final isPasswordReset = pendingChallenge.isPasswordReset;
     final isSignUp = pendingChallenge.isSignUp;
     final referralCode = driverAuthController.pendingReferralCode;
     final fullName = driverAuthController.pendingFullName;
     final phone = driverAuthController.pendingPhone;
 
     try {
+      if (isPasswordReset) {
+        await driverAuthController.verifyPasswordResetOtp(_code.text.trim());
+        if (!mounted) return;
+        setState(() => _errorMessage = null);
+        context.push(DriverRoutePaths.resetNewPassword);
+        return;
+      }
+
       await driverAuthController.verifyPendingOtp(_code.text.trim());
       await customerAuthController.provisionRole('driver');
 
@@ -107,8 +120,8 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
         await FirebaseFunctions.instance
             .httpsCallable('createDriverProfileCallable')
             .call(<String, dynamic>{
-          if (referralCode != null) 'referredByCode': referralCode,
-        });
+              if (referralCode != null) 'referredByCode': referralCode,
+            });
 
         final uid = driverAuthController.currentUid;
         if (uid != null && (fullName != null || phone != null)) {
@@ -151,7 +164,6 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
       if (mounted) setState(() => _loading = false);
     }
   }
-
 
   Future<void> _resendViaPhone() async {
     if (_loading) return;
@@ -263,8 +275,18 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
   }
 
   Future<void> _onChangeEmail() async {
+    final isReset =
+        driverAuthController.pendingChallenge?.isPasswordReset == true;
     await driverAuthController.clearPendingChallenge();
     if (!mounted) return;
+    if (isReset) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(DriverRoutePaths.forgotPassword);
+      }
+      return;
+    }
     if (context.canPop()) {
       context.pop();
     } else {
@@ -276,11 +298,16 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final challenge = driverAuthController.pendingChallenge;
+    final isPasswordReset = challenge?.isPasswordReset ?? false;
     final isSms = challenge?.isSms == true;
-    final destination = isSms ? (challenge?.phone ?? '') : (challenge?.email ?? '');
+    final destination = isSms
+        ? (challenge?.phone ?? '')
+        : (challenge?.email ?? '');
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: GlassAppBar(
         title: 'Verify Code',
         leading: IconButton(
@@ -315,7 +342,9 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                         border: Border.all(color: AppColors.brandGlassBorder),
                       ),
                       child: Icon(
-                        isSms ? Icons.phone_android_rounded : Icons.mark_email_read_outlined,
+                        isSms
+                            ? Icons.phone_android_rounded
+                            : Icons.mark_email_read_outlined,
                         color: AppColors.brand,
                         size: 48,
                       ),
@@ -323,18 +352,26 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   Text(
-                    isSms ? 'Check your phone' : 'Check your email',
+                    isPasswordReset
+                        ? 'Reset Verification'
+                        : (isSms ? 'Check your phone' : 'Check your email'),
                     style: AppTextStyles.headlineLarge.copyWith(
-                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
                       fontWeight: FontWeight.w800,
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'We sent a 6-digit verification code to\n$destination',
+                    isPasswordReset
+                        ? 'Enter the 6-digit verification code sent to\n$destination to reset your password.'
+                        : 'We sent a 6-digit verification code to\n$destination',
                     style: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -343,7 +380,9 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                     child: Text(
                       'Leaving the app to copy the code won\'t reset your progress.',
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
+                        color: isDark
+                            ? AppColors.textTertiaryDark
+                            : AppColors.textTertiaryLight,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -366,12 +405,22 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _openEmailApp,
                         icon: const Icon(Icons.mail_outline_rounded, size: 18),
-                        label: const Text('Open Email App', style: TextStyle(fontWeight: FontWeight.w600)),
+                        label: const Text(
+                          'Open Email App',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.brand,
-                          side: BorderSide(color: AppColors.brand.withValues(alpha: 0.5)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          side: BorderSide(
+                            color: AppColors.brand.withValues(alpha: 0.5),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -396,7 +445,8 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                               ),
                               children: [
                                 const TextSpan(
-                                    text: 'You can resend the code in '),
+                                  text: 'You can resend the code in ',
+                                ),
                                 TextSpan(
                                   text: '$_remainingSeconds',
                                   style: const TextStyle(
@@ -430,8 +480,8 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                         color: _remainingSeconds == 0
                             ? AppColors.brand
                             : (isDark
-                                ? AppColors.textTertiaryDark
-                                : AppColors.textTertiaryLight),
+                                  ? AppColors.textTertiaryDark
+                                  : AppColors.textTertiaryLight),
                       ),
                       label: Text(
                         isSms
@@ -441,60 +491,71 @@ class _DriverOtpScreenState extends State<DriverOtpScreen> {
                           color: _remainingSeconds == 0
                               ? AppColors.brand
                               : (isDark
-                                  ? AppColors.textTertiaryDark
-                                  : AppColors.textTertiaryLight),
+                                    ? AppColors.textTertiaryDark
+                                    : AppColors.textTertiaryLight),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  // Alternative verification option (Phone <-> Email)
-                  Center(
-                    child: OutlinedButton.icon(
-                      onPressed: (_remainingSeconds == 0 && !_loading)
-                          ? (isSms ? _sendViaEmail : _resendViaPhone)
-                          : null,
-                      icon: Icon(
-                        isSms
-                            ? Icons.mark_email_read_outlined
-                            : Icons.phone_android_rounded,
-                        size: 18,
-                      ),
-                      label: Text(
-                        isSms
-                            ? 'Verify account via Email OTP'
-                            : 'Send code via SMS (Phone Number)',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _remainingSeconds == 0
-                            ? AppColors.brand
-                            : (isDark
-                                ? AppColors.textTertiaryDark
-                                : AppColors.textTertiaryLight),
-                        side: BorderSide(
-                          color: _remainingSeconds == 0
-                              ? AppColors.brand.withValues(alpha: 0.5)
+                  if (!isPasswordReset) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    // Alternative verification option (Phone <-> Email)
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed: (_remainingSeconds == 0 && !_loading)
+                            ? (isSms ? _sendViaEmail : _resendViaPhone)
+                            : null,
+                        icon: Icon(
+                          isSms
+                              ? Icons.mark_email_read_outlined
+                              : Icons.phone_android_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          isSms
+                              ? 'Verify account via Email OTP'
+                              : 'Send code via SMS (Phone Number)',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _remainingSeconds == 0
+                              ? AppColors.brand
                               : (isDark
-                                  ? AppColors.darkOutline
-                                  : AppColors.lightOutline),
+                                    ? AppColors.textTertiaryDark
+                                    : AppColors.textTertiaryLight),
+                          side: BorderSide(
+                            color: _remainingSeconds == 0
+                                ? AppColors.brand.withValues(alpha: 0.5)
+                                : (isDark
+                                      ? AppColors.darkOutline
+                                      : AppColors.lightOutline),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: AppSpacing.sm),
                   Center(
                     child: TextButton(
                       onPressed: _onChangeEmail,
                       child: Text(
-                        isSms ? 'Wrong number? Change number' : 'Wrong email? Change email',
+                        isSms
+                            ? 'Wrong number? Change number'
+                            : 'Wrong email? Change email',
                         style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
                           decoration: TextDecoration.underline,
                         ),
                       ),

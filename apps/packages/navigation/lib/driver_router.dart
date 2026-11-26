@@ -58,6 +58,11 @@ DriverRouterBundle createDriverRouter({
         path: DriverRoutePaths.forgotPassword,
         builder: (context, state) => d.forgotPassword(context),
       ),
+      if (d.resetNewPassword != null)
+        GoRoute(
+          path: DriverRoutePaths.resetNewPassword,
+          builder: (context, state) => d.resetNewPassword!(context),
+        ),
       GoRoute(
         path: DriverRoutePaths.onboarding,
         builder: (context, state) => d.onboarding(context),

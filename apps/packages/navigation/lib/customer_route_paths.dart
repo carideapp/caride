@@ -8,6 +8,7 @@ abstract final class CustomerRoutePaths {
   static const otp = '/otp';
   static const completeProfile = '/complete-profile';
   static const forgotPassword = '/forgot-password';
+  static const resetNewPassword = '/reset-new-password';
   static const roleSelector = '/role-selector';
 
   static const home = '/home';

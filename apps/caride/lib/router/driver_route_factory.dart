@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:caride/features/driver/auth/driver_forgot_password_screen.dart';
+import 'package:caride/features/driver/auth/driver_reset_new_password_screen.dart';
 import 'package:caride/features/driver/auth/driver_get_started_screen.dart';
 import 'package:caride/features/driver/auth/driver_login_screen.dart';
 import 'package:caride/features/driver/auth/driver_otp_screen.dart';
@@ -56,6 +57,7 @@ DriverRouteDelegates buildDriverRouteDelegates() {
     otp: (_) => const DriverOtpScreen(),
     registerSuccess: (_) => const DriverRegisterSuccessScreen(),
     forgotPassword: (_) => const DriverForgotPasswordScreen(),
+    resetNewPassword: (_) => const DriverResetNewPasswordScreen(),
     onboarding: (_) => const SizedBox.shrink(),
     pendingApproval: (_) => const DriverPendingApprovalScreen(),
     mainShell: (context, shell) => DriverMainShell(navigationShell: shell),

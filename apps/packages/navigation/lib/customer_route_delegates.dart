@@ -13,6 +13,7 @@ class CustomerRouteDelegates {
     required this.otp,
     required this.completeProfile,
     required this.forgotPassword,
+    this.resetNewPassword,
     required this.mainShell,
     required this.home,
     this.chat,
@@ -123,6 +124,7 @@ class CustomerRouteDelegates {
   final WidgetBuilder otp;
   final WidgetBuilder completeProfile;
   final WidgetBuilder forgotPassword;
+  final WidgetBuilder? resetNewPassword;
 
   /// Wraps [StatefulNavigationShell] with bottom navigation / branch UI.
   final Widget Function(BuildContext context, StatefulNavigationShell shell)

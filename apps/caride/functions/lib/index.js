@@ -36,8 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendAnnouncementPush = exports.onChatMessageCreated = exports.takeWeeklyWalletSnapshot = exports.reconcileStuckRides = exports.adminRetryFailedPayout = exports.adminExecuteSettlementBatch = exports.adminCreateSettlementBatch = exports.adminProcessSinglePayout = exports.adminProcessWithdrawal = exports.onRideUpdatedDriverNotify = exports.onRideUpdatedCustomerNotify = exports.onRideCreatedCustomerNotify = exports.onRideStatusChanged = exports.rateCustomer = exports.cancelRideByCustomer = exports.respondToBid = exports.completeRide = exports.publishDriverLocation = exports.updateRideStatus = exports.createDriverBid = exports.submitDriverApplication = exports.onDriverRatingChanged = exports.notifyDriverApprovalStatus = exports.sendDriverWelcomeOnProfileCreate = exports.sendWelcomeEmailOnProfileCreate = exports.onVehicleReviewUpdated = exports.onVehicleReviewCreated = exports.onDriverDocumentUpdated = exports.onDriverDocumentCreated = exports.saveDriverBankAccount = exports.resolveTransactPayBankAccount = exports.listTransactPayBanks = exports.saveTransactPayCard = exports.transactPayWebhook = exports.createDedicatedVirtualAccount = exports.verifyTransactPayTransaction = exports.chargeTransactPayCard = exports.initializeTransactPayTransaction = exports.initializeBankTransfer = exports.initializeTierSettings = exports.deleteStaffAccount = exports.processStaffWithdrawal = exports.requestStaffWithdrawal = exports.updateStaffProfile = exports.createStaffAccount = exports.applyReferralCode = exports.createDriverProfileCallable = exports.verifyEmailOtp = exports.sendCustomPasswordResetEmail = exports.requestEmailOtp = void 0;
-exports.reconcileExpiredSecurityLocks = exports.listLockoutSupportChatsCallable = exports.getLockoutSupportChatCallable = exports.submitLockoutSupportMessageCallable = exports.adminUnrestrictIpCallable = exports.adminRestrictIpCallable = exports.adminManualLockAccountCallable = exports.adminUnlockAccountCallable = exports.reportLoginAttemptCallable = exports.checkAccountLockStatusCallable = exports.updateSecurityPolicyCallable = exports.getSecurityPolicyCallable = exports.expireStaleRideRequests = exports.onRideUnavailableCancelAlerts = exports.onRideCreatedDispatchDrivers = exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = void 0;
+exports.onChatMessageCreated = exports.takeWeeklyWalletSnapshot = exports.reconcileStuckRides = exports.adminRetryFailedPayout = exports.adminExecuteSettlementBatch = exports.adminCreateSettlementBatch = exports.adminProcessSinglePayout = exports.adminProcessWithdrawal = exports.onRideUpdatedDriverNotify = exports.onRideUpdatedCustomerNotify = exports.onRideCreatedCustomerNotify = exports.onRideStatusChanged = exports.rateCustomer = exports.cancelRideByCustomer = exports.respondToBid = exports.completeRide = exports.publishDriverLocation = exports.updateRideStatus = exports.createDriverBid = exports.submitDriverApplication = exports.onDriverRatingChanged = exports.notifyDriverApprovalStatus = exports.sendDriverWelcomeOnProfileCreate = exports.sendWelcomeEmailOnProfileCreate = exports.onVehicleReviewUpdated = exports.onVehicleReviewCreated = exports.onDriverDocumentUpdated = exports.onDriverDocumentCreated = exports.saveDriverBankAccount = exports.resolveTransactPayBankAccount = exports.listTransactPayBanks = exports.saveTransactPayCard = exports.transactPayWebhook = exports.createDedicatedVirtualAccount = exports.verifyTransactPayTransaction = exports.chargeTransactPayCard = exports.initializeTransactPayTransaction = exports.initializeBankTransfer = exports.initializeTierSettings = exports.deleteStaffAccount = exports.processStaffWithdrawal = exports.requestStaffWithdrawal = exports.updateStaffProfile = exports.createStaffAccount = exports.applyReferralCode = exports.createDriverProfileCallable = exports.verifyEmailOtp = exports.resetPasswordWithPhoneOtp = exports.sendCustomPasswordResetEmail = exports.requestEmailOtp = void 0;
+exports.reconcileExpiredSecurityLocks = exports.listLockoutSupportChatsCallable = exports.getLockoutSupportChatCallable = exports.submitLockoutSupportMessageCallable = exports.adminUnrestrictIpCallable = exports.adminRestrictIpCallable = exports.adminManualLockAccountCallable = exports.adminUnlockAccountCallable = exports.reportLoginAttemptCallable = exports.checkAccountLockStatusCallable = exports.updateSecurityPolicyCallable = exports.getSecurityPolicyCallable = exports.expireStaleRideRequests = exports.onRideUnavailableCancelAlerts = exports.onRideCreatedDispatchDrivers = exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = exports.sendAnnouncementPush = void 0;
 exports.encryptTransactPayPayload = encryptTransactPayPayload;
 exports.transactpayRequest = transactpayRequest;
 exports.doesProfileNameMatchNimc = doesProfileNameMatchNimc;
@@ -1000,6 +1000,144 @@ exports.sendCustomPasswordResetEmail = (0, https_1.onCall)({ region: REGION_PRIM
         logger.error("Failed to generate/send custom password reset email", { email, error });
         throw new https_1.HttpsError("internal", error.message || "Failed to process password reset request.");
     }
+});
+exports.resetPasswordWithPhoneOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+    const payload = request.data;
+    const rawPhone = String(payload.phone ?? "").trim();
+    const pinId = String(payload.pinId ?? "").trim();
+    const code = String(payload.code ?? "").trim();
+    const newPassword = String(payload.newPassword ?? "").trim();
+    const role = String(payload.role ?? "customer").trim().toLowerCase();
+    // 1. Normalize Phone to 11 digits
+    const digits = rawPhone.replace(/\D/g, "");
+    let cleanPhone = digits;
+    if (digits.startsWith("234") && digits.length === 13) {
+        cleanPhone = `0${digits.slice(3)}`;
+    }
+    else if (digits.length === 10) {
+        cleanPhone = `0${digits}`;
+    }
+    if (cleanPhone.length !== 11 || !cleanPhone.startsWith("0")) {
+        throw new https_1.HttpsError("invalid-argument", "Invalid phone number format. Must be 11 digits.");
+    }
+    if (!pinId || !code) {
+        throw new https_1.HttpsError("invalid-argument", "Missing verification PIN or code.");
+    }
+    if (!newPassword || newPassword.length < 6) {
+        throw new https_1.HttpsError("invalid-argument", "New password must be at least 6 characters long.");
+    }
+    const db = admin.firestore();
+    const policy = await (0, security_1.getEffectiveSecurityPolicy)(db);
+    const clientIp = (0, security_1.extractClientIp)(request);
+    // 2. IP Rate Limiting Check
+    const ipCheck = await (0, security_1.checkAndEnforceIpRateLimit)(db, clientIp, "password_reset", policy);
+    if (!ipCheck.allowed) {
+        throw new https_1.HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many reset attempts from this IP.");
+    }
+    // 3. Verify OTP with Termii
+    const termiiApiKey = process.env.TERMII_API_KEY || "tlv_lp0hynBHneUEuT09j_HiNTndWrNCKilFOQE9ck7gNTw";
+    let otpVerified = false;
+    for (const base of ["https://v4.api.termii.com", "https://api.ng.termii.com"]) {
+        try {
+            const resp = await fetch(`${base}/api/sms/otp/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    api_key: termiiApiKey,
+                    pin_id: pinId,
+                    pin: code,
+                }),
+            });
+            const data = (await resp.json());
+            const v = data?.verified;
+            const msg = String(data?.message || data?.error || "").toLowerCase();
+            if (v === true ||
+                v === "True" ||
+                v === "true" ||
+                msg.includes("has been verified") ||
+                msg.includes("have been verified") ||
+                msg.includes("already verified") ||
+                msg.includes("successfully verified")) {
+                otpVerified = true;
+                break;
+            }
+        }
+        catch (e) {
+            logger.warn(`Termii verification attempt failed on ${base}`, { error: e });
+        }
+    }
+    if (!otpVerified) {
+        throw new https_1.HttpsError("permission-denied", "Invalid or expired verification code. Please request a new code.");
+    }
+    // 4. Locate user by phone number
+    let targetUid = null;
+    let targetEmail = null;
+    // Check role-specific collection first
+    const targetCol = role === "driver" ? driversCollection : customersCollection;
+    const snap = await targetCol.where("phone", "==", cleanPhone).limit(1).get();
+    if (!snap.empty) {
+        targetUid = snap.docs[0].id;
+        targetEmail = snap.docs[0].data()?.email || null;
+    }
+    else {
+        // Check fallback collections
+        const otherCol = role === "driver" ? customersCollection : driversCollection;
+        const otherSnap = await otherCol.where("phone", "==", cleanPhone).limit(1).get();
+        if (!otherSnap.empty) {
+            targetUid = otherSnap.docs[0].id;
+            targetEmail = otherSnap.docs[0].data()?.email || null;
+        }
+        else {
+            // Check synthetic phone user in Auth
+            const syntheticEmail = `${cleanPhone}@phone.caride.com`;
+            const authUser = await admin.auth().getUserByEmail(syntheticEmail).catch(() => null);
+            if (authUser) {
+                targetUid = authUser.uid;
+                targetEmail = authUser.email || syntheticEmail;
+            }
+        }
+    }
+    if (!targetUid) {
+        throw new https_1.HttpsError("not-found", "No account found registered with this phone number.");
+    }
+    // 5. Update Firebase Auth Password
+    try {
+        await admin.auth().updateUser(targetUid, {
+            password: newPassword,
+        });
+        logger.info("Password successfully updated via phone OTP", { uid: targetUid, phone: cleanPhone });
+    }
+    catch (err) {
+        logger.error("Failed to update password in Firebase Auth", { uid: targetUid, error: err });
+        throw new https_1.HttpsError("internal", err.message || "Failed to update password. Please try again.");
+    }
+    // 6. Clear Account Lockout if present
+    try {
+        const lockRef = db.collection("security_account_locks").doc(targetUid);
+        const lockSnap = await lockRef.get();
+        if (lockSnap.exists) {
+            await lockRef.update({
+                status: "unlocked",
+                unlockedAt: admin.firestore.FieldValue.serverTimestamp(),
+                unlockedBy: "phone_otp_reset",
+                failedAttempts: 0,
+            });
+        }
+    }
+    catch (lockErr) {
+        logger.warn("Could not clear account lock record", { uid: targetUid, error: lockErr });
+    }
+    // 7. Log Security Audit Event
+    await (0, security_1.logSecurityAuditEvent)(db, {
+        eventType: "auto_unlock",
+        severity: "low",
+        targetEmail: targetEmail || cleanPhone,
+        ip: clientIp,
+        endpoint: "resetPasswordWithPhoneOtp",
+        actionTaken: "password_updated",
+        description: `User ${targetUid} reset password via phone SMS OTP for phone ${cleanPhone}.`,
+    });
+    return { success: true, message: "Password updated successfully." };
 });
 exports.verifyEmailOtp = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
     const payload = request.data;

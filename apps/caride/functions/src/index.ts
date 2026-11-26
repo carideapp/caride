@@ -1209,6 +1209,161 @@ export const sendCustomPasswordResetEmail = onCall({ region: REGION_PRIMARY, max
   }
 });
 
+export const resetPasswordWithPhoneOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+  const payload = request.data as {
+    phone?: string;
+    pinId?: string;
+    code?: string;
+    newPassword?: string;
+    role?: string;
+  };
+
+  const rawPhone = String(payload.phone ?? "").trim();
+  const pinId = String(payload.pinId ?? "").trim();
+  const code = String(payload.code ?? "").trim();
+  const newPassword = String(payload.newPassword ?? "").trim();
+  const role = String(payload.role ?? "customer").trim().toLowerCase();
+
+  // 1. Normalize Phone to 11 digits
+  const digits = rawPhone.replace(/\D/g, "");
+  let cleanPhone = digits;
+  if (digits.startsWith("234") && digits.length === 13) {
+    cleanPhone = `0${digits.slice(3)}`;
+  } else if (digits.length === 10) {
+    cleanPhone = `0${digits}`;
+  }
+
+  if (cleanPhone.length !== 11 || !cleanPhone.startsWith("0")) {
+    throw new HttpsError("invalid-argument", "Invalid phone number format. Must be 11 digits.");
+  }
+  if (!pinId || !code) {
+    throw new HttpsError("invalid-argument", "Missing verification PIN or code.");
+  }
+  if (!newPassword || newPassword.length < 6) {
+    throw new HttpsError("invalid-argument", "New password must be at least 6 characters long.");
+  }
+
+  const db = admin.firestore();
+  const policy = await getEffectiveSecurityPolicy(db);
+  const clientIp = extractClientIp(request);
+
+  // 2. IP Rate Limiting Check
+  const ipCheck = await checkAndEnforceIpRateLimit(db, clientIp, "password_reset", policy);
+  if (!ipCheck.allowed) {
+    throw new HttpsError("resource-exhausted", ipCheck.restrictionReason || "Too many reset attempts from this IP.");
+  }
+
+  // 3. Verify OTP with Termii
+  const termiiApiKey = process.env.TERMII_API_KEY || "tlv_lp0hynBHneUEuT09j_HiNTndWrNCKilFOQE9ck7gNTw";
+  let otpVerified = false;
+  for (const base of ["https://v4.api.termii.com", "https://api.ng.termii.com"]) {
+    try {
+      const resp = await fetch(`${base}/api/sms/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: termiiApiKey,
+          pin_id: pinId,
+          pin: code,
+        }),
+      });
+      const data = (await resp.json()) as any;
+      const v = data?.verified;
+      const msg = String(data?.message || data?.error || "").toLowerCase();
+      if (
+        v === true ||
+        v === "True" ||
+        v === "true" ||
+        msg.includes("has been verified") ||
+        msg.includes("have been verified") ||
+        msg.includes("already verified") ||
+        msg.includes("successfully verified")
+      ) {
+        otpVerified = true;
+        break;
+      }
+    } catch (e) {
+      logger.warn(`Termii verification attempt failed on ${base}`, { error: e });
+    }
+  }
+
+  if (!otpVerified) {
+    throw new HttpsError("permission-denied", "Invalid or expired verification code. Please request a new code.");
+  }
+
+  // 4. Locate user by phone number
+  let targetUid: string | null = null;
+  let targetEmail: string | null = null;
+
+  // Check role-specific collection first
+  const targetCol = role === "driver" ? driversCollection : customersCollection;
+  const snap = await targetCol.where("phone", "==", cleanPhone).limit(1).get();
+  if (!snap.empty) {
+    targetUid = snap.docs[0].id;
+    targetEmail = (snap.docs[0].data()?.email as string) || null;
+  } else {
+    // Check fallback collections
+    const otherCol = role === "driver" ? customersCollection : driversCollection;
+    const otherSnap = await otherCol.where("phone", "==", cleanPhone).limit(1).get();
+    if (!otherSnap.empty) {
+      targetUid = otherSnap.docs[0].id;
+      targetEmail = (otherSnap.docs[0].data()?.email as string) || null;
+    } else {
+      // Check synthetic phone user in Auth
+      const syntheticEmail = `${cleanPhone}@phone.caride.com`;
+      const authUser = await admin.auth().getUserByEmail(syntheticEmail).catch(() => null);
+      if (authUser) {
+        targetUid = authUser.uid;
+        targetEmail = authUser.email || syntheticEmail;
+      }
+    }
+  }
+
+  if (!targetUid) {
+    throw new HttpsError("not-found", "No account found registered with this phone number.");
+  }
+
+  // 5. Update Firebase Auth Password
+  try {
+    await admin.auth().updateUser(targetUid, {
+      password: newPassword,
+    });
+    logger.info("Password successfully updated via phone OTP", { uid: targetUid, phone: cleanPhone });
+  } catch (err: any) {
+    logger.error("Failed to update password in Firebase Auth", { uid: targetUid, error: err });
+    throw new HttpsError("internal", err.message || "Failed to update password. Please try again.");
+  }
+
+  // 6. Clear Account Lockout if present
+  try {
+    const lockRef = db.collection("security_account_locks").doc(targetUid);
+    const lockSnap = await lockRef.get();
+    if (lockSnap.exists) {
+      await lockRef.update({
+        status: "unlocked",
+        unlockedAt: admin.firestore.FieldValue.serverTimestamp(),
+        unlockedBy: "phone_otp_reset",
+        failedAttempts: 0,
+      });
+    }
+  } catch (lockErr) {
+    logger.warn("Could not clear account lock record", { uid: targetUid, error: lockErr });
+  }
+
+  // 7. Log Security Audit Event
+  await logSecurityAuditEvent(db, {
+    eventType: "auto_unlock",
+    severity: "low",
+    targetEmail: targetEmail || cleanPhone,
+    ip: clientIp,
+    endpoint: "resetPasswordWithPhoneOtp",
+    actionTaken: "password_updated",
+    description: `User ${targetUid} reset password via phone SMS OTP for phone ${cleanPhone}.`,
+  });
+
+  return { success: true, message: "Password updated successfully." };
+});
+
 
 export const verifyEmailOtp = onCall({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
   const payload = request.data as VerifyOtpPayload;

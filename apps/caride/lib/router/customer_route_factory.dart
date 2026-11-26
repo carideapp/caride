@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:caride/features/auth/forgot_password_screen.dart';
+import 'package:caride/features/auth/reset_new_password_screen.dart';
 import 'package:caride/features/auth/login_screen.dart';
 import 'package:caride/features/auth/otp_screen.dart';
 import 'package:caride/features/auth/signup_screen.dart';
@@ -89,6 +90,7 @@ CustomerRouteDelegates buildCustomerRouteDelegates() {
     otp: (_) => const OtpScreen(),
     completeProfile: (_) => const SizedBox.shrink(),
     forgotPassword: (_) => const ForgotPasswordScreen(),
+    resetNewPassword: (_) => const ResetNewPasswordScreen(),
     becomeDriver: (_) => const BecomeDriverBenefitsScreen(),
     mainShell: (context, shell) => CustomerMainShell(navigationShell: shell),
     home: (_) => const CustomerHomeScreen(),

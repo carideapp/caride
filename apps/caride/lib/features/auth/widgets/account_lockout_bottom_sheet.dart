@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:ui';
 
 import 'package:caride/core/auth/account_lockout_exception.dart';
 import 'package:caride/core/auth/lockout_support_service.dart';

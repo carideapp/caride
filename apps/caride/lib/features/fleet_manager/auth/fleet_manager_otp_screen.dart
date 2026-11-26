@@ -53,7 +53,8 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
       final restored = await fleetAuthController.restorePendingSession();
       if (!restored && mounted) {
         setState(
-          () => _errorMessage = 'Session expired. Please request a new verification code.',
+          () => _errorMessage =
+              'Session expired. Please request a new verification code.',
         );
       }
     }
@@ -91,7 +92,8 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
     final email = fleetAuthController.email.trim();
     if (email.isNotEmpty) return email;
     final challengeEmail = fleetAuthController.pendingChallenge?.email;
-    if (challengeEmail != null && challengeEmail.isNotEmpty) return challengeEmail;
+    if (challengeEmail != null && challengeEmail.isNotEmpty)
+      return challengeEmail;
     final phone = fleetAuthController.phone.trim();
     if (phone.isNotEmpty) return '$phone@phone.caride.com';
     return 'fleet@caride.ng';
@@ -401,7 +403,9 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
                                   ],
                                 )
                               : GestureDetector(
-                                  onTap: _isResending ? null : _handleResendPhone,
+                                  onTap: _isResending
+                                      ? null
+                                      : _handleResendPhone,
                                   child: _isResending
                                       ? const SizedBox(
                                           height: 18,
@@ -483,9 +487,7 @@ class _FleetManagerOtpScreenState extends State<FleetManagerOtpScreen> {
               ],
             ),
           ),
-          const FloatingLockoutSupportButton(
-            role: 'fleet',
-          ),
+          const FloatingLockoutSupportButton(role: 'fleet'),
         ],
       ),
     );

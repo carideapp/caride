@@ -38,7 +38,9 @@ class _OtpScreenState extends State<OtpScreen> {
     if (customerAuthController.pendingChallenge == null) {
       final restored = await customerAuthController.restorePendingSession();
       if (!restored && mounted) {
-        setState(() => _formError = 'Session expired. Please request a new OTP.');
+        setState(
+          () => _formError = 'Session expired. Please request a new OTP.',
+        );
       }
     }
     if (mounted) {
@@ -65,12 +67,27 @@ class _OtpScreenState extends State<OtpScreen> {
       return;
     }
 
+    final challenge = customerAuthController.pendingChallenge;
+    final isPasswordReset = challenge?.isPasswordReset ?? false;
+
     setState(() {
       _loading = true;
       _formError = null;
     });
     try {
-      await customerAuthController.verifyPendingOtp(_codeController.text.trim());
+      if (isPasswordReset) {
+        await customerAuthController.verifyPasswordResetOtp(
+          _codeController.text.trim(),
+        );
+        if (!mounted) return;
+        setState(() => _formError = null);
+        context.push(CustomerRoutePaths.resetNewPassword);
+        return;
+      }
+
+      await customerAuthController.verifyPendingOtp(
+        _codeController.text.trim(),
+      );
       if (!mounted) return;
       setState(() => _formError = null);
       context.go(CustomerRoutePaths.home);
@@ -86,7 +103,8 @@ class _OtpScreenState extends State<OtpScreen> {
           context,
           lockout: lockout,
           role: 'customer',
-          onResetPassword: () => context.push(CustomerRoutePaths.forgotPassword),
+          onResetPassword: () =>
+              context.push(CustomerRoutePaths.forgotPassword),
         );
         return;
       }
@@ -167,7 +185,8 @@ class _OtpScreenState extends State<OtpScreen> {
           context,
           lockout: lockout,
           role: 'customer',
-          onResetPassword: () => context.push(CustomerRoutePaths.forgotPassword),
+          onResetPassword: () =>
+              context.push(CustomerRoutePaths.forgotPassword),
         );
         return;
       }
@@ -219,7 +238,8 @@ class _OtpScreenState extends State<OtpScreen> {
           context,
           lockout: lockout,
           role: 'customer',
-          onResetPassword: () => context.push(CustomerRoutePaths.forgotPassword),
+          onResetPassword: () =>
+              context.push(CustomerRoutePaths.forgotPassword),
         );
         return;
       }
@@ -247,6 +267,15 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   Future<void> _onBack() async {
+    final challenge = customerAuthController.pendingChallenge;
+    if (challenge?.isPasswordReset == true) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(CustomerRoutePaths.forgotPassword);
+      }
+      return;
+    }
     if (context.canPop()) {
       context.pop();
     } else {
@@ -255,8 +284,18 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   Future<void> _onChangeEmail() async {
+    final isReset =
+        customerAuthController.pendingChallenge?.isPasswordReset == true;
     await customerAuthController.clearPendingChallenge();
     if (!mounted) return;
+    if (isReset) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(CustomerRoutePaths.forgotPassword);
+      }
+      return;
+    }
     if (context.canPop()) {
       context.pop();
     } else {
@@ -268,11 +307,16 @@ class _OtpScreenState extends State<OtpScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final challenge = customerAuthController.pendingChallenge;
+    final isPasswordReset = challenge?.isPasswordReset ?? false;
     final isSms = challenge?.isSms == true;
-    final destination = isSms ? (challenge?.phone ?? '') : (challenge?.email ?? '');
+    final destination = isSms
+        ? (challenge?.phone ?? '')
+        : (challenge?.email ?? '');
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: GlassAppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
@@ -304,7 +348,9 @@ class _OtpScreenState extends State<OtpScreen> {
                         border: Border.all(color: AppColors.brandGlassBorder),
                       ),
                       child: Icon(
-                        isSms ? Icons.phone_android_rounded : Icons.mark_email_read_outlined,
+                        isSms
+                            ? Icons.phone_android_rounded
+                            : Icons.mark_email_read_outlined,
                         color: AppColors.brand,
                         size: 48,
                       ),
@@ -312,7 +358,9 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   Text(
-                    isSms ? 'Check your phone' : 'Check your email',
+                    isPasswordReset
+                        ? 'Reset Verification'
+                        : (isSms ? 'Check your phone' : 'Check your email'),
                     style: AppTextStyles.headlineLarge.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -320,9 +368,13 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    "We sent a ${AppEnv.otpCodeLength}-digit verification code to\n$destination",
+                    isPasswordReset
+                        ? "Enter the 6-digit verification code sent to\n$destination to reset your password."
+                        : "We sent a ${AppEnv.otpCodeLength}-digit verification code to\n$destination",
                     style: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -331,7 +383,9 @@ class _OtpScreenState extends State<OtpScreen> {
                     child: Text(
                       'Leaving the app to copy the code won\'t reset your progress.',
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark ? AppColors.textTertiaryDark : AppColors.textTertiaryLight,
+                        color: isDark
+                            ? AppColors.textTertiaryDark
+                            : AppColors.textTertiaryLight,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -353,12 +407,22 @@ class _OtpScreenState extends State<OtpScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _openEmailApp,
                         icon: const Icon(Icons.mail_outline_rounded, size: 18),
-                        label: const Text('Open Email App', style: TextStyle(fontWeight: FontWeight.w600)),
+                        label: const Text(
+                          'Open Email App',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.brand,
-                          side: BorderSide(color: AppColors.brand.withValues(alpha: 0.5)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          side: BorderSide(
+                            color: AppColors.brand.withValues(alpha: 0.5),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -382,7 +446,8 @@ class _OtpScreenState extends State<OtpScreen> {
                               ),
                               children: [
                                 const TextSpan(
-                                    text: 'You can resend the code in '),
+                                  text: 'You can resend the code in ',
+                                ),
                                 TextSpan(
                                   text: '$_remainingSeconds',
                                   style: const TextStyle(
@@ -416,8 +481,8 @@ class _OtpScreenState extends State<OtpScreen> {
                         color: _remainingSeconds == 0
                             ? AppColors.brand
                             : (isDark
-                                ? AppColors.textTertiaryDark
-                                : AppColors.textTertiaryLight),
+                                  ? AppColors.textTertiaryDark
+                                  : AppColors.textTertiaryLight),
                       ),
                       label: Text(
                         isSms
@@ -427,60 +492,71 @@ class _OtpScreenState extends State<OtpScreen> {
                           color: _remainingSeconds == 0
                               ? AppColors.brand
                               : (isDark
-                                  ? AppColors.textTertiaryDark
-                                  : AppColors.textTertiaryLight),
+                                    ? AppColors.textTertiaryDark
+                                    : AppColors.textTertiaryLight),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  // Alternative verification option (Phone <-> Email)
-                  Center(
-                    child: OutlinedButton.icon(
-                      onPressed: (_remainingSeconds == 0 && !_loading)
-                          ? (isSms ? _sendViaEmail : _resendViaPhone)
-                          : null,
-                      icon: Icon(
-                        isSms
-                            ? Icons.mark_email_read_outlined
-                            : Icons.phone_android_rounded,
-                        size: 18,
-                      ),
-                      label: Text(
-                        isSms
-                            ? 'Verify account via Email OTP'
-                            : 'Send code via SMS (Phone Number)',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _remainingSeconds == 0
-                            ? AppColors.brand
-                            : (isDark
-                                ? AppColors.textTertiaryDark
-                                : AppColors.textTertiaryLight),
-                        side: BorderSide(
-                          color: _remainingSeconds == 0
-                              ? AppColors.brand.withValues(alpha: 0.5)
+                  if (!isPasswordReset) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    // Alternative verification option (Phone <-> Email)
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed: (_remainingSeconds == 0 && !_loading)
+                            ? (isSms ? _sendViaEmail : _resendViaPhone)
+                            : null,
+                        icon: Icon(
+                          isSms
+                              ? Icons.mark_email_read_outlined
+                              : Icons.phone_android_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          isSms
+                              ? 'Verify account via Email OTP'
+                              : 'Send code via SMS (Phone Number)',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _remainingSeconds == 0
+                              ? AppColors.brand
                               : (isDark
-                                  ? AppColors.darkOutline
-                                  : AppColors.lightOutline),
+                                    ? AppColors.textTertiaryDark
+                                    : AppColors.textTertiaryLight),
+                          side: BorderSide(
+                            color: _remainingSeconds == 0
+                                ? AppColors.brand.withValues(alpha: 0.5)
+                                : (isDark
+                                      ? AppColors.darkOutline
+                                      : AppColors.lightOutline),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: AppSpacing.sm),
                   Center(
                     child: TextButton(
                       onPressed: _onChangeEmail,
                       child: Text(
-                        isSms ? 'Wrong number? Change number' : 'Wrong email? Change email',
+                        isSms
+                            ? 'Wrong number? Change number'
+                            : 'Wrong email? Change email',
                         style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
                           decoration: TextDecoration.underline,
                         ),
                       ),

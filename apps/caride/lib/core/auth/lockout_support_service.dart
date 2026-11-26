@@ -1,13 +1,12 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service facilitating in-app support communication for accounts locked out
 /// due to failed login attempts or administrative security policies.
 class LockoutSupportService {
   LockoutSupportService({FirebaseFunctions? functions})
-      : _functions =
-            functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
+    : _functions =
+          functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
 
   final FirebaseFunctions _functions;
 
@@ -26,11 +25,15 @@ class LockoutSupportService {
     final normalizedEmail = email.trim().toLowerCase();
     final roleKey = role.trim().toLowerCase();
     await prefs.setString('$_lockoutEmailKeyPrefix$roleKey', normalizedEmail);
-    await prefs.setInt('$_lockoutTimestampKeyPrefix$roleKey',
-        DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt(
+      '$_lockoutTimestampKeyPrefix$roleKey',
+      DateTime.now().millisecondsSinceEpoch,
+    );
     if (chatId != null && chatId.isNotEmpty) {
       await prefs.setString(
-          '$_activeChatKeyPrefix${roleKey}_$normalizedEmail', chatId);
+        '$_activeChatKeyPrefix${roleKey}_$normalizedEmail',
+        chatId,
+      );
     }
   }
 
@@ -55,7 +58,9 @@ class LockoutSupportService {
     final normalizedEmail = email.trim().toLowerCase();
     final roleKey = role.trim().toLowerCase();
     await prefs.setString(
-        '$_activeChatKeyPrefix${roleKey}_$normalizedEmail', chatId);
+      '$_activeChatKeyPrefix${roleKey}_$normalizedEmail',
+      chatId,
+    );
   }
 
   /// Check if there is an active lockout recorded for this role.
@@ -105,8 +110,9 @@ class LockoutSupportService {
     String? chatId,
     String? stageName,
   }) async {
-    final callable =
-        _functions.httpsCallable('submitLockoutSupportMessageCallable');
+    final callable = _functions.httpsCallable(
+      'submitLockoutSupportMessageCallable',
+    );
     final response = await callable.call<Map<String, dynamic>>({
       'email': email.trim().toLowerCase(),
       'role': role.trim().toLowerCase(),
@@ -119,11 +125,7 @@ class LockoutSupportService {
     final data = Map<String, dynamic>.from(response.data);
     final returnedChatId = data['chatId'] as String?;
     if (returnedChatId != null && returnedChatId.isNotEmpty) {
-      await saveActiveChatId(
-        role: role,
-        email: email,
-        chatId: returnedChatId,
-      );
+      await saveActiveChatId(role: role, email: email, chatId: returnedChatId);
     }
     return data;
   }
@@ -148,7 +150,9 @@ class LockoutSupportService {
     required String email,
     required String role,
   }) async {
-    final callable = _functions.httpsCallable('listLockoutSupportChatsCallable');
+    final callable = _functions.httpsCallable(
+      'listLockoutSupportChatsCallable',
+    );
     final response = await callable.call<Map<String, dynamic>>({
       'email': email.trim().toLowerCase(),
       'role': role.trim().toLowerCase(),

@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'package:caride/core/auth/lockout_support_service.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_widgets/shared_widgets.dart';
 
 /// Screen allowing locked-out users (Customer, Driver, Fleet Manager) to chat
@@ -161,7 +160,8 @@ class _LockedAccountSupportScreenState
         setState(() {
           _activeChatId = chatId;
           _ticketStatus = res['status'] as String? ?? 'active';
-          _ticketSubject = res['subject'] as String? ?? 'Account Lockout Support';
+          _ticketSubject =
+              res['subject'] as String? ?? 'Account Lockout Support';
           _messages = messages;
           _isLoading = false;
           _errorMessage = null;
@@ -283,7 +283,9 @@ class _LockedAccountSupportScreenState
           return Container(
             decoration: BoxDecoration(
               color: cardBg,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
             child: Column(
@@ -351,13 +353,16 @@ class _LockedAccountSupportScreenState
                         final cId = c['id'] as String;
                         final isSelected = cId == _activeChatId;
                         final status = c['status'] as String? ?? 'active';
-                        final isResolved = status == 'resolved' || status == 'closed';
+                        final isResolved =
+                            status == 'resolved' || status == 'closed';
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
                             c['subject'] as String? ?? 'Support Inquiry',
                             style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                               color: isSelected ? AppColors.brand : null,
                             ),
                           ),
@@ -369,11 +374,15 @@ class _LockedAccountSupportScreenState
                           ),
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: isResolved
                                   ? AppColors.success.withValues(alpha: 0.15)
-                                  : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                  : const Color(
+                                      0xFFF59E0B,
+                                    ).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -403,9 +412,9 @@ class _LockedAccountSupportScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load tickets: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not load tickets: $e')));
       }
     }
   }
@@ -416,12 +425,15 @@ class _LockedAccountSupportScreenState
     final isDark = theme.brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : AppColors.textPrimaryLight;
     final cardBg = isDark ? AppColors.darkSurface : Colors.white;
-    final borderColor = isDark ? AppColors.glassBorderDark : const Color(0xFFE5E7EB);
+    final borderColor = isDark
+        ? AppColors.glassBorderDark
+        : const Color(0xFFE5E7EB);
     final isResolved = _ticketStatus == 'resolved' || _ticketStatus == 'closed';
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,8 +471,19 @@ class _LockedAccountSupportScreenState
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _activeChatId == null
-                ? _buildInitialComposeView(isDark, primaryTextColor, cardBg, borderColor)
-                : _buildActiveChatView(isDark, primaryTextColor, isResolved, cardBg, borderColor),
+            ? _buildInitialComposeView(
+                isDark,
+                primaryTextColor,
+                cardBg,
+                borderColor,
+              )
+            : _buildActiveChatView(
+                isDark,
+                primaryTextColor,
+                isResolved,
+                cardBg,
+                borderColor,
+              ),
       ),
     );
   }
@@ -558,7 +581,8 @@ class _LockedAccountSupportScreenState
               ),
               decoration: const InputDecoration(
                 border: InputBorder.none,
-                hintText: 'Describe your issue or request access restoration...',
+                hintText:
+                    'Describe your issue or request access restoration...',
               ),
             ),
           ),
@@ -572,7 +596,9 @@ class _LockedAccountSupportScreenState
           const SizedBox(height: AppSpacing.xl),
 
           PrimaryButton(
-            label: _isSending ? 'Sending to Support...' : 'Send Message to Support',
+            label: _isSending
+                ? 'Sending to Support...'
+                : 'Send Message to Support',
             icon: Icons.send_rounded,
             isLoading: _isSending,
             onPressed: _handleStartNewTicket,
@@ -643,8 +669,10 @@ class _LockedAccountSupportScreenState
                     );
                     Navigator.of(context).pop();
                   },
-                  child: const Text('Go to Sign In',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  child: const Text(
+                    'Go to Sign In',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
                 ),
             ],
           ),
@@ -663,15 +691,15 @@ class _LockedAccountSupportScreenState
               final text = m['text'] as String? ?? '';
               final timeMs = m['createdAtMs'] as int?;
               final timeStr = timeMs != null && timeMs > 0
-                  ? DateTime.fromMillisecondsSinceEpoch(timeMs)
-                      .toLocal()
-                      .toString()
-                      .substring(11, 16)
+                  ? DateTime.fromMillisecondsSinceEpoch(
+                      timeMs,
+                    ).toLocal().toString().substring(11, 16)
                   : '';
 
               return Align(
-                alignment:
-                    isAdmin ? Alignment.centerLeft : Alignment.centerRight,
+                alignment: isAdmin
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
                 child: Container(
                   margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                   constraints: BoxConstraints(
@@ -711,7 +739,9 @@ class _LockedAccountSupportScreenState
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.brand.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),

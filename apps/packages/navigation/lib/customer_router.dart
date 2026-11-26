@@ -74,6 +74,12 @@ CustomerRouterBundle createCustomerRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => d.forgotPassword(context),
       ),
+      if (d.resetNewPassword != null)
+        GoRoute(
+          path: CustomerRoutePaths.resetNewPassword,
+          parentNavigatorKey: rootNavigatorKey,
+          builder: (context, state) => d.resetNewPassword!(context),
+        ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return d.mainShell(context, navigationShell);
@@ -630,6 +636,13 @@ CustomerRouterBundle createCustomerRouter({
           builder: (context, state) =>
               d.driverDelegates!.forgotPassword(context),
         ),
+        if (d.driverDelegates!.resetNewPassword != null)
+          GoRoute(
+            path: DriverRoutePaths.resetNewPassword,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (context, state) =>
+                d.driverDelegates!.resetNewPassword!(context),
+          ),
         GoRoute(
           path: DriverRoutePaths.onboarding,
           parentNavigatorKey: rootNavigatorKey,
