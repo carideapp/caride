@@ -100,6 +100,7 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _submit() async {
     setState(() => _formError = null);
     if (!(_formKey.currentState?.validate() ?? false)) {
+      setState(() => _formError = 'Please complete all required fields correctly.');
       return;
     }
     if (!_agreedToTos) {
@@ -194,6 +195,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -444,12 +446,29 @@ class _SignupScreenState extends State<SignupScreen> {
                               width: 1.5,
                             ),
                           ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: AppColors.error,
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: AppColors.error,
+                              width: 1.5,
+                            ),
+                          ),
                         ),
                         validator: (value) {
                           final v = value?.trim() ?? '';
-                          if (v.isEmpty) return 'Please enter your email address.';
+                          if (v.isEmpty) return 'Email address is required.';
+                          if (v.toLowerCase().endsWith('@phone.caride.com')) {
+                            return 'Please enter a real email address.';
+                          }
                           final emailRegex = RegExp(r'^[\w.+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
-                          if (!emailRegex.hasMatch(v)) return 'Enter a valid email address.';
+                          if (!emailRegex.hasMatch(v)) return 'Please enter a valid email address.';
                           return null;
                         },
                       ),
@@ -542,16 +561,36 @@ class _SignupScreenState extends State<SignupScreen> {
                                     width: 1.5,
                                   ),
                                 ),
+                                errorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.error,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.error,
+                                    width: 1.5,
+                                  ),
+                                ),
                               ),
                               validator: (value) {
                                 final v = value?.trim() ?? '';
-                                if (v.isEmpty) return 'Please enter your phone number.';
+                                if (v.isEmpty) return 'Phone number is required.';
                                 final digitsOnly = v.replaceAll(RegExp(r'\D'), '');
+                                if (digitsOnly.startsWith('234') && digitsOnly.length == 13) {
+                                  return 'Enter your 11-digit number (e.g. 0${digitsOnly.substring(3)}).';
+                                }
+                                if (digitsOnly.length == 10 && !digitsOnly.startsWith('0')) {
+                                  return 'Add a leading 0 (e.g. 0$digitsOnly).';
+                                }
                                 if (digitsOnly.length != 11) {
                                   return 'Phone number must be exactly 11 digits.';
                                 }
                                 if (!digitsOnly.startsWith('0')) {
-                                  return 'Phone number must start with 0 (e.g. 0801...).';
+                                  return 'Phone number must start with 0 (e.g. 08012345678).';
                                 }
                                 return null;
                               },

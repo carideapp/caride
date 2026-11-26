@@ -730,12 +730,29 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               width: 1.5,
                             ),
                           ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: AppColors.error,
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            borderSide: const BorderSide(
+                              color: AppColors.error,
+                              width: 1.5,
+                            ),
+                          ),
                         ),
                         validator: (value) {
                           final v = value?.trim() ?? '';
-                          if (v.isEmpty) return 'Please enter your email address.';
+                          if (v.isEmpty) return 'Email address is required.';
+                          if (v.toLowerCase().endsWith('@phone.caride.com')) {
+                            return 'Please enter a real email address.';
+                          }
                           final emailRegex = RegExp(r'^[\w.+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
-                          if (!emailRegex.hasMatch(v)) return 'Enter a valid email address.';
+                          if (!emailRegex.hasMatch(v)) return 'Please enter a valid email address.';
                           return null;
                         },
                       ),
@@ -828,10 +845,24 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                     width: 1.5,
                                   ),
                                 ),
+                                errorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.error,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.error,
+                                    width: 1.5,
+                                  ),
+                                ),
                               ),
                               validator: (value) {
                                 final v = value?.trim() ?? '';
-                                if (v.isEmpty) return 'Please enter your phone number.';
+                                if (v.isEmpty) return 'Phone number is required.';
                                 final digitsOnly = v.replaceAll(RegExp(r'\D'), '');
                                 if (digitsOnly.startsWith('234') && digitsOnly.length == 13) {
                                   return 'Enter your 11-digit number (e.g. 0${digitsOnly.substring(3)}).';
