@@ -17,17 +17,24 @@ import '../data/fleet_auth_repository.dart';
 
 class FleetAuthController extends ChangeNotifier {
   FleetAuthController({FleetAuthRepository? repository})
-      : _repository = repository ?? fleetAuthRepository {
+    : _repository = repository ?? fleetAuthRepository {
     _authSub = _repository.authStateChanges().listen((user) {
       _profileSub?.cancel();
       _currentUserUid = user?.uid;
       if (user != null) {
-        _profileSub = _repository.streamFleetProfile(user.uid).listen((profile) {
-          _currentProfile = profile;
-          notifyListeners();
-        }, onError: (err) {
-          debugPrint('[FleetAuthController] streamFleetProfile error: $err');
-        });
+        _profileSub = _repository
+            .streamFleetProfile(user.uid)
+            .listen(
+              (profile) {
+                _currentProfile = profile;
+                notifyListeners();
+              },
+              onError: (err) {
+                debugPrint(
+                  '[FleetAuthController] streamFleetProfile error: $err',
+                );
+              },
+            );
       } else {
         _currentProfile = null;
         notifyListeners();
@@ -48,8 +55,8 @@ class FleetAuthController extends ChangeNotifier {
   int currentSignupStep = 0;
 
   // Step 1: Account
-  String email = '';       // user's real email address
-  String phone = '';       // user's phone number (11-digit local)
+  String email = ''; // user's real email address
+  String phone = ''; // user's phone number (11-digit local)
   String password = '';
   String confirmPassword = '';
   String referralCode = '';
@@ -153,7 +160,9 @@ class FleetAuthController extends ChangeNotifier {
         final result = await TermiiService.instance.sendOtp(cleanPhone);
         pendingChallenge = AuthChallenge(
           challengeId: result.pinId,
-          email: userEmail.isNotEmpty ? userEmail : '$cleanPhone@phone.caride.com',
+          email: userEmail.isNotEmpty
+              ? userEmail
+              : '$cleanPhone@phone.caride.com',
           phone: cleanPhone,
           expiresAt: DateTime.now().add(const Duration(minutes: 10)),
           isSignUp: true,
@@ -163,7 +172,9 @@ class FleetAuthController extends ChangeNotifier {
         pendingChallenge = await _repository.requestEmailOtp(
           email: userEmail,
           isSignUp: true,
-          referredByCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
+          referredByCode: referralCode.trim().isNotEmpty
+              ? referralCode.trim()
+              : null,
         );
       }
 
@@ -173,7 +184,9 @@ class FleetAuthController extends ChangeNotifier {
             challenge: pendingChallenge!,
             role: 'fleet',
             tempPassword: password,
-            referralCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
+            referralCode: referralCode.trim().isNotEmpty
+                ? referralCode.trim()
+                : null,
             phone: cleanPhone,
             email: userEmail.isNotEmpty ? userEmail : null,
             fullName: fullName,
@@ -202,7 +215,9 @@ class FleetAuthController extends ChangeNotifier {
       pendingChallenge = await _repository.requestEmailOtp(
         email: userEmail,
         isSignUp: true,
-        referredByCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
+        referredByCode: referralCode.trim().isNotEmpty
+            ? referralCode.trim()
+            : null,
       );
       if (pendingChallenge != null) {
         await PendingOtpSessionService.instance.saveSession(
@@ -210,7 +225,9 @@ class FleetAuthController extends ChangeNotifier {
             challenge: pendingChallenge!,
             role: 'fleet',
             tempPassword: password,
-            referralCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
+            referralCode: referralCode.trim().isNotEmpty
+                ? referralCode.trim()
+                : null,
             phone: phone.trim().isNotEmpty ? phone.trim() : null,
             email: userEmail,
             fullName: fullName,
@@ -251,7 +268,9 @@ class FleetAuthController extends ChangeNotifier {
           challenge: pendingChallenge!,
           role: 'fleet',
           tempPassword: password,
-          referralCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
+          referralCode: referralCode.trim().isNotEmpty
+              ? referralCode.trim()
+              : null,
           phone: cleanPhone,
           email: email.trim().isNotEmpty ? email.trim() : null,
           fullName: fullName,
@@ -269,7 +288,9 @@ class FleetAuthController extends ChangeNotifier {
 
   /// Restores pending fleet OTP session from storage if it exists and has not expired.
   Future<bool> restorePendingSession() async {
-    final session = await PendingOtpSessionService.instance.loadSession(roleFilter: 'fleet');
+    final session = await PendingOtpSessionService.instance.loadSession(
+      roleFilter: 'fleet',
+    );
     if (session != null) {
       pendingChallenge = session.challenge;
       // Restore the user's real email (session.email), not the synthetic one
@@ -314,26 +335,37 @@ class FleetAuthController extends ChangeNotifier {
           code: code,
         );
 
-        // 2. Sign in or create Firebase Auth user
-        final cleanPhone = challenge.phone ?? TermiiService.formatToLocal11Digits(challenge.email);
-        final syntheticEmail = '$cleanPhone@phone.caride.com';
-        final pwd = password.isNotEmpty ? password : 'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
+        // 2. Sign in or create Firebase Auth user (prefer real email if provided)
+        final cleanPhone =
+            challenge.phone ??
+            TermiiService.formatToLocal11Digits(challenge.email);
+        final trimmedRealEmail = email.trim().toLowerCase();
+        final hasRealEmail =
+            trimmedRealEmail.isNotEmpty &&
+            trimmedRealEmail.contains('@') &&
+            !trimmedRealEmail.endsWith('@phone.caride.com');
+        final authEmail = hasRealEmail
+            ? trimmedRealEmail
+            : '$cleanPhone@phone.caride.com';
+        final pwd = password.isNotEmpty
+            ? password
+            : 'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
 
         try {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: syntheticEmail,
+            email: authEmail,
             password: pwd,
           );
         } catch (_) {
           try {
             await FirebaseAuth.instance.createUserWithEmailAndPassword(
-              email: syntheticEmail,
+              email: authEmail,
               password: pwd,
             );
           } on FirebaseAuthException catch (fe) {
             if (fe.code == 'email-already-in-use') {
               await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: syntheticEmail,
+                email: authEmail,
                 password: pwd,
               );
             } else {
@@ -347,7 +379,7 @@ class FleetAuthController extends ChangeNotifier {
 
         // 3. Provision fleet user
         await _repository.provisionFleetUserAfterOtp(
-          email: syntheticEmail,
+          email: authEmail,
           password: pwd,
         );
 
@@ -355,10 +387,7 @@ class FleetAuthController extends ChangeNotifier {
         return;
       }
 
-      await _repository.verifyEmailOtp(
-        challenge: challenge,
-        code: code,
-      );
+      await _repository.verifyEmailOtp(challenge: challenge, code: code);
       pendingChallenge = null;
       await PendingOtpSessionService.instance.clearSession();
 
@@ -410,10 +439,12 @@ class FleetAuthController extends ChangeNotifier {
     try {
       final draft = await _repository.getFleetSignupDraft(uid);
       if (draft != null) {
-        if (draft['businessType'] != null && (draft['businessType'] as String).isNotEmpty) {
+        if (draft['businessType'] != null &&
+            (draft['businessType'] as String).isNotEmpty) {
           businessType = draft['businessType'] as String;
         }
-        if (draft['fullName'] != null && (draft['fullName'] as String).isNotEmpty) {
+        if (draft['fullName'] != null &&
+            (draft['fullName'] as String).isNotEmpty) {
           fullName = draft['fullName'] as String;
         }
         if (draft['phone'] != null && (draft['phone'] as String).isNotEmpty) {
@@ -422,16 +453,20 @@ class FleetAuthController extends ChangeNotifier {
         if (draft['gender'] != null && (draft['gender'] as String).isNotEmpty) {
           gender = draft['gender'] as String;
         }
-        if (draft['businessName'] != null && (draft['businessName'] as String).isNotEmpty) {
+        if (draft['businessName'] != null &&
+            (draft['businessName'] as String).isNotEmpty) {
           companyName = draft['businessName'] as String;
         }
-        if (draft['address'] != null && (draft['address'] as String).isNotEmpty) {
+        if (draft['address'] != null &&
+            (draft['address'] as String).isNotEmpty) {
           companyAddress = draft['address'] as String;
         }
-        if (draft['registrationNumber'] != null && (draft['registrationNumber'] as String).isNotEmpty) {
+        if (draft['registrationNumber'] != null &&
+            (draft['registrationNumber'] as String).isNotEmpty) {
           rcNumber = draft['registrationNumber'] as String;
         }
-        if (draft['identityDocumentType'] != null && (draft['identityDocumentType'] as String).isNotEmpty) {
+        if (draft['identityDocumentType'] != null &&
+            (draft['identityDocumentType'] as String).isNotEmpty) {
           identityDocumentType = draft['identityDocumentType'] as String;
         }
         if (draft['email'] != null && (draft['email'] as String).isNotEmpty) {
@@ -458,7 +493,9 @@ class FleetAuthController extends ChangeNotifier {
   Future<FleetProfile> submitFleetApplication() async {
     final uid = _repository.currentUser?.uid;
     if (uid == null) {
-      throw StateError('User must be authenticated before submitting fleet application.');
+      throw StateError(
+        'User must be authenticated before submitting fleet application.',
+      );
     }
 
     _setBusy(true);
@@ -470,7 +507,9 @@ class FleetAuthController extends ChangeNotifier {
         ownerUid: uid,
         businessName: isCompany ? companyName.trim() : '$fullName\'s Fleet',
         phone: phone.trim(),
-        email: email.trim().isNotEmpty ? email.trim() : (_repository.currentUser?.email ?? ''),
+        email: email.trim().isNotEmpty
+            ? email.trim()
+            : (_repository.currentUser?.email ?? ''),
         businessType: businessType,
         fullName: fullName.trim(),
         gender: gender,
@@ -480,7 +519,9 @@ class FleetAuthController extends ChangeNotifier {
         city: 'Abuja',
         identityDocumentType: identityDocumentType,
         verificationStatus: 'pending',
-        referredByCode: referralCode.trim().isNotEmpty ? referralCode.trim() : null,
+        referredByCode: referralCode.trim().isNotEmpty
+            ? referralCode.trim()
+            : null,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -507,7 +548,10 @@ class FleetAuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> signInWithEmailAndPassword(String emailInput, String passInput) async {
+  Future<void> signInWithEmailAndPassword(
+    String emailInput,
+    String passInput,
+  ) async {
     _setBusy(true);
     _errorMessage = null;
     try {
@@ -528,7 +572,9 @@ class FleetAuthController extends ChangeNotifier {
           rethrow;
         }
         // If user entered a real email, check if fleet account was created via phone OTP
-        if (!isPhone && resolved.contains('@') && !resolved.endsWith('@phone.caride.com')) {
+        if (!isPhone &&
+            resolved.contains('@') &&
+            !resolved.endsWith('@phone.caride.com')) {
           final cleanInputEmail = resolved.toLowerCase();
           final firestore = FirebaseFirestore.instance;
 
@@ -557,7 +603,9 @@ class FleetAuthController extends ChangeNotifier {
           } catch (_) {}
 
           if (matchedPhone != null && matchedPhone.isNotEmpty) {
-            final formattedPhone = TermiiService.formatToLocal11Digits(matchedPhone);
+            final formattedPhone = TermiiService.formatToLocal11Digits(
+              matchedPhone,
+            );
             final syntheticEmail = '$formattedPhone@phone.caride.com';
 
             await _repository.signInWithEmailAndPassword(
@@ -594,7 +642,6 @@ class FleetAuthController extends ChangeNotifier {
       _setBusy(false);
     }
   }
-
 
   Future<void> sendPasswordResetEmail(String emailInput) async {
     _setBusy(true);

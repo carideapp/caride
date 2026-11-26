@@ -33,68 +33,74 @@ class CustomerAuthController extends ChangeNotifier {
             .collection('users')
             .doc(user.uid)
             .snapshots()
-            .listen((snap) {
-          if (snap.exists) {
-            final data = snap.data() ?? {};
-            _activeRole = data['activeRole'] as String? ?? 'customer';
-            _customerExists = data['customerExists'] as bool? ?? true;
-            _driverExists = data['driverExists'] as bool? ?? false;
-            _fleetExists = (data['hasFleet'] as bool? ?? false) ||
-                (data['fleetExists'] as bool? ?? false) ||
-                (data['fleetId'] as String? ?? '').isNotEmpty;
-          } else {
-            // Default if metadata does not exist yet
-            _activeRole = 'customer';
-            _customerExists = true;
-            _driverExists = false;
-            _fleetExists = false;
-          }
-          _metadataLoaded = true;
-          notifyListeners();
-
-          // 2. Watch the profile based on the active role
-          _profileSub?.cancel();
-          if (_activeRole == 'customer') {
-            _profileSub = _accountRepo.watchProfile().listen(
-              (profile) {
-                _currentProfile = profile;
-                _profileLoaded = true;
+            .listen(
+              (snap) {
+                if (snap.exists) {
+                  final data = snap.data() ?? {};
+                  _activeRole = data['activeRole'] as String? ?? 'customer';
+                  _customerExists = data['customerExists'] as bool? ?? true;
+                  _driverExists = data['driverExists'] as bool? ?? false;
+                  _fleetExists =
+                      (data['hasFleet'] as bool? ?? false) ||
+                      (data['fleetExists'] as bool? ?? false) ||
+                      (data['fleetId'] as String? ?? '').isNotEmpty;
+                } else {
+                  // Default if metadata does not exist yet
+                  _activeRole = 'customer';
+                  _customerExists = true;
+                  _driverExists = false;
+                  _fleetExists = false;
+                }
+                _metadataLoaded = true;
                 notifyListeners();
+
+                // 2. Watch the profile based on the active role
+                _profileSub?.cancel();
+                if (_activeRole == 'customer') {
+                  _profileSub = _accountRepo.watchProfile().listen(
+                    (profile) {
+                      _currentProfile = profile;
+                      _profileLoaded = true;
+                      notifyListeners();
+                    },
+                    onError: (e) {
+                      debugPrint('Error listening to customer profile: $e');
+                      _profileLoaded = true;
+                      notifyListeners();
+                    },
+                  );
+                } else if (_activeRole == 'fleet') {
+                  _profileLoaded = true;
+                  notifyListeners();
+                } else {
+                  // Watch the driver profile document for onboarding and approval status
+                  _profileSub = FirebaseFirestore.instance
+                      .collection('drivers')
+                      .doc(user.uid)
+                      .snapshots()
+                      .listen((driverSnap) {
+                        if (driverSnap.exists) {
+                          final d = driverSnap.data() ?? {};
+                          _driverProfileCompleted =
+                              d['profileCompleted'] as bool? ?? false;
+                          _driverApprovalStatus =
+                              d['approvalStatus'] as String? ?? 'draft';
+                        } else {
+                          _driverProfileCompleted = false;
+                          _driverApprovalStatus = 'draft';
+                        }
+                        _profileLoaded = true;
+                        notifyListeners();
+                      });
+                }
               },
               onError: (e) {
-                debugPrint('Error listening to customer profile: $e');
+                debugPrint('Error listening to user metadata: $e');
+                _metadataLoaded = true;
                 _profileLoaded = true;
                 notifyListeners();
               },
             );
-          } else if (_activeRole == 'fleet') {
-            _profileLoaded = true;
-            notifyListeners();
-          } else {
-            // Watch the driver profile document for onboarding and approval status
-            _profileSub = FirebaseFirestore.instance
-                .collection('drivers')
-                .doc(user.uid)
-                .snapshots()
-                .listen((driverSnap) {
-              if (driverSnap.exists) {
-                final d = driverSnap.data() ?? {};
-                _driverProfileCompleted = d['profileCompleted'] as bool? ?? false;
-                _driverApprovalStatus = d['approvalStatus'] as String? ?? 'draft';
-              } else {
-                _driverProfileCompleted = false;
-                _driverApprovalStatus = 'draft';
-              }
-              _profileLoaded = true;
-              notifyListeners();
-            });
-          }
-        }, onError: (e) {
-          debugPrint('Error listening to user metadata: $e');
-          _metadataLoaded = true;
-          _profileLoaded = true;
-          notifyListeners();
-        });
       } else {
         _profileLoaded = true; // not signed in — no profile to wait for
         _metadataLoaded = true;
@@ -113,7 +119,7 @@ class CustomerAuthController extends ChangeNotifier {
   StreamSubscription<Object?>? _sub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _metadataSub;
   StreamSubscription<dynamic>? _profileSub;
-  
+
   AccountProfile? _currentProfile;
   bool _profileLoaded = false;
   bool _metadataLoaded = false;
@@ -127,9 +133,13 @@ class CustomerAuthController extends ChangeNotifier {
   String _driverApprovalStatus = 'draft';
 
   AccountProfile? get currentProfile => _currentProfile;
-  bool get profileLoaded => _profileLoaded && _metadataLoaded && (_repository.currentUser == null || _loadedUid == _repository.currentUser?.uid);
+  bool get profileLoaded =>
+      _profileLoaded &&
+      _metadataLoaded &&
+      (_repository.currentUser == null ||
+          _loadedUid == _repository.currentUser?.uid);
   bool get isProfileComplete => true;
-  
+
   String get activeRole => _activeRole;
   bool get customerExists => _customerExists;
   bool get driverExists => _driverExists;
@@ -342,7 +352,11 @@ class CustomerAuthController extends ChangeNotifier {
       }
     } else {
       if (challenge.isSignUp) {
-        await _requestOtp(email: challenge.email, isSignUp: true, referredByCode: _tempReferredByCode);
+        await _requestOtp(
+          email: challenge.email,
+          isSignUp: true,
+          referredByCode: _tempReferredByCode,
+        );
       } else {
         await requestOtpForLogin(challenge.email);
       }
@@ -383,7 +397,9 @@ class CustomerAuthController extends ChangeNotifier {
 
   /// Restores pending OTP session from storage if it exists and has not expired.
   Future<bool> restorePendingSession() async {
-    final session = await PendingOtpSessionService.instance.loadSession(roleFilter: 'customer');
+    final session = await PendingOtpSessionService.instance.loadSession(
+      roleFilter: 'customer',
+    );
     if (session != null) {
       _pendingChallenge = session.challenge;
       _tempPassword = session.tempPassword;
@@ -412,7 +428,10 @@ class CustomerAuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> signInWithEmailAndPassword(String emailOrPhone, String password) async {
+  Future<void> signInWithEmailAndPassword(
+    String emailOrPhone,
+    String password,
+  ) async {
     _setBusy(true);
     try {
       String resolvedEmail = emailOrPhone.trim();
@@ -423,14 +442,19 @@ class CustomerAuthController extends ChangeNotifier {
       }
 
       try {
-        await _repository.signInWithEmailAndPassword(email: resolvedEmail, password: password);
+        await _repository.signInWithEmailAndPassword(
+          email: resolvedEmail,
+          password: password,
+        );
       } catch (authError) {
         if (AccountLockoutHelper.isLockout(authError)) {
           rethrow;
         }
         // If user entered a real email, check if their account was created via phone OTP
         // (synthetic email in Auth, but real email saved in Firestore).
-        if (!isPhone && resolvedEmail.contains('@') && !resolvedEmail.endsWith('@phone.caride.com')) {
+        if (!isPhone &&
+            resolvedEmail.contains('@') &&
+            !resolvedEmail.endsWith('@phone.caride.com')) {
           final cleanInputEmail = resolvedEmail.toLowerCase();
           final firestore = FirebaseFirestore.instance;
 
@@ -473,11 +497,16 @@ class CustomerAuthController extends ChangeNotifier {
           }
 
           if (matchedPhone != null && matchedPhone.isNotEmpty) {
-            final formattedPhone = TermiiService.formatToLocal11Digits(matchedPhone);
+            final formattedPhone = TermiiService.formatToLocal11Digits(
+              matchedPhone,
+            );
             final syntheticEmail = '$formattedPhone@phone.caride.com';
 
             // Sign in using the phone-based synthetic account
-            await _repository.signInWithEmailAndPassword(email: syntheticEmail, password: password);
+            await _repository.signInWithEmailAndPassword(
+              email: syntheticEmail,
+              password: password,
+            );
 
             // Attempt to link the real email credential so future direct logins succeed
             try {
@@ -525,26 +554,37 @@ class CustomerAuthController extends ChangeNotifier {
           code: code,
         );
 
-        // 2. Sign in or create Firebase Auth user with phone-based synthetic email
-        final cleanPhone = challenge.phone ?? TermiiService.formatToLocal11Digits(challenge.email);
-        final syntheticEmail = '$cleanPhone@phone.caride.com';
-        final pwd = _tempPassword ?? 'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
+        // 2. Sign in or create Firebase Auth user (prefer real email if provided)
+        final cleanPhone =
+            challenge.phone ??
+            TermiiService.formatToLocal11Digits(challenge.email);
+        final trimmedRealEmail = (tempEmail ?? '').trim().toLowerCase();
+        final hasRealEmail =
+            trimmedRealEmail.isNotEmpty &&
+            trimmedRealEmail.contains('@') &&
+            !trimmedRealEmail.endsWith('@phone.caride.com');
+        final authEmail = hasRealEmail
+            ? trimmedRealEmail
+            : '$cleanPhone@phone.caride.com';
+        final pwd =
+            _tempPassword ??
+            'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
 
         try {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: syntheticEmail,
+            email: authEmail,
             password: pwd,
           );
         } catch (_) {
           try {
             await FirebaseAuth.instance.createUserWithEmailAndPassword(
-              email: syntheticEmail,
+              email: authEmail,
               password: pwd,
             );
           } on FirebaseAuthException catch (fe) {
             if (fe.code == 'email-already-in-use') {
               await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: syntheticEmail,
+                email: authEmail,
                 password: pwd,
               );
             } else {
@@ -555,7 +595,7 @@ class CustomerAuthController extends ChangeNotifier {
 
         // 3. Provision customer profile and user metadata
         await _repository.provisionUserMetadataAndProfile(
-          email: tempEmail ?? '',
+          email: hasRealEmail ? trimmedRealEmail : '',
           phone: cleanPhone,
           referredByCode: _tempReferredByCode,
           selectedRole: selectedRole,
@@ -584,7 +624,11 @@ class CustomerAuthController extends ChangeNotifier {
         }
       }
 
-      if (challenge.isSignUp && selectedRole == 'customer' && tempFullName != null && tempPhone != null && tempPhotoFile != null) {
+      if (challenge.isSignUp &&
+          selectedRole == 'customer' &&
+          tempFullName != null &&
+          tempPhone != null &&
+          tempPhotoFile != null) {
         final photoUrl = await _accountRepo.uploadProfilePhoto(tempPhotoFile!);
         await _accountRepo.createProfile(
           fullName: tempFullName!,
@@ -593,17 +637,22 @@ class CustomerAuthController extends ChangeNotifier {
         );
       }
 
-      if (challenge.isSignUp && tempFullName != null && tempFullName!.trim().isNotEmpty) {
+      if (challenge.isSignUp &&
+          tempFullName != null &&
+          tempFullName!.trim().isNotEmpty) {
         final uid = _repository.currentUser?.uid;
         if (uid != null) {
           final cleanName = tempFullName!.trim();
           try {
-            await FirebaseFirestore.instance.collection('customers').doc(uid).set({
-              'fullName': cleanName,
-              'displayName': cleanName,
-              if (challenge.phone != null) 'phone': challenge.phone,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            await FirebaseFirestore.instance
+                .collection('customers')
+                .doc(uid)
+                .set({
+                  'fullName': cleanName,
+                  'displayName': cleanName,
+                  if (challenge.phone != null) 'phone': challenge.phone,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true));
           } catch (e) {
             debugPrint('Error updating customer full name: $e');
           }
@@ -647,7 +696,9 @@ class CustomerAuthController extends ChangeNotifier {
       _activeRole = role;
       notifyListeners();
     } catch (e) {
-      debugPrint('[CustomerAuthController] Error switching role in Firestore: $e');
+      debugPrint(
+        '[CustomerAuthController] Error switching role in Firestore: $e',
+      );
       _activeRole = role;
       notifyListeners();
     } finally {
@@ -698,7 +749,11 @@ class CustomerAuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> provisionRole(String role, {String? fullName, String? phone}) async {
+  Future<void> provisionRole(
+    String role, {
+    String? fullName,
+    String? phone,
+  }) async {
     final user = _repository.currentUser;
     if (user == null) return;
     _setBusy(true);
@@ -732,7 +787,9 @@ class CustomerAuthController extends ChangeNotifier {
   Future<void> requestPasswordResetPhoneOtp(String phone) async {
     final cleanPhone = TermiiService.formatToLocal11Digits(phone.trim());
     if (cleanPhone.length != 11 || !cleanPhone.startsWith('0')) {
-      throw Exception('Please enter a valid 11-digit phone number (e.g. 08012345678).');
+      throw Exception(
+        'Please enter a valid 11-digit phone number (e.g. 08012345678).',
+      );
     }
 
     _setBusy(true);
@@ -753,7 +810,9 @@ class CustomerAuthController extends ChangeNotifier {
             .get();
 
         if (userSnap.docs.isEmpty) {
-          throw Exception('No account found registered with this phone number.');
+          throw Exception(
+            'No account found registered with this phone number.',
+          );
         }
       }
 
@@ -789,7 +848,9 @@ class CustomerAuthController extends ChangeNotifier {
   Future<void> verifyPasswordResetOtp(String code) async {
     final challenge = _pendingChallenge;
     if (challenge == null) {
-      throw Exception('Session expired. Please request a new verification code.');
+      throw Exception(
+        'Session expired. Please request a new verification code.',
+      );
     }
 
     _setBusy(true);
@@ -813,13 +874,16 @@ class CustomerAuthController extends ChangeNotifier {
     final code = _verifiedResetCode;
 
     if (phone == null || pinId == null || code == null) {
-      throw Exception('Verification details missing. Please start password reset again.');
+      throw Exception(
+        'Verification details missing. Please start password reset again.',
+      );
     }
 
     _setBusy(true);
     try {
-      final callable = FirebaseFunctions.instanceFor(region: AppEnv.firebaseFunctionsRegion)
-          .httpsCallable('resetPasswordWithPhoneOtp');
+      final callable = FirebaseFunctions.instanceFor(
+        region: AppEnv.firebaseFunctionsRegion,
+      ).httpsCallable('resetPasswordWithPhoneOtp');
       await callable.call<Map<String, dynamic>>({
         'phone': phone,
         'pinId': pinId,
@@ -837,7 +901,6 @@ class CustomerAuthController extends ChangeNotifier {
       _setBusy(false);
     }
   }
-
 
   Future<void> signOut() async {
     _profileSub?.cancel();
@@ -873,7 +936,9 @@ class CustomerAuthController extends ChangeNotifier {
     try {
       await _repository.signOut();
     } catch (e) {
-      debugPrint('[CustomerAuthController] Error during repository signOut: $e');
+      debugPrint(
+        '[CustomerAuthController] Error during repository signOut: $e',
+      );
     }
 
     notifyListeners();

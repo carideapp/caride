@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onChatMessageCreated = exports.takeWeeklyWalletSnapshot = exports.reconcileStuckRides = exports.adminRetryFailedPayout = exports.adminExecuteSettlementBatch = exports.adminCreateSettlementBatch = exports.adminProcessSinglePayout = exports.adminProcessWithdrawal = exports.onRideUpdatedDriverNotify = exports.onRideUpdatedCustomerNotify = exports.onRideCreatedCustomerNotify = exports.onRideStatusChanged = exports.rateCustomer = exports.cancelRideByCustomer = exports.respondToBid = exports.completeRide = exports.publishDriverLocation = exports.updateRideStatus = exports.createDriverBid = exports.submitDriverApplication = exports.onDriverRatingChanged = exports.notifyDriverApprovalStatus = exports.sendDriverWelcomeOnProfileCreate = exports.sendWelcomeEmailOnProfileCreate = exports.onVehicleReviewUpdated = exports.onVehicleReviewCreated = exports.onDriverDocumentUpdated = exports.onDriverDocumentCreated = exports.saveDriverBankAccount = exports.resolveTransactPayBankAccount = exports.listTransactPayBanks = exports.saveTransactPayCard = exports.transactPayWebhook = exports.createDedicatedVirtualAccount = exports.verifyTransactPayTransaction = exports.chargeTransactPayCard = exports.initializeTransactPayTransaction = exports.initializeBankTransfer = exports.initializeTierSettings = exports.deleteStaffAccount = exports.processStaffWithdrawal = exports.requestStaffWithdrawal = exports.updateStaffProfile = exports.createStaffAccount = exports.applyReferralCode = exports.createDriverProfileCallable = exports.verifyEmailOtp = exports.resetPasswordWithPhoneOtp = exports.sendCustomPasswordResetEmail = exports.requestEmailOtp = void 0;
-exports.reconcileExpiredSecurityLocks = exports.listLockoutSupportChatsCallable = exports.getLockoutSupportChatCallable = exports.submitLockoutSupportMessageCallable = exports.adminUnrestrictIpCallable = exports.adminRestrictIpCallable = exports.adminManualLockAccountCallable = exports.adminUnlockAccountCallable = exports.reportLoginAttemptCallable = exports.checkAccountLockStatusCallable = exports.updateSecurityPolicyCallable = exports.getSecurityPolicyCallable = exports.expireStaleRideRequests = exports.onRideUnavailableCancelAlerts = exports.onRideCreatedDispatchDrivers = exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = exports.sendAnnouncementPush = void 0;
+exports.reconcileExpiredSecurityLocks = exports.listLockoutSupportChatsCallable = exports.getLockoutSupportChatCallable = exports.submitLockoutSupportMessageCallable = exports.adminUnrestrictIpCallable = exports.adminRestrictIpCallable = exports.adminManualLockAccountCallable = exports.adminUnlockAccountCallable = exports.reportLoginAttemptCallable = exports.checkAccountLockStatusCallable = exports.updateSecurityPolicyCallable = exports.getSecurityPolicyCallable = exports.expireStaleRideRequests = exports.onRideUnavailableCancelAlerts = exports.onRideCreatedDispatchDrivers = exports.adminRecoverUserAuth = exports.adminRepairPhoneAuthAccounts = exports.adminSyncDriverEmails = exports.adminToggleCustomerVerification = exports.verifyCustomerNin = exports.adminAdjustWalletBalance = exports.adminLookupUserForAdjustment = exports.sendEmergencyAlert = exports.processReferralCode = exports.processDriverReferralOnCreate = exports.processCustomerReferralOnCreate = exports.processDriverWithdrawal = exports.verifyDriverSecurityPin = exports.resetDriverSecurityPin = exports.sendDriverPinResetOtp = exports.changeDriverSecurityPin = exports.createDriverSecurityPin = exports.processCustomerWithdrawal = exports.verifyCustomerSecurityPin = exports.resetCustomerSecurityPin = exports.sendCustomerPinResetOtp = exports.changeCustomerSecurityPin = exports.createCustomerSecurityPin = exports.sendAnnouncementEmail = exports.sendAnnouncementPush = void 0;
 exports.encryptTransactPayPayload = encryptTransactPayPayload;
 exports.transactpayRequest = transactpayRequest;
 exports.doesProfileNameMatchNimc = doesProfileNameMatchNimc;
@@ -7039,6 +7039,360 @@ exports.adminSyncDriverEmails = (0, https_1.onCall)({ region: REGION_PRIMARY, ma
         updatedCount: updatedWithRealEmailCount,
         clearedCount: clearedSyntheticCount,
         updatedDrivers: updatedDrivers.slice(0, 50),
+    };
+});
+/**
+ * Callable Cloud Function: Admin Repair `@phone.caride.com` Firebase Auth Accounts.
+ * - Attaches E.164 `phoneNumber` (`+234...`) on Firebase Auth UserRecords.
+ * - Normalizes & syncs 11-digit `phone` to existing `customers/{uid}`, `drivers/{uid}`, `users/{uid}` docs
+ *   so Phone OTP password reset (`resetPasswordWithPhoneOtp`) always finds the account.
+ * - If a real (non-synthetic) email exists in Firestore or Auth providerData, replaces `@phone.caride.com`
+ *   in Firebase Auth with the real email (`emailVerified: true`).
+ */
+exports.adminRepairPhoneAuthAccounts = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 2, timeoutSeconds: 300 }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication required.");
+    }
+    const db = admin.firestore();
+    const [adminSnap, staffSnap] = await Promise.all([
+        db.collection("admins").doc(request.auth.uid).get(),
+        db.collection("staff").doc(request.auth.uid).get(),
+    ]);
+    if (!adminSnap.exists && !staffSnap.exists) {
+        throw new https_1.HttpsError("permission-denied", "Unauthorized. Administrator or Staff access required.");
+    }
+    const { targetUid } = (request.data ?? {});
+    const isRealEmail = (raw) => {
+        const v = (raw ?? "").trim().toLowerCase();
+        return v.length > 0 && v.includes("@") && !v.endsWith("@phone.caride.com");
+    };
+    const normalizeLocalPhone = (raw) => {
+        const digits = String(raw ?? "").replace(/\D/g, "");
+        if (digits.startsWith("234") && digits.length === 13) {
+            return `0${digits.slice(3)}`;
+        }
+        if (digits.length === 10) {
+            return `0${digits}`;
+        }
+        if (digits.length === 11 && digits.startsWith("0")) {
+            return digits;
+        }
+        return "";
+    };
+    const toE164Nigeria = (localPhone) => {
+        if (localPhone.length === 11 && localPhone.startsWith("0")) {
+            return `+234${localPhone.slice(1)}`;
+        }
+        return "";
+    };
+    const authUsers = [];
+    if (targetUid && targetUid.trim()) {
+        const single = await admin.auth().getUser(targetUid.trim()).catch(() => null);
+        if (!single) {
+            throw new https_1.HttpsError("not-found", "Target user not found in Firebase Auth.");
+        }
+        authUsers.push(single);
+    }
+    else {
+        let pageToken;
+        do {
+            const listRes = await admin.auth().listUsers(1000, pageToken);
+            authUsers.push(...listRes.users);
+            pageToken = listRes.pageToken;
+        } while (pageToken);
+    }
+    let affectedCount = 0;
+    let phoneLinkedCount = 0;
+    let emailUpgradedCount = 0;
+    let firestoreSyncedCount = 0;
+    let skippedCount = 0;
+    const skippedDetails = [];
+    for (const authUser of authUsers) {
+        const authEmail = (authUser.email ?? "").trim();
+        const isSynthetic = authEmail.toLowerCase().endsWith("@phone.caride.com");
+        if (!isSynthetic && !(targetUid && targetUid.trim())) {
+            continue;
+        }
+        affectedCount++;
+        const uid = authUser.uid;
+        const [custSnap, driverSnap, userSnap] = await Promise.all([
+            customersCollection.doc(uid).get(),
+            driversCollection.doc(uid).get(),
+            db.collection("users").doc(uid).get(),
+        ]);
+        const custData = custSnap.exists ? custSnap.data() || {} : {};
+        const driverData = driverSnap.exists ? driverSnap.data() || {} : {};
+        const userData = userSnap.exists ? userSnap.data() || {} : {};
+        const emailPrefix = isSynthetic ? authEmail.split("@")[0] : "";
+        const localPhone = normalizeLocalPhone(custData.phone) ||
+            normalizeLocalPhone(driverData.phone) ||
+            normalizeLocalPhone(userData.phone) ||
+            normalizeLocalPhone(authUser.phoneNumber) ||
+            normalizeLocalPhone(emailPrefix);
+        let realEmail = "";
+        const emailCandidates = [
+            custData.email,
+            driverData.email,
+            userData.email,
+            authUser.email,
+            ...authUser.providerData.map((p) => p.email),
+        ];
+        for (const candidate of emailCandidates) {
+            if (isRealEmail(candidate)) {
+                realEmail = String(candidate).trim().toLowerCase();
+                break;
+            }
+        }
+        const e164Phone = localPhone ? toE164Nigeria(localPhone) : "";
+        const wantPhoneUpdate = Boolean(e164Phone && authUser.phoneNumber !== e164Phone);
+        const wantEmailUpdate = Boolean(realEmail && authEmail.toLowerCase() !== realEmail.toLowerCase());
+        if (wantPhoneUpdate || wantEmailUpdate) {
+            const updatePayload = {};
+            if (wantPhoneUpdate)
+                updatePayload.phoneNumber = e164Phone;
+            if (wantEmailUpdate) {
+                updatePayload.email = realEmail;
+                updatePayload.emailVerified = true;
+            }
+            try {
+                await admin.auth().updateUser(uid, updatePayload);
+                if (wantPhoneUpdate)
+                    phoneLinkedCount++;
+                if (wantEmailUpdate)
+                    emailUpgradedCount++;
+            }
+            catch (err) {
+                const code = String(err?.code || "");
+                // Retry without conflicting field if one of email/phone already exists on another UID
+                if (wantPhoneUpdate && wantEmailUpdate) {
+                    try {
+                        if (code.includes("phone-number-already-exists")) {
+                            await admin.auth().updateUser(uid, { email: realEmail, emailVerified: true });
+                            emailUpgradedCount++;
+                        }
+                        else if (code.includes("email-already-exists")) {
+                            await admin.auth().updateUser(uid, { phoneNumber: e164Phone });
+                            phoneLinkedCount++;
+                        }
+                    }
+                    catch (retryErr) {
+                        skippedCount++;
+                        skippedDetails.push({
+                            uid,
+                            reason: retryErr?.message || code || "Auth update failed",
+                        });
+                    }
+                }
+                else {
+                    skippedCount++;
+                    skippedDetails.push({
+                        uid,
+                        reason: err?.message || code || "Auth update failed",
+                    });
+                }
+            }
+        }
+        // Sync normalized 11-digit phone and real email (if any) back to existing Firestore docs
+        const syncDoc = async (ref, data) => {
+            const updates = {};
+            const currentPhone = String(data.phone ?? "").trim();
+            const currentDocEmail = String(data.email ?? "").trim();
+            if (localPhone && currentPhone !== localPhone) {
+                updates.phone = localPhone;
+            }
+            if (realEmail &&
+                (!currentDocEmail || currentDocEmail.toLowerCase().endsWith("@phone.caride.com"))) {
+                updates.email = realEmail;
+            }
+            if (Object.keys(updates).length > 0) {
+                updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+                await ref.update(updates);
+                return true;
+            }
+            return false;
+        };
+        let docSynced = false;
+        if (custSnap.exists && (await syncDoc(customersCollection.doc(uid), custData))) {
+            docSynced = true;
+        }
+        if (driverSnap.exists && (await syncDoc(driversCollection.doc(uid), driverData))) {
+            docSynced = true;
+        }
+        if (userSnap.exists && (await syncDoc(db.collection("users").doc(uid), userData))) {
+            docSynced = true;
+        }
+        if (docSynced)
+            firestoreSyncedCount++;
+    }
+    logger.info("Admin repaired @phone.caride.com auth accounts", {
+        adminUid: request.auth.uid,
+        scannedCount: authUsers.length,
+        affectedCount,
+        phoneLinkedCount,
+        emailUpgradedCount,
+        firestoreSyncedCount,
+        skippedCount,
+    });
+    return {
+        success: true,
+        scannedCount: authUsers.length,
+        affectedCount,
+        phoneLinkedCount,
+        emailUpgradedCount,
+        firestoreSyncedCount,
+        skippedCount,
+        skippedDetails: skippedDetails.slice(0, 20),
+    };
+});
+/**
+ * Callable Cloud Function: Admin Recover User Auth (Email / Password / Lockout).
+ * Allows an admin or staff member to:
+ * - Replace a synthetic `@phone.caride.com` email (or empty email) with a verified real email
+ * - Set a temporary password directly so the user can log in
+ * - Attach E.164 `phoneNumber` if missing in Firebase Auth
+ * - Clear any active `security_account_locks` record
+ */
+exports.adminRecoverUserAuth = (0, https_1.onCall)({ region: REGION_PRIMARY, maxInstances: 5 }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Authentication required.");
+    }
+    const db = admin.firestore();
+    const [adminSnap, staffSnap] = await Promise.all([
+        db.collection("admins").doc(request.auth.uid).get(),
+        db.collection("staff").doc(request.auth.uid).get(),
+    ]);
+    if (!adminSnap.exists && !staffSnap.exists) {
+        throw new https_1.HttpsError("permission-denied", "Unauthorized. Administrator or Staff access required.");
+    }
+    const payload = (request.data ?? {});
+    const uid = String(payload.uid ?? "").trim();
+    if (!uid) {
+        throw new https_1.HttpsError("invalid-argument", "User UID is required.");
+    }
+    const rawNewEmail = String(payload.newEmail ?? "").trim().toLowerCase();
+    const rawNewPassword = String(payload.newPassword ?? "").trim();
+    const clearLockout = payload.clearLockout !== false;
+    if (rawNewEmail) {
+        if (!isValidEmail(rawNewEmail) || rawNewEmail.endsWith("@phone.caride.com")) {
+            throw new https_1.HttpsError("invalid-argument", "Please provide a valid real email address (not @phone.caride.com).");
+        }
+    }
+    if (rawNewPassword && rawNewPassword.length < 6) {
+        throw new https_1.HttpsError("invalid-argument", "Temporary password must be at least 6 characters.");
+    }
+    if (!rawNewEmail && !rawNewPassword && !clearLockout) {
+        throw new https_1.HttpsError("invalid-argument", "Provide a new email, a new password, or enable lockout clearing.");
+    }
+    const authUser = await admin.auth().getUser(uid).catch(() => null);
+    if (!authUser) {
+        throw new https_1.HttpsError("not-found", "User not found in Firebase Auth.");
+    }
+    const [custSnap, driverSnap, userSnap] = await Promise.all([
+        customersCollection.doc(uid).get(),
+        driversCollection.doc(uid).get(),
+        db.collection("users").doc(uid).get(),
+    ]);
+    const normalizeLocalPhone = (raw) => {
+        const digits = String(raw ?? "").replace(/\D/g, "");
+        if (digits.startsWith("234") && digits.length === 13)
+            return `0${digits.slice(3)}`;
+        if (digits.length === 10)
+            return `0${digits}`;
+        if (digits.length === 11 && digits.startsWith("0"))
+            return digits;
+        return "";
+    };
+    const authEmailPrefix = (authUser.email ?? "").toLowerCase().endsWith("@phone.caride.com")
+        ? (authUser.email ?? "").split("@")[0]
+        : "";
+    const localPhone = normalizeLocalPhone(custSnap.data()?.phone) ||
+        normalizeLocalPhone(driverSnap.data()?.phone) ||
+        normalizeLocalPhone(userSnap.data()?.phone) ||
+        normalizeLocalPhone(authUser.phoneNumber) ||
+        normalizeLocalPhone(authEmailPrefix);
+    const e164Phone = localPhone.length === 11 && localPhone.startsWith("0")
+        ? `+234${localPhone.slice(1)}`
+        : "";
+    const authUpdate = {};
+    if (rawNewEmail) {
+        authUpdate.email = rawNewEmail;
+        authUpdate.emailVerified = true;
+    }
+    if (rawNewPassword) {
+        authUpdate.password = rawNewPassword;
+    }
+    let phoneLinked = false;
+    if (e164Phone && !authUser.phoneNumber) {
+        authUpdate.phoneNumber = e164Phone;
+        phoneLinked = true;
+    }
+    if (Object.keys(authUpdate).length > 0) {
+        try {
+            await admin.auth().updateUser(uid, authUpdate);
+        }
+        catch (err) {
+            const msg = String(err?.message || "");
+            if (phoneLinked && msg.toLowerCase().includes("phone")) {
+                // Retry without phoneNumber if phoneNumber collided with another Auth account
+                delete authUpdate.phoneNumber;
+                phoneLinked = false;
+                if (Object.keys(authUpdate).length > 0) {
+                    await admin.auth().updateUser(uid, authUpdate);
+                }
+            }
+            else {
+                throw new https_1.HttpsError("internal", msg || "Failed to update Firebase Auth user.");
+            }
+        }
+    }
+    // Sync email & phone to existing Firestore profile docs
+    const fsUpdates = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (rawNewEmail)
+        fsUpdates.email = rawNewEmail;
+    if (localPhone)
+        fsUpdates.phone = localPhone;
+    if (rawNewEmail || localPhone) {
+        const writes = [];
+        if (custSnap.exists)
+            writes.push(customersCollection.doc(uid).update(fsUpdates));
+        if (driverSnap.exists)
+            writes.push(driversCollection.doc(uid).update(fsUpdates));
+        if (userSnap.exists)
+            writes.push(db.collection("users").doc(uid).update(fsUpdates));
+        await Promise.all(writes);
+    }
+    let lockoutCleared = false;
+    if (clearLockout) {
+        const lockRef = db.collection("security_account_locks").doc(uid);
+        const lockSnap = await lockRef.get();
+        if (lockSnap.exists && lockSnap.data()?.status === "active") {
+            await lockRef.update({
+                status: "unlocked",
+                unlockedAt: admin.firestore.FieldValue.serverTimestamp(),
+                unlockedBy: `admin:${request.auth.uid}`,
+                failedAttempts: 0,
+            });
+            lockoutCleared = true;
+        }
+    }
+    await (0, security_1.logSecurityAuditEvent)(db, {
+        eventType: "auto_unlock",
+        severity: "low",
+        targetEmail: rawNewEmail || authUser.email || localPhone || uid,
+        ip: (0, security_1.extractClientIp)(request),
+        endpoint: "adminRecoverUserAuth",
+        actionTaken: "admin_auth_recovery",
+        description: `Admin ${request.auth.uid} recovered auth for ${uid} (emailUpdated=${Boolean(rawNewEmail)}, passwordUpdated=${Boolean(rawNewPassword)}, phoneLinked=${phoneLinked}, lockoutCleared=${lockoutCleared}).`,
+    });
+    return {
+        success: true,
+        uid,
+        updatedEmail: rawNewEmail || null,
+        passwordUpdated: Boolean(rawNewPassword),
+        phoneLinked,
+        lockoutCleared,
     };
 });
 var dispatch_2 = require("./dispatch");

@@ -356,30 +356,37 @@ class DriverAuthController extends ChangeNotifier {
           code: code,
         );
 
-        // 2. Sign in or create Firebase Auth user with phone-based synthetic email
+        // 2. Sign in or create Firebase Auth user (prefer real email if provided)
         final cleanPhone =
             challenge.phone ??
             TermiiService.formatToLocal11Digits(challenge.email);
-        final syntheticEmail = '$cleanPhone@phone.caride.com';
+        final trimmedRealEmail = (_tempEmail ?? '').trim().toLowerCase();
+        final hasRealEmail =
+            trimmedRealEmail.isNotEmpty &&
+            trimmedRealEmail.contains('@') &&
+            !trimmedRealEmail.endsWith('@phone.caride.com');
+        final authEmail = hasRealEmail
+            ? trimmedRealEmail
+            : '$cleanPhone@phone.caride.com';
         final pwd =
             _tempPassword ??
             'Caride@${cleanPhone.length >= 6 ? cleanPhone.substring(cleanPhone.length - 6) : "123456"}';
 
         try {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: syntheticEmail,
+            email: authEmail,
             password: pwd,
           );
         } catch (_) {
           try {
             await FirebaseAuth.instance.createUserWithEmailAndPassword(
-              email: syntheticEmail,
+              email: authEmail,
               password: pwd,
             );
           } on FirebaseAuthException catch (fe) {
             if (fe.code == 'email-already-in-use') {
               await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: syntheticEmail,
+                email: authEmail,
                 password: pwd,
               );
             } else {
@@ -390,12 +397,7 @@ class DriverAuthController extends ChangeNotifier {
 
         // 3. Provision driver profile doc in Firestore
         await _repository.provisionDriverProfile(
-          email:
-              (_tempEmail != null &&
-                  _tempEmail!.trim().isNotEmpty &&
-                  !_tempEmail!.trim().endsWith('@phone.caride.com'))
-              ? _tempEmail!.trim()
-              : '',
+          email: hasRealEmail ? trimmedRealEmail : '',
           referralCode: _pendingReferralCode,
           fullName: _pendingFullName,
           phone: cleanPhone,
@@ -582,7 +584,9 @@ class DriverAuthController extends ChangeNotifier {
   Future<void> requestPasswordResetPhoneOtp(String phone) async {
     final cleanPhone = TermiiService.formatToLocal11Digits(phone.trim());
     if (cleanPhone.length != 11 || !cleanPhone.startsWith('0')) {
-      throw Exception('Please enter a valid 11-digit phone number (e.g. 08012345678).');
+      throw Exception(
+        'Please enter a valid 11-digit phone number (e.g. 08012345678).',
+      );
     }
 
     _setBusy(true);
@@ -602,7 +606,9 @@ class DriverAuthController extends ChangeNotifier {
             .get();
 
         if (userSnap.docs.isEmpty) {
-          throw Exception('No driver account found registered with this phone number.');
+          throw Exception(
+            'No driver account found registered with this phone number.',
+          );
         }
       }
 
@@ -637,7 +643,9 @@ class DriverAuthController extends ChangeNotifier {
   Future<void> verifyPasswordResetOtp(String code) async {
     final challenge = _pendingChallenge;
     if (challenge == null) {
-      throw Exception('Session expired. Please request a new verification code.');
+      throw Exception(
+        'Session expired. Please request a new verification code.',
+      );
     }
 
     _setBusy(true);
@@ -661,13 +669,16 @@ class DriverAuthController extends ChangeNotifier {
     final code = _verifiedResetCode;
 
     if (phone == null || pinId == null || code == null) {
-      throw Exception('Verification details missing. Please start password reset again.');
+      throw Exception(
+        'Verification details missing. Please start password reset again.',
+      );
     }
 
     _setBusy(true);
     try {
-      final callable = FirebaseFunctions.instanceFor(region: AppEnv.firebaseFunctionsRegion)
-          .httpsCallable('resetPasswordWithPhoneOtp');
+      final callable = FirebaseFunctions.instanceFor(
+        region: AppEnv.firebaseFunctionsRegion,
+      ).httpsCallable('resetPasswordWithPhoneOtp');
       await callable.call<Map<String, dynamic>>({
         'phone': phone,
         'pinId': pinId,
